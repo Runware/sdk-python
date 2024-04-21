@@ -1,0 +1,28 @@
+# Compiled Python files
+*.pyc
+*.pyo
+__pycache__/
+
+# Distribution and packaging
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Virtual environment
+venv/
+.venv/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing and coverage
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Other
+.DS_Store
