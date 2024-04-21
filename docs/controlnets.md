@@ -13,10 +13,10 @@ Requests must be sent in the following format:
         "preProcessorType": "string",
         "guideImageUUID": "string",
         "taskType": 11,
-        "width": int,
-        "height": int,
-        "lowThresholdCanny": int,
-        "highThresholdCanny": int
+        "width": "integer",
+        "height": "integer",
+        "lowThresholdCanny": "integer",
+        "highThresholdCanny": "integer"
     }
 }
 ```
@@ -29,11 +29,11 @@ Requests must be sent in the following format:
 | `preProcessorType`            | string        | The preprocessor type. Here are all the available options.                                                                                                |
 | `guideImageUUID`              | UUIDV4 string | The image guide UUID. The recommended option is to use the Image Upload Functionality.                                                                    |
 | `guideImageUrl`               | string        | Optional. You can provide an image URL, from where the API will download the image. This adds additional delay and is not recommended.                     |
-| `taskType`                    | int           | Value: 11                                                                                                                                                 |
-| `width`                       | int           | Optional. Will resize the image to this width.                                                                                                            |
-| `height`                      | int           | Optional. Will resize the image to this height.                                                                                                           |
-| `lowThresholdCanny`           | int           | Optional. Available just for `canny` preprocessors. Defines the lower threshold. The recommended value is 100.                                             |
-| `highThresholdCanny`          | int           | Optional. Available just for `canny` preprocessors. Defines the high threshold. The recommended value is 200.                                              |
+| `taskType`                    | integer           | Value: 11                                                                                                                                                 |
+| `width`                       | integer           | Optional. Will resize the image to this width.                                                                                                            |
+| `height`                      | integer           | Optional. Will resize the image to this height.                                                                                                           |
+| `lowThresholdCanny`           | integer           | Optional. Available just for `canny` preprocessors. Defines the lower threshold. The recommended value is 100.                                             |
+| `highThresholdCanny`          | integer           | Optional. Available just for `canny` preprocessors. Defines the high threshold. The recommended value is 200.                                              |
 | `includeHandsAndFaceOpenPose` | bool          | Optional. Available just for `openpose` preprocessors. Will include the hands and face in the pose outline. Defaults to false.                              |
 | `guideImageMaskUUID`          | UUIDV4 string | Mandatory for ControlNet inpainting. The UUID of the image mask used for the inpainting process.                                                          |
 | `guideImageMaskUrl`           | string        | Optional. A URL can be provided, from where the API will download the guide image for the mask. This adds additional delay and is not recommended.         |
@@ -64,10 +64,10 @@ The response to the image upload request will have the following format:
    "newImages":{
       "images":[
          {
-            "imageSrc":"string",
-            "imageUUID":"string",
-            "bNSFWContent":bool,
-            "taskUUID":"string"
+            "imageSrc": "string",
+            "imageUUID": "string",
+            "bNSFWContent": "bool",
+            "taskUUID": "string"
          }
       ]
    }

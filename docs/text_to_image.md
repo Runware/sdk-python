@@ -11,47 +11,47 @@ Requests must be sent in the following format:
 ```json
 {
    "newTask":{
-      "taskUUID":"string",
-      "promptText":"string",
-      "numberResults":int,
+      "taskUUID": "string",
+      "promptText": "string",
+      "numberResults": "integer",
       "modelId": "string",
-      "sizeId":int,
-      "taskType":int,
-      "promptLanguageId":null,
-      "offset":int,
+      "sizeId": "integer",
+      "taskType": "integer",
+      "promptLanguageId": null,
+      "offset": "integer",
       "lora":[
          {
-            "modelId":"string",
-            "weight":float
+            "modelId": "string",
+            "weight": "float"
          },
          {
-            "modelId":"string",
-            "weight":float
+            "modelId": "string",
+            "weight": "float"
          }
       ],
       "controlNet":[
          {
-            "preprocessor":"string",
-            "weight":float,
-            "startStep":int,
-            "endStep":int,
-            "guideImageUUID":"string",
+            "preprocessor": "string",
+            "weight": "float",
+            "startStep": "integer",
+            "endStep": "integer",
+            "guideImageUUID": "string",
             "controlMode": "string"
          },
           {
-            "preprocessor":"string",
-            "weight":float,
-            "startStep":int,
-            "endStep":int,
-            "guideImageUUID":"string",
+            "preprocessor": "string",
+            "weight": "float",
+            "startStep": "integer",
+            "endStep": "integer",
+            "guideImageUUID": "string",
             "controlMode": "string"
          },
          {
-            "preprocessor":"string",
-            "weight":float,
-            "startStep":int,
-            "endStep":int,
-            "guideImageUUID":"string",
+            "preprocessor": "string",
+            "weight": "float",
+            "startStep": "integer",
+            "endStep": "integer",
+            "guideImageUUID": "string",
             "controlMode": "string"
          }
       ]

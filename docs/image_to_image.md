@@ -11,23 +11,23 @@ To generate an image from an uploaded seed image, send a request in the followin
 ```json
 {
    "newTask":{
-      "taskUUID":"string",
+      "taskUUID": "string",
       "imageInitiatorUUID": "string",
-      "promptText":"string",
-      "numberResults":integer,
-      "sizeId":integer,
-      "taskType":2,
-      "promptLanguageId":integer,
-      "offset": integer,
-      "modelId": string,
+      "promptText": "string",
+      "numberResults": "integer",
+      "sizeId": "integer",
+      "taskType": 2,
+      "promptLanguageId": "integer",
+      "offset": "integer",
+      "modelId": "string",
       "lora": [
         {
           "modelId": "string",
-          "weight": float
+          "weight": "float"
         },
         {
           "modelId": "string",
-          "weight": float
+          "weight": "float"
         }
       ]
    }
