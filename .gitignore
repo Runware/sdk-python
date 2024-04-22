@@ -26,3 +26,6 @@ htmlcov/
 
 # Other
 .DS_Store
+
+# Logs
+debug.log
