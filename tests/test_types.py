@@ -2,8 +2,6 @@ import pytest
 import sys
 import os
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from typing import List, Union, Optional, Callable, Any, Dict
 from runware.types import (
     IControlNet,
@@ -155,7 +153,6 @@ def test_icontrol_net_creation():
         start_step=0,
         end_step=10,
         guide_image="guide_image.png",
-        guide_image_unprocessed="guide_image_unprocessed.png",
         control_mode=EControlMode.BALANCED,
     )
     assert isinstance(control_net, IControlNet)
@@ -164,7 +161,6 @@ def test_icontrol_net_creation():
     assert control_net.start_step == 0
     assert control_net.end_step == 10
     assert control_net.guide_image == "guide_image.png"
-    assert control_net.guide_image_unprocessed == "guide_image_unprocessed.png"
     assert control_net.control_mode == EControlMode.BALANCED
 
 

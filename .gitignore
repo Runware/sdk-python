@@ -12,6 +12,7 @@ build/
 # Virtual environment
 venv/
 .venv/
+.env
 
 # IDE and editor files
 .vscode/
@@ -29,3 +30,6 @@ htmlcov/
 
 # Logs
 debug.log
+
+# Research
+rnd/
