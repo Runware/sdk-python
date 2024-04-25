@@ -32,7 +32,7 @@ def test_icontrol_net_union():
     assert isinstance(canny_control_net, IControlNet)
 
     hands_face_control_net = IControlNetHandsAndFace(
-        preprocessor=EOpenPosePreProcessor.OPENPOSE_FACE,
+        preprocessor=EOpenPosePreProcessor.openpose_face,
         weight=0.7,
         start_step=5,
         end_step=15,
@@ -148,7 +148,7 @@ def test_listener_type():
 
 def test_icontrol_net_creation():
     control_net = IControlNetA(
-        preprocessor=EPreProcessor.CANNY,
+        preprocessor=EPreProcessor.canny,
         weight=0.5,
         start_step=0,
         end_step=10,
@@ -156,7 +156,7 @@ def test_icontrol_net_creation():
         control_mode=EControlMode.BALANCED,
     )
     assert isinstance(control_net, IControlNet)
-    assert control_net.preprocessor == EPreProcessor.CANNY
+    assert control_net.preprocessor == EPreProcessor.canny
     assert control_net.weight == 0.5
     assert control_net.start_step == 0
     assert control_net.end_step == 10
@@ -176,7 +176,7 @@ def test_icontrol_net_canny_creation():
     )
     assert isinstance(control_net_canny, IControlNetCanny)
     assert isinstance(control_net_canny, IControlNet)
-    assert control_net_canny.preprocessor == EPreProcessor.CANNY
+    assert control_net_canny.preprocessor == EPreProcessor.canny
     assert control_net_canny.weight == 0.8
     assert control_net_canny.start_step == 2
     assert control_net_canny.end_step == 8
@@ -188,7 +188,7 @@ def test_icontrol_net_canny_creation():
 
 def test_icontrol_net_hands_and_face_creation():
     control_net_hands_and_face = IControlNetHandsAndFace(
-        preprocessor=EOpenPosePreProcessor.OPENPOSE_FACE,
+        preprocessor=EOpenPosePreProcessor.openpose_face,
         weight=0.6,
         start_step=1,
         end_step=9,
@@ -199,7 +199,7 @@ def test_icontrol_net_hands_and_face_creation():
     assert isinstance(control_net_hands_and_face, IControlNetHandsAndFace)
     assert isinstance(control_net_hands_and_face, IControlNet)
     assert (
-        control_net_hands_and_face.preprocessor == EOpenPosePreProcessor.OPENPOSE_FACE
+        control_net_hands_and_face.preprocessor == EOpenPosePreProcessor.openpose_face
     )
     assert control_net_hands_and_face.weight == 0.6
     assert control_net_hands_and_face.start_step == 1
@@ -223,7 +223,7 @@ def test_icontrol_net_union():
         high_threshold_canny=250,
     )
     control_net_hands_and_face = IControlNetHandsAndFace(
-        preprocessor=EOpenPosePreProcessor.OPENPOSE_FULL,
+        preprocessor=EOpenPosePreProcessor.openpose_full,
         weight=0.9,
         start_step=4,
         end_step=6,

@@ -4,7 +4,7 @@ import uuid
 from typing import List, Union, Optional, Callable, Any, Dict
 
 
-from .utils import BASE_RUNWARE_URLS, delay, get_uuid
+from .utils import BASE_RUNWARE_URLS, delay, getUUID
 
 from .types import (
     Environment,
@@ -52,6 +52,77 @@ class RunwareBase:
         self._connection_session_uuid = None
         self._invalid_api_key = None
         self._sdk_type = SdkType.SERVER
+
+    def isWebsocketReadyState(self):
+        return self._ws and self._ws.readyState == 1
+
+    def addListener(self, lis, check, groupKey=None):
+        async def listener(msg):
+            if msg.get("error"):
+                lis(msg)
+            elif check(msg):
+                lis(msg)
+
+        groupListener = ListenerType(
+            key=getUUID(), listener=listener, groupKey=groupKey
+        )
+        self._listeners.append(groupListener)
+
+        def destroy():
+            self._listeners = removeListener(self._listeners, groupListener)
+
+        return {"destroy": destroy}
+
+    def connect(self):
+        async def on_open(e):
+            if self._connection_session_uuid:
+                self.send(
+                    {
+                        "newConnection": {
+                            "apiKey": self._api_key,
+                            "connectionSessionUUID": self._connection_session_uuid,
+                        }
+                    }
+                )
+            else:
+                self.send({"newConnection": {"apiKey": self._api_key}})
+
+            self.addListener(
+                check=lambda m: m.get("newConnectionSessionUUID", {}).get(
+                    "connectionSessionUUID"
+                ),
+                lis=lambda m: self.handle_connection_response(m),
+            )
+
+        async def on_message(e):
+            data = json.loads(e.data)
+            for lis in self._listeners:
+                result = lis.listener(data)
+                if result:
+                    return
+
+        async def on_close(e):
+            if self._invalid_api_key:
+                print(f"Error: {self._invalid_api_key}")
+
+        self._ws.onopen = on_open
+        self._ws.onmessage = on_message
+        self._ws.onclose = on_close
+
+    def handle_connection_response(self, m):
+        if m.get("error"):
+            if m["errorId"] == 19:
+                self._invalid_api_key = "Invalid API key"
+            else:
+                self._invalid_api_key = "Error connection"
+            return
+        self._connection_session_uuid = m.get("newConnectionSessionUUID", {}).get(
+            "connectionSessionUUID"
+        )
+        self._invalid_api_key = None
+
+    def send(self, msg):
+        self._ws.send(json.dumps(msg))
 
     # def is_websocket_ready_state(self):
     #     return self._ws and self._ws.open
@@ -165,3 +236,27 @@ class RunwareBase:
         )
 
         return uploaded_unprocessed_image
+
+    def listenToImages(self, onPartialImages, taskUUID, groupKey):
+        # Placeholder for the listenToImages method
+        pass
+
+    def globalListener(self, responseKey, taskKey, taskUUID):
+        # Placeholder for the globalListener method
+        pass
+
+    def handleIncompleteImages(self, taskUUIDs, error):
+        # Placeholder for the handleIncompleteImages method
+        pass
+
+    async def ensureConnection(self):
+        # Placeholder for the ensureConnection method
+        pass
+
+    async def getSimililarImage(self, taskUUID, numberOfImages, shouldThrowError, lis):
+        # Placeholder for the getSimililarImage method
+        pass
+
+    def connected(self):
+        # Placeholder for the connected method
+        pass

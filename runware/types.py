@@ -21,56 +21,56 @@ class EControlMode(Enum):
 
 
 class EPreProcessorGroup(Enum):
-    CANNY = "canny"
-    DEPTH = "depth"
-    MLSDD = "mlsd"
-    NORMALBAE = "normalbae"
-    OPENPOSE = "openpose"
-    TILE = "tile"
-    SEG = "seg"
-    LINEART = "lineart"
-    LINEART_ANIME = "lineart_anime"
-    SHUFFLE = "shuffle"
-    SCRIBBLE = "scribble"
-    SOFTEDGE = "softedge"
+    canny = "canny"
+    depth = "depth"
+    mlsd = "mlsd"
+    normalbae = "normalbae"
+    openpose = "openpose"
+    tile = "tile"
+    seg = "seg"
+    lineart = "lineart"
+    lineart_anime = "lineart_anime"
+    shuffle = "shuffle"
+    scribble = "scribble"
+    softedge = "softedge"
 
 
 class EPreProcessor(Enum):
-    CANNY = "canny"
-    DEPTH_LERES = "depth_leres"
-    DEPTH_MIDAS = "depth_midas"
-    DEPTH_ZOE = "depth_zoe"
-    INPAINT_GLOBAL_HARMONIOUS = "inpaint_global_harmonious"
-    LINEART_ANIME = "lineart_anime"
-    LINEART_COARSE = "lineart_coarse"
-    LINEART_REALISTIC = "lineart_realistic"
-    LINEART_STANDARD = "lineart_standard"
-    MLSDD = "mlsd"
-    NORMAL_BAE = "normal_bae"
-    SCRIBBLE_HED = "scribble_hed"
-    SCRIBBLE_PIDINET = "scribble_pidinet"
-    SEG_OFADE20K = "seg_ofade20k"
-    SEG_OFCOCO = "seg_ofcoco"
-    SEG_UFADE20K = "seg_ufade20k"
-    SHUFFLE = "shuffle"
-    SOFTEDGE_HED = "softedge_hed"
-    SOFTEDGE_HEDSAFE = "softedge_hedsafe"
-    SOFTEDGE_PIDINET = "softedge_pidinet"
-    SOFTEDGE_PIDISAFE = "softedge_pidisafe"
-    TILE_GAUSSIAN = "tile_gaussian"
-    OPENPOSE = "openpose"
-    OPENPOSE_FACE = "openpose_face"
-    OPENPOSE_FACEONLY = "openpose_faceonly"
-    OPENPOSE_FULL = "openpose_full"
-    OPENPOSE_HAND = "openpose_hand"
+    canny = "canny"
+    depth_leres = "depth_leres"
+    depth_midas = "depth_midas"
+    depth_zoe = "depth_zoe"
+    inpaint_global_harmonious = "inpaint_global_harmonious"
+    lineart_anime = "lineart_anime"
+    lineart_coarse = "lineart_coarse"
+    lineart_realistic = "lineart_realistic"
+    lineart_standard = "lineart_standard"
+    mlsd = "mlsd"
+    normal_bae = "normal_bae"
+    scribble_hed = "scribble_hed"
+    scribble_pidinet = "scribble_pidinet"
+    seg_ofade20k = "seg_ofade20k"
+    seg_ofcoco = "seg_ofcoco"
+    seg_ufade20k = "seg_ufade20k"
+    shuffle = "shuffle"
+    softedge_hed = "softedge_hed"
+    softedge_hedsafe = "softedge_hedsafe"
+    softedge_pidinet = "softedge_pidinet"
+    softedge_pidisafe = "softedge_pidisafe"
+    tile_gaussian = "tile_gaussian"
+    openpose = "openpose"
+    openpose_face = "openpose_face"
+    openpose_faceonly = "openpose_faceonly"
+    openpose_full = "openpose_full"
+    openpose_hand = "openpose_hand"
 
 
 class EOpenPosePreProcessor(Enum):
-    OPENPOSE = "openpose"
-    OPENPOSE_FACE = "openpose_face"
-    OPENPOSE_FACEONLY = "openpose_faceonly"
-    OPENPOSE_FULL = "openpose_full"
-    OPENPOSE_HAND = "openpose_hand"
+    openpose = "openpose"
+    openpose_face = "openpose_face"
+    openpose_faceonly = "openpose_faceonly"
+    openpose_full = "openpose_full"
+    openpose_hand = "openpose_hand"
 
 
 @dataclass
@@ -129,7 +129,7 @@ class IControlNetCanny:
     control_mode: EControlMode
     low_threshold_canny: int
     high_threshold_canny: int
-    preprocessor: EPreProcessor = EPreProcessor.CANNY
+    preprocessor: EPreProcessor = EPreProcessor.canny
     guide_image: Optional[Union[str, File]] = None
     guide_image_unprocessed: Optional[Union[str, File]] = None
 
@@ -175,7 +175,7 @@ class IControlNetCannyWithUUID:
     low_threshold_canny: int
     high_threshold_canny: int
     guide_image: Optional[Union[str, File]] = None
-    preprocessor: EPreProcessor = EPreProcessor.CANNY
+    preprocessor: EPreProcessor = EPreProcessor.canny
     guide_image: Optional[Union[str, File]] = None
     guide_image_unprocessed: Optional[Union[str, File]] = None
 
@@ -378,6 +378,13 @@ class ListenerType:
     def __init__(
         self, key: str, listener: Callable[[Any], None], group_key: Optional[str] = None
     ):
+        """
+        Initialize a new ListenerType instance.
+
+        :param key: str, a unique identifier for the listener.
+        :param listener: Callable[[Any], None], the function to be called when the listener is triggered.
+        :param group_key: Optional[str], an optional grouping key that can be used to categorize listeners.
+        """
         self.key = key
         self.listener = listener
         self.group_key = group_key
