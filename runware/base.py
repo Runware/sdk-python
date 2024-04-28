@@ -1,11 +1,12 @@
 import asyncio
 import json
 import uuid
+import inspect
 from typing import List, Union, Optional, Callable, Any, Dict
 
 
-from .utils import BASE_RUNWARE_URLS, delay, getUUID
-
+from .utils import BASE_RUNWARE_URLS, delay, getUUID, removeListener, accessDeepObject
+from .async_retry import asyncRetry
 from .types import (
     Environment,
     SdkType,
@@ -39,75 +40,84 @@ from .types import (
     File,
 )
 
+from typing import List, Optional, Union, Callable, Any, Dict
+from .types import IImage, IError, SdkType, ListenerType
+from .utils import (
+    accessDeepObject,
+    getIntervalWithPromise,
+    removeListener,
+    LISTEN_TO_IMAGES_KEY,
+)
+
+import logging
+
+from .logging_config import configure_logging
+
+# Configure logging
+configure_logging(log_level=logging.CRITICAL)
+
+logger = logging.getLogger(__name__)
+
 
 class RunwareBase:
-    def __init__(self, api_key, url=BASE_RUNWARE_URLS[Environment.PRODUCTION]):
-        self._ws = None
-        self._listeners = []
-        self._api_key = api_key
-        self._url = url
-        self._global_messages = {}
-        self._global_images = []
-        self._global_error = None
-        self._connection_session_uuid = None
-        self._invalid_api_key = None
-        self._sdk_type = SdkType.SERVER
+    def __init__(
+        self, api_key: str, url: str = BASE_RUNWARE_URLS[Environment.PRODUCTION]
+    ):
+        self._ws: Optional[ReconnectingWebsocketProps] = None
+        self._listeners: List[ListenerType] = []
+        self._apiKey: str = api_key
+        self._url: Optional[str] = url
+        self._globalMessages: Dict[str, Any] = {}
+        self._global_images: List[IImage] = []
+        self._global_error: Optional[IError] = None
+        self._connectionSessionUUID: Optional[str] = None
+        self._invalid_api_key: Optional[str] = None
+        self._sdkType: SdkType = SdkType.SERVER
 
-    def isWebsocketReadyState(self):
-        return self._ws and self._ws.readyState == 1
+    def isWebsocketReadyState(self) -> bool:
+        return self._ws and self._ws.open
 
-    def addListener(self, lis, check, groupKey=None):
-        async def listener(msg):
+    def isAuthenticated(self):
+        return self._connectionSessionUUID is not None
+
+    async def addListener(
+        self,
+        lis: Callable[[Any], Any],
+        check: Callable[[Any], Any],
+        groupKey: Optional[str] = None,
+    ) -> Dict[str, Callable[[], None]]:
+        async def listener(msg: Any) -> None:
             if msg.get("error"):
-                lis(msg)
-            elif check(msg):
-                lis(msg)
+                await lis(msg)
+            elif await check(msg):
+                await lis(msg)
 
-        groupListener = ListenerType(
-            key=getUUID(), listener=listener, groupKey=groupKey
+        # Get the current frame
+        current_frame = inspect.currentframe()
+
+        # Get the caller's frame
+        caller_frame = current_frame.f_back
+
+        # Get the caller's function name
+        caller_name = caller_frame.f_code.co_name
+
+        # Get the caller's line number
+        caller_line_number = caller_frame.f_lineno
+
+        # Print the caller information
+        logger.debug(
+            f"Function {self.addListener.__name__} called by {caller_name} at line {caller_line_number}"
+        )
+
+        groupListener: ListenerType = ListenerType(
+            key=getUUID(), listener=listener, group_key=groupKey
         )
         self._listeners.append(groupListener)
 
-        def destroy():
+        def destroy() -> None:
             self._listeners = removeListener(self._listeners, groupListener)
 
         return {"destroy": destroy}
-
-    def connect(self):
-        async def on_open(e):
-            if self._connection_session_uuid:
-                self.send(
-                    {
-                        "newConnection": {
-                            "apiKey": self._api_key,
-                            "connectionSessionUUID": self._connection_session_uuid,
-                        }
-                    }
-                )
-            else:
-                self.send({"newConnection": {"apiKey": self._api_key}})
-
-            self.addListener(
-                check=lambda m: m.get("newConnectionSessionUUID", {}).get(
-                    "connectionSessionUUID"
-                ),
-                lis=lambda m: self.handle_connection_response(m),
-            )
-
-        async def on_message(e):
-            data = json.loads(e.data)
-            for lis in self._listeners:
-                result = lis.listener(data)
-                if result:
-                    return
-
-        async def on_close(e):
-            if self._invalid_api_key:
-                print(f"Error: {self._invalid_api_key}")
-
-        self._ws.onopen = on_open
-        self._ws.onmessage = on_message
-        self._ws.onclose = on_close
 
     def handle_connection_response(self, m):
         if m.get("error"):
@@ -116,24 +126,10 @@ class RunwareBase:
             else:
                 self._invalid_api_key = "Error connection"
             return
-        self._connection_session_uuid = m.get("newConnectionSessionUUID", {}).get(
+        self._connectionSessionUUID = m.get("newConnectionSessionUUID", {}).get(
             "connectionSessionUUID"
         )
         self._invalid_api_key = None
-
-    def send(self, msg):
-        self._ws.send(json.dumps(msg))
-
-    # def is_websocket_ready_state(self):
-    #     return self._ws and self._ws.open
-
-    # async def connect(self):
-    #     self.logger.info("Connecting to Runware server from base")
-    #     # Implement the connection logic based on the WebSocket library you choose
-    #     pass
-
-    # async def send(self, msg):
-    #     await self._ws.send(json.dumps(msg))
 
     async def requestImages(
         self,
@@ -200,10 +196,83 @@ class RunwareBase:
     async def enhancePrompt(
         self, promptEnhancer: IPromptEnhancer
     ) -> List[IEnhancedPrompt]:
-        # Create a list of dummy IEnhancedPrompt objects
+        """
+        Enhance the given prompt by generating multiple versions of it.
+
+        :param promptEnhancer: An IPromptEnhancer object containing the prompt details.
+        :return: A list of IEnhancedPrompt objects representing the enhanced versions of the prompt.
+        :raises: Any error that occurs during the enhancement process.
+        """
+        try:
+            await self.ensureConnection()
+            return await asyncRetry(lambda: self._enhancePrompt(promptEnhancer))
+        except Exception as e:
+            raise e
+
+    async def _enhancePrompt(
+        self, promptEnhancer: IPromptEnhancer
+    ) -> List[IEnhancedPrompt]:
+        """
+        Internal method to perform the actual prompt enhancement.
+
+        :param promptEnhancer: An IPromptEnhancer object containing the prompt details.
+        :return: A list of IEnhancedPrompt objects representing the enhanced versions of the prompt.
+        """
+        prompt = promptEnhancer.prompt
+        promptMaxLength = promptEnhancer.prompt_max_length or 380
+        promptLanguageId = promptEnhancer.prompt_language_id or 1
+        promptVersions = promptEnhancer.prompt_versions or 1
+
+        taskUUID = getUUID()
+
+        await self.send(
+            {
+                "newPromptEnhance": {
+                    "prompt": prompt,
+                    "taskUUID": taskUUID,
+                    "promptMaxLength": promptMaxLength,
+                    "promptVersions": promptVersions,
+                    "promptLanguageId": promptLanguageId,
+                }
+            }
+        )
+
+        lis = await self.globalListener(
+            responseKey="newPromptEnhancer",
+            taskKey="newPromptEnhancer.texts",
+            taskUUID=taskUUID,
+        )
+
+        def check(resolve: Any, reject: Any, *args: Any) -> bool:
+            # print(f"Checking _globalMessages... {self._globalMessages}")
+            # print(
+            #     f"Checking task {taskUUID} for enhanced prompt... {self._globalMessages.get(taskUUID)}"
+            # )
+
+            # reducedPrompt: List[IEnhancedPrompt] = self._globalMessages.get(taskUUID)
+            response = self._globalMessages.get(taskUUID)
+
+            # print(f"Reduced prompt: {response}")
+
+            if isinstance(response, dict) and response.get("error"):
+                reject(response)
+                return True
+
+            if response and len(response) >= promptVersions:
+                del self._globalMessages[taskUUID]
+                resolve(response)
+                return True
+
+            return False
+
+        response = await getIntervalWithPromise(check, debugKey="enhance-prompt")
+
+        lis["destroy"]()
+
+        # Transform the response to a list of IEnhancedPrompt objects
         enhanced_prompts = [
-            IEnhancedPrompt(task_uuid=str(uuid.uuid4()), text=f"Enhanced Prompt {i+1}")
-            for i in range(promptEnhancer.prompt_versions)
+            IEnhancedPrompt(task_uuid=prompt["taskUUID"], text=prompt["text"])
+            for prompt in response
         ]
 
         return enhanced_prompts
@@ -237,26 +306,190 @@ class RunwareBase:
 
         return uploaded_unprocessed_image
 
-    def listenToImages(self, onPartialImages, taskUUID, groupKey):
-        # Placeholder for the listenToImages method
-        pass
+    def listenToImages(
+        self,
+        onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]],
+        taskUUID: str,
+        groupKey: LISTEN_TO_IMAGES_KEY,
+    ) -> Dict[str, Callable[[], None]]:
+        """
+        Set up a listener to receive partial image updates for a specific task.
 
-    def globalListener(self, responseKey, taskKey, taskUUID):
-        # Placeholder for the globalListener method
-        pass
+        :param onPartialImages: A callback function to be invoked with the filtered images and any error.
+        :param taskUUID: The unique identifier of the task to filter images for.
+        :param groupKey: The group key to categorize the listener.
+        :return: A dictionary containing a 'destroy' function to remove the listener.
+        """
 
-    def handleIncompleteImages(self, taskUUIDs, error):
-        # Placeholder for the handleIncompleteImages method
-        pass
+        def listener(m: Dict[str, Any]) -> None:
+            if m.get("newImages") and m["newImages"].get("images"):
+                images = [
+                    img
+                    for img in m["newImages"]["images"]
+                    if img["taskUUID"] == taskUUID
+                ]
+                onPartialImages(images, m.get("error"))
 
-    async def ensureConnection(self):
-        # Placeholder for the ensureConnection method
-        pass
+                if m.get("error"):
+                    self._globalError = m
+                else:
+                    if self._sdkType == SdkType.CLIENT:
+                        self._globalImages.extend(m["newImages"]["images"])
+                    else:
+                        self._globalImages.extend(images)
 
-    async def getSimililarImage(self, taskUUID, numberOfImages, shouldThrowError, lis):
-        # Placeholder for the getSimililarImage method
-        pass
+        return self.addListener(
+            listener,
+            lambda m: m.get("newImages") and m["newImages"].get("images"),
+            groupKey,
+        )
 
-    def connected(self):
-        # Placeholder for the connected method
-        pass
+    async def globalListener(
+        self, responseKey: str, taskKey: str, taskUUID: str
+    ) -> Dict[str, Callable[[], None]]:
+        """
+        Set up a global listener to capture specific messages based on the provided keys.
+
+        :param responseKey: The key to check for the presence of the desired response data.
+        :param taskKey: The key to extract the relevant data from the received message.
+        :param taskUUID: The unique identifier of the task associated with the listener.
+        :return: A dictionary containing a 'destroy' function to remove the listener.
+        """
+        logger.debug("Setting up global listener for taskUUID: %s", taskUUID)
+
+        async def listener(m: Dict[str, Any]) -> None:
+            logger.debug("Global listener message: %s", m)
+            logger.debug("Global listener taskUUID: %s", taskUUID)
+            logger.debug("Global listener taskKey: %s", taskKey)
+
+            if m.get("error"):
+                self._globalMessages[taskUUID] = m
+                return
+
+            value = accessDeepObject(taskKey, m)
+
+            if isinstance(value, list):
+                for v in value:
+                    self._globalMessages[v["taskUUID"]] = self._globalMessages.get(
+                        v["taskUUID"], []
+                    ) + [v]
+                    logger.debug("Global messages v: %s", v)
+                    logger.debug(
+                        "self._globalMessages[v[taskUUID]]: %s",
+                        self._globalMessages[v["taskUUID"]],
+                    )
+            else:
+                self._globalMessages[value["taskUUID"]] = value
+
+        async def check(m):
+            logger.debug("Global check message: %s", m)
+            return accessDeepObject(responseKey, m)
+
+        logger.debug("Global Listener responseKey: %s", responseKey)
+        logger.debug("Global Listener taskUUID: %s", taskUUID)
+        logger.debug("Global Listener taskKey: %s", taskKey)
+
+        temp_listener = await self.addListener(check=check, lis=listener)
+        logger.debug("Temp listener: %s", temp_listener)
+
+        return temp_listener
+
+        def handleIncompleteImages(
+            self, taskUUIDs: List[str], error: Any
+        ) -> Optional[List[IImage]]:
+            """
+            Handle scenarios where the requested number of images is not fully received.
+
+            :param taskUUIDs: A list of task UUIDs to filter the images.
+            :param error: The error object to raise if there are no or only one image.
+            :return: A list of available images if there are more than one, otherwise None.
+            :raises: The provided error if there are no or only one image.
+            """
+            imagesWithSimilarTask = [
+                img for img in self._globalImages if img["taskUUID"] in taskUUIDs
+            ]
+            if len(imagesWithSimilarTask) > 1:
+                self._globalImages = [
+                    img
+                    for img in self._globalImages
+                    if img["taskUUID"] not in taskUUIDs
+                ]
+                return imagesWithSimilarTask
+            else:
+                raise error
+
+    async def ensureConnection(self) -> None:
+        """
+        Ensure that a connection is established with the server.
+
+        This method checks if the current connection is active and, if not, initiates a new connection.
+        It handles authentication and retries the connection if necessary.
+
+        :raises: An error message if the connection cannot be established due to an invalid API key or other reasons.
+        """
+        isConnected = self.connected() and self._ws.open
+        # print(f"Is connected: {isConnected}")
+
+        try:
+            if self._invalidAPIkey:
+                raise self._invalidAPIkey
+
+            if not isConnected:
+                self.connect()
+                await asyncio.sleep(2)
+
+        except Exception as e:
+            raise self._invalidAPIkey or "Could not connect to server. Ensure your API key is correct"
+
+    async def getSimililarImage(
+        self,
+        taskUUID: Union[str, List[str]],
+        numberOfImages: int,
+        shouldThrowError: bool = False,
+        lis: Optional[ListenerType] = None,
+    ) -> Union[List[IImage], IError]:
+        """
+        Retrieve similar images based on the provided task UUID(s) and desired number of images.
+
+        :param taskUUID: A single task UUID or a list of task UUIDs to filter images.
+        :param numberOfImages: The desired number of images to retrieve.
+        :param shouldThrowError: A flag indicating whether to throw an error if the desired number of images is not reached.
+        :param lis: An optional listener to handle image updates.
+        :return: A list of retrieved images or an error object if the desired number of images is not reached.
+        """
+        taskUUIDs = taskUUID if isinstance(taskUUID, list) else [taskUUID]
+
+        def check(
+            resolve: Callable[[List[IImage]], None],
+            reject: Callable[[IError], None],
+            intervalId: Any,
+        ) -> Optional[bool]:
+            imagesWithSimilarTask = [
+                img for img in self._globalImages if img["taskUUID"] in taskUUIDs
+            ]
+
+            if self._globalError:
+                newData = self._globalError
+                self._globalError = None
+                reject(newData)
+                return True
+            elif len(imagesWithSimilarTask) >= numberOfImages:
+                resolve(imagesWithSimilarTask[:numberOfImages])
+                self._globalImages = [
+                    img
+                    for img in self._globalImages
+                    if img["taskUUID"] not in taskUUIDs
+                ]
+                return True
+
+        return await getIntervalWithPromise(
+            check, debugKey="getting images", shouldThrowError=shouldThrowError
+        )
+
+    def connected(self) -> bool:
+        """
+        Check if the current WebSocket connection is active and authenticated.
+
+        :return: True if the connection is active and authenticated, False otherwise.
+        """
+        return self.isWebsocketReadyState() and self._connectionSessionUUID is not None

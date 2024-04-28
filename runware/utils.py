@@ -5,6 +5,7 @@ import datetime
 import uuid
 import re
 import json
+import inspect
 from functools import reduce
 from typing import Any, Callable, Dict, List, Union, Optional, TypeVar
 from .types import (
@@ -16,7 +17,9 @@ from .types import (
     File,
     GetWithPromiseCallBackType,
 )
+import logging
 
+logger = logging.getLogger(__name__)
 
 BASE_RUNWARE_URLS = {
     Environment.PRODUCTION: "wss://ws-api.runware.ai/v1",
@@ -27,6 +30,10 @@ RETRY_SDK_COUNTS = {
     "GLOBAL": 2,
     "REQUEST_IMAGES": 2,
 }
+
+
+PING_TIMEOUT_DURATION = 10000  # 10 seconds
+PING_INTERVAL = 5000  # 5 seconds
 
 TIMEOUT_DURATION = 120000  # 120 seconds
 POLLING_INTERVAL = 1000  # 1 seconds
@@ -410,13 +417,41 @@ def accessDeepObject(
     :param shouldReturnString: bool, return a JSON string of the object if True.
     :return: The value found at the key path or a default value.
     """
+
+    # Get the current frame
+    current_frame = inspect.currentframe()
+
+    # Get the caller's frame
+    caller_frame = current_frame.f_back
+
+    # Get the caller's function name
+    caller_name = caller_frame.f_code.co_name
+
+    # Get the caller's line number
+    caller_line_number = caller_frame.f_lineno
+
+    logger.debug(
+        f"Function {accessDeepObject.__name__} called by {caller_name} at line {caller_line_number}"
+    )
+    logger.debug(f"accessDeepObject key: {key}")
+    logger.debug(f"accessDeepObject data: {data}")
+
     default_value = 0 if useZero else None
     keys = re.split(r"\.|\[", key)
     keys = [k.replace("]", "") for k in keys]
 
+    logger.debug(f"accessDeepObject keys: {keys}")
+
     current_value = data
     for k in keys:
+        logger.debug(f"accessDeepObject key: {k}")
+        logger.debug(
+            "isinstance(current_value, (dict, list))",
+            isinstance(current_value, (dict, list)),
+        )
         if isinstance(current_value, (dict, list)):
+            logger.debug(f"accessDeepObject current_value: {current_value}")
+            logger.debug(f"k in current_value: {k in current_value}")
             if k.isdigit() and isinstance(current_value, list):
                 index = int(k)
                 if 0 <= index < len(current_value):
@@ -429,6 +464,8 @@ def accessDeepObject(
                 return default_value
         else:
             return default_value
+
+    logger.debug(f"accessDeepObject current_value: {current_value}")
 
     if shouldReturnString and isinstance(current_value, (dict, list)):
         return json.dumps(current_value)
@@ -470,6 +507,8 @@ async def getIntervalWithPromise(
         uploaded_image = await upload_image("task123")
         print(uploaded_image)  # Output: "uploadedImage"
     """
+    logger = logging.getLogger(__name__)
+
     loop = asyncio.get_running_loop()
     future = loop.create_future()
     intervalHandle = None
@@ -478,30 +517,43 @@ async def getIntervalWithPromise(
         nonlocal intervalHandle, future
         try:
             if not future.done():
+                logger.debug(f"Checking callback for {debugKey}")
+                logger.debug(f"Future done: {future.done()}")
+                logger.debug(f"Future result: {future.result}")
+                logger.debug(f"Future exception: {future.exception}")
+                logger.debug(f"callback: {callback}")
+
                 result = callback(
-                    {
-                        "resolve": future.set_result,
-                        "reject": future.set_exception,
-                        "intervalId": intervalHandle,
-                    }
+                    future.set_result, future.set_exception, intervalHandle
                 )
                 if result:
                     if intervalHandle:
                         intervalHandle.cancel()
-                        print(f"Interval cleared for {debugKey}")
+                        logger.debug(f"Interval cleared for {debugKey}")
                 else:
                     intervalHandle = loop.call_later(
                         pollingInterval / 1000,
-                        lambda: asyncio.create_task(check_callback()),
+                        lambda: (
+                            logger.debug("Creating task for check_callback"),
+                            asyncio.create_task(check_callback()),
+                        )[-1],
                     )
             else:
-                print(f"Future already done for {debugKey}, interval not rescheduled")
+                logger.debug(
+                    f"Future already done for {debugKey}, interval not rescheduled"
+                )
         except Exception as e:
             future.set_exception(e)
-            print(f"Error in check_callback for {debugKey}: {str(e)}")
+            logger.exception(f"Error in check_callback for {debugKey}: {str(e)}")
 
     intervalHandle = loop.call_later(
-        pollingInterval / 1000, lambda: asyncio.create_task(check_callback())
+        pollingInterval / 1000,
+        lambda: (
+            logger.debug("Creating task for check_callback"),
+            asyncio.create_task(check_callback()),
+        )[
+            -1
+        ],  # Return the task itself)
     )
 
     async def timeout_handler():
@@ -512,19 +564,23 @@ async def getIntervalWithPromise(
                     future.set_exception(
                         Exception(f"Message could not be received for {debugKey}")
                     )
-                    print(f"Error: Message could not be received for {debugKey}")
+                    logger.error(f"Error: Message could not be received for {debugKey}")
                 else:
                     future.set_result(None)
                 if intervalHandle:
                     intervalHandle.cancel()
-                    print(f"Interval cleared due to timeout for {debugKey}")
+                    logger.debug(f"Interval cleared due to timeout for {debugKey}")
         except Exception as e:
             future.set_exception(e)
-            print(f"Error in timeout_handler for {debugKey}: {str(e)}")
+            logger.exception(f"Error in timeout_handler for {debugKey}: {str(e)}")
 
     # Schedule the timeout handler
     timeoutHandle = loop.call_later(
-        timeOutDuration / 1000, lambda: asyncio.create_task(timeout_handler())
+        timeOutDuration / 1000,
+        lambda: (
+            logger.debug("Creating task for timeout_handler"),
+            asyncio.create_task(timeout_handler()),
+        )[-1],
     )
 
     try:
@@ -532,9 +588,9 @@ async def getIntervalWithPromise(
     finally:
         if intervalHandle and not intervalHandle.cancelled():
             intervalHandle.cancel()
-            print(f"Interval canceled for {debugKey}")
+            logger.debug(f"Interval canceled for {debugKey}")
         if timeoutHandle and not timeoutHandle.cancelled():
             timeoutHandle.cancel()
-            print(f"Timeout canceled for {debugKey}")
+            logger.debug(f"Timeout canceled for {debugKey}")
 
     return await future

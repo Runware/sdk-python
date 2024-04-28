@@ -10,9 +10,14 @@ RUNWARE_API_KEY = os.environ.get("RUNWARE_API_KEY")
 
 
 async def main() -> None:
+    # Create an instance of RunwareServer
     runware = Runware(api_key=RUNWARE_API_KEY)
 
+    # Connect to the Runware service
+    await runware.connect()
+
     prompt = "A beautiful sunset over the mountains"
+    print(f"Original Prompt: {prompt}")
 
     prompt_enhancer = IPromptEnhancer(
         prompt=prompt,
@@ -23,9 +28,9 @@ async def main() -> None:
         promptEnhancer=prompt_enhancer
     )
 
-    print("Enhanced Prompts:")
+    print("Enhanced Prompts:\n")
     for enhanced_prompt in enhanced_prompts:
-        print(enhanced_prompt.text)
+        print(enhanced_prompt.text, "\n")
 
 
 if __name__ == "__main__":
