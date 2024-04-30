@@ -319,9 +319,9 @@ class ReconnectingWebsocketProps:
 
 @dataclass
 class UploadImageType:
-    new_image_uuid: str
-    new_image_src: str
-    task_uuid: str
+    newImageUUID: str
+    newImageSrc: str
+    taskUUID: str
 
 
 # The GetWithPromiseCallBackType is defined using the Callable type from the typing module. It represents a function that takes a dictionary

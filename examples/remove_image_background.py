@@ -1,5 +1,6 @@
 import asyncio
 import os
+import logging
 from typing import List, Optional
 from dotenv import load_dotenv
 from runware import Runware, IImage, IRemoveImageBackground
@@ -11,10 +12,13 @@ RUNWARE_API_KEY = os.environ.get("RUNWARE_API_KEY")
 
 
 async def main() -> None:
-    # Initialize the Runware client
+    # Create an instance of RunwareServer
     runware = Runware(api_key=RUNWARE_API_KEY)
 
-    image_path = "path/to/image.jpg"
+    # Connect to the Runware service
+    await runware.connect()
+
+    image_path = "retriever.jpg"
 
     remove_image_background_payload = IRemoveImageBackground(image_initiator=image_path)
 
@@ -22,7 +26,7 @@ async def main() -> None:
         removeImageBackgroundPayload=remove_image_background_payload
     )
 
-    print("Processed Images:")
+    print("Processed Image with the background removed:")
     # TODO: Does it really return List[IImage] or just one IImage object?
     for image in processed_images:
         print(image.imageSrc)

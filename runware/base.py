@@ -14,6 +14,8 @@ from .utils import (
     accessDeepObject,
     getPreprocessorType,
     getTaskType,
+    fileToBase64,
+    isValidUUID,
 )
 from .async_retry import asyncRetry
 from .types import (
@@ -331,18 +333,76 @@ class RunwareBase:
     async def removeImageBackground(
         self, removeImageBackgroundPayload: IRemoveImageBackground
     ) -> List[IImage]:
-        # Create a list of dummy IImage objects
-        images = [
-            IImage(
-                imageSrc=f"https://example.com/image_{i}.jpg",
-                imageUUID=str(uuid.uuid4()),
-                taskUUID=str(uuid.uuid4()),
-                bNSFWContent=False,
+        try:
+            await self.ensureConnection()
+            return await asyncRetry(
+                lambda: self._removeImageBackground(removeImageBackgroundPayload)
             )
-            for i in range(1)
+        except Exception as e:
+            raise e
+
+    async def _removeImageBackground(
+        self, removeImageBackgroundPayload: IRemoveImageBackground
+    ) -> List[IImage]:
+        image_initiator = removeImageBackgroundPayload.image_initiator
+
+        image_uploaded = await self.uploadImage(image_initiator)
+
+        if not image_uploaded or not image_uploaded.newImageUUID:
+            return []
+
+        taskUUID = getUUID()
+
+        await self.send(
+            {
+                "newRemoveBackground": {
+                    "imageUUID": image_uploaded.newImageUUID,
+                    "taskUUID": taskUUID,
+                    "taskType": 8,
+                }
+            }
+        )
+
+        lis = self.globalListener(
+            responseKey="newRemoveBackground",
+            taskKey="newRemoveBackground.images",
+            taskUUID=taskUUID,
+        )
+
+        def check(resolve: callable, reject: callable, *args: Any) -> bool:
+            response = self._globalMessages.get(taskUUID)
+            # TODO: Check why I need a conversion here?
+            if response:
+                new_remove_background = response[0]
+            else:
+                new_remove_background = response
+            if new_remove_background and new_remove_background.get("error"):
+                reject(new_remove_background)
+                return True
+
+            if new_remove_background:
+                del self._globalMessages[taskUUID]
+                resolve(new_remove_background)
+                return True
+
+            return False
+
+        response = await getIntervalWithPromise(
+            check, debugKey="remove-image-background"
+        )
+
+        lis["destroy"]()
+
+        image_list: List[IImage] = [
+            IImage(
+                imageSrc=response["imageSrc"],
+                imageUUID=response["imageUUID"],
+                taskUUID=response["taskUUID"],
+                bNSFWContent=response["bNSFWContent"],
+            )
         ]
 
-        return images
+        return image_list
 
     async def upscaleGan(self, upscaleGanPayload: IUpscaleGan) -> List[IImage]:
         # Create a list of dummy IImage objects
@@ -433,14 +493,68 @@ class RunwareBase:
         return enhanced_prompts
 
     async def uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
-        # Create a dummy UploadImageType object
-        uploaded_image = UploadImageType(
-            new_image_uuid=str(uuid.uuid4()),
-            new_image_src="https://example.com/uploaded_image.jpg",
-            task_uuid=str(uuid.uuid4()),
+        try:
+            await self.ensureConnection()
+            return await asyncRetry(lambda: self._uploadImage(file))
+        except Exception as e:
+            raise e
+
+    async def _uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
+        task_uuid = getUUID()
+
+        if isinstance(file, str) and isValidUUID(file):
+            return UploadImageType(
+                new_image_uuid=file,
+                new_image_src=file,
+                task_uuid=task_uuid,
+            )
+
+        image_base64 = await fileToBase64(file) if isinstance(file, str) else file
+
+        await self.send(
+            {
+                "newImageUpload": {
+                    "imageBase64": image_base64,
+                    "taskUUID": task_uuid,
+                    "taskType": 7,
+                }
+            }
         )
 
-        return uploaded_image
+        lis = self.globalListener(
+            responseKey="newUploadedImageUUID",
+            taskKey="newUploadedImageUUID",
+            taskUUID=task_uuid,
+        )
+
+        def check(resolve: callable, reject: callable, *args: Any) -> bool:
+            uploaded_image = self._globalMessages.get(task_uuid)
+
+            if uploaded_image and uploaded_image.get("error"):
+                reject(uploaded_image)
+                return True
+
+            if uploaded_image:
+                del self._globalMessages[task_uuid]
+                resolve(uploaded_image)
+                return True
+
+            return False
+
+        response = await getIntervalWithPromise(check, debugKey="upload-image")
+
+        lis["destroy"]()
+
+        if response:
+            image = UploadImageType(
+                newImageUUID=response["newImageUUID"],
+                newImageSrc=response["newImageSrc"],
+                taskUUID=response["taskUUID"],
+            )
+        else:
+            image = None
+
+        return image
 
     async def uploadUnprocessedImage(
         self,

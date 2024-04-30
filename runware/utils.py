@@ -5,6 +5,7 @@ import datetime
 import uuid
 import re
 import json
+import mimetypes
 import inspect
 from functools import reduce
 from typing import Any, Callable, Dict, List, Union, Optional, TypeVar
@@ -249,7 +250,9 @@ async def fileToBase64(file_path: str) -> str:
     try:
         async with aiofiles.open(file_path, "rb") as file:
             file_contents = await file.read()
-            return base64.b64encode(file_contents).decode("utf-8")
+            mime_type, _ = mimetypes.guess_type(file_path)
+            base64_content = base64.b64encode(file_contents).decode("utf-8")
+            return f"data:{mime_type};base64,{base64_content}"
     except FileNotFoundError:
         raise FileNotFoundError(f"The file at {file_path} does not exist.")
     except IOError:
