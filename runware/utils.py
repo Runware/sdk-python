@@ -534,10 +534,13 @@ async def getIntervalWithPromise(
                         intervalHandle.cancel()
                         logger.debug(f"Interval cleared for {debugKey}")
                 else:
+                    # TODO: Find a better way than polling, as it's not very efficient.
+                    # Consider using asyncio.Event or asyncio.Condition triggered by an incoming message
+                    # as the state won't change unless I have a new message from the service
                     intervalHandle = loop.call_later(
                         pollingInterval / 1000,
                         lambda: (
-                            logger.debug("Creating task for check_callback"),
+                            # logger.debug("Creating task for check_callback"),
                             asyncio.create_task(check_callback()),
                         )[-1],
                     )

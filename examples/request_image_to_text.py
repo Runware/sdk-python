@@ -1,18 +1,24 @@
 import asyncio
 import os
+import logging
 from dotenv import load_dotenv
 from runware import Runware, IImageToText, IRequestImageToText
 
 # Load environment variables from .env file
 load_dotenv()
 
+RUNWARE_API_KEY = os.environ.get("RUNWARE_API_KEY")
+
 
 async def main() -> None:
-    # Initialize the Runware client
-    runware = Runware(api_key=os.environ.get("RUNWARE_API_KEY"))
+    # Create an instance of RunwareServer
+    runware = Runware(api_key=RUNWARE_API_KEY)
+
+    # Connect to the Runware service
+    await runware.connect()
 
     # The image requires for the seed image. It can be the UUID of previously generated image or an a file image.
-    image_path = "path/to/image.jpg"
+    image_path = "retriever.jpg"
 
     request_image_to_text_payload = IRequestImageToText(image_initiator=image_path)
 

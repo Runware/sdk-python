@@ -322,13 +322,67 @@ class RunwareBase:
     async def requestImageToText(
         self, requestImageToText: IRequestImageToText
     ) -> IImageToText:
-        # Create a dummy IImageToText object
-        image_to_text = IImageToText(
-            task_uuid=str(uuid.uuid4()),
-            text="Sample text",
+        try:
+            await self.ensureConnection()
+            return await asyncRetry(
+                lambda: self._requestImageToText(requestImageToText)
+            )
+        except Exception as e:
+            raise e
+
+    async def _requestImageToText(
+        self, requestImageToText: IRequestImageToText
+    ) -> IImageToText:
+        image_initiator = requestImageToText.image_initiator
+
+        image_uploaded = await self.uploadImage(image_initiator)
+
+        if not image_uploaded or not image_uploaded.newImageUUID:
+            return None
+
+        task_uuid = getUUID()
+
+        await self.send(
+            {
+                "newReverseImageClip": {
+                    "imageUUID": image_uploaded.newImageUUID,
+                    "taskUUID": task_uuid,
+                }
+            }
         )
 
-        return image_to_text
+        lis = self.globalListener(
+            responseKey="newReverseClip",
+            taskKey="newReverseClip.texts",
+            taskUUID=task_uuid,
+        )
+
+        def check(resolve: callable, reject: callable, *args: Any) -> bool:
+            response = self._globalMessages.get(task_uuid)
+            # TODO: Check why I need a conversion here?
+            if response:
+                image_to_text = response[0]
+            else:
+                image_to_text = response
+            if image_to_text and image_to_text.get("error"):
+                reject(image_to_text)
+                return True
+
+            if image_to_text:
+                del self._globalMessages[task_uuid]
+                resolve(image_to_text)
+                return True
+
+            return False
+
+        response = await getIntervalWithPromise(check, debugKey="image-to-text")
+
+        lis["destroy"]()
+
+        if response:
+            return IImageToText(task_uuid=response["taskUUID"], text=response["text"])
+        else:
+            return None
 
     async def removeImageBackground(
         self, removeImageBackgroundPayload: IRemoveImageBackground
@@ -405,18 +459,72 @@ class RunwareBase:
         return image_list
 
     async def upscaleGan(self, upscaleGanPayload: IUpscaleGan) -> List[IImage]:
-        # Create a list of dummy IImage objects
-        images = [
+        try:
+            await self.ensureConnection()
+            return await asyncRetry(lambda: self._upscaleGan(upscaleGanPayload))
+        except Exception as e:
+            raise e
+
+    async def _upscaleGan(self, upscaleGanPayload: IUpscaleGan) -> List[IImage]:
+        image_initiator = upscaleGanPayload.image_initiator
+        upscale_factor = upscaleGanPayload.upscale_factor
+
+        image_uploaded = await self.uploadImage(image_initiator)
+
+        if not image_uploaded or not image_uploaded.newImageUUID:
+            return []
+
+        taskUUID = getUUID()
+
+        await self.send(
+            {
+                "newUpscaleGan": {
+                    "imageUUID": image_uploaded.newImageUUID,
+                    "taskUUID": taskUUID,
+                    "upscaleFactor": upscale_factor,
+                }
+            }
+        )
+
+        lis = self.globalListener(
+            responseKey="newUpscaleGan",
+            taskKey="newUpscaleGan.images",
+            taskUUID=taskUUID,
+        )
+
+        def check(resolve: callable, reject: callable, *args: Any) -> bool:
+            response = self._globalMessages.get(taskUUID)
+            # TODO: Check why I need a conversion here?
+            if response:
+                upscaled_image = response[0]
+            else:
+                upscaled_image = response
+            if upscaled_image and upscaled_image.get("error"):
+                reject(upscaled_image)
+                return True
+
+            if upscaled_image:
+                del self._globalMessages[taskUUID]
+                resolve(upscaled_image)
+                return True
+
+            return False
+
+        response = await getIntervalWithPromise(check, debugKey="upscale-gan")
+
+        lis["destroy"]()
+
+        # TODO: The respones has an upscaleImageUUID field, should I return it as well?
+        image_list: List[IImage] = [
             IImage(
-                imageSrc=f"https://example.com/image_{i}.jpg",
-                imageUUID=str(uuid.uuid4()),
-                taskUUID=str(uuid.uuid4()),
-                bNSFWContent=False,
+                imageSrc=response["imageSrc"],
+                imageUUID=response["imageUUID"],
+                taskUUID=response["taskUUID"],
+                bNSFWContent=response["bNSFWContent"],
             )
-            for i in range(1)
         ]
 
-        return images
+        return image_list
 
     async def enhancePrompt(
         self, promptEnhancer: IPromptEnhancer
