@@ -445,10 +445,10 @@ def accessDeepObject(
     current_value = data
     for k in keys:
         logger.debug(f"accessDeepObject key: {k}")
-        logger.debug(
-            "isinstance(current_value, (dict, list))",
-            isinstance(current_value, (dict, list)),
-        )
+        # logger.debug(
+        #     "isinstance(current_value, (dict, list))",
+        #     str(isinstance(current_value, (dict, list))),
+        # )
         if isinstance(current_value, (dict, list)):
             logger.debug(f"accessDeepObject current_value: {current_value}")
             logger.debug(f"k in current_value: {k in current_value}")
@@ -517,11 +517,11 @@ async def getIntervalWithPromise(
         nonlocal intervalHandle, future
         try:
             if not future.done():
-                logger.debug(f"Checking callback for {debugKey}")
-                logger.debug(f"Future done: {future.done()}")
-                logger.debug(f"Future result: {future.result}")
-                logger.debug(f"Future exception: {future.exception}")
-                logger.debug(f"callback: {callback}")
+                # logger.debug(f"Checking callback for {debugKey}")
+                # logger.debug(f"Future done: {future.done()}")
+                # logger.debug(f"Future result: {future.result}")
+                # logger.debug(f"Future exception: {future.exception}")
+                # logger.debug(f"callback: {callback}")
 
                 result = callback(
                     future.set_result, future.set_exception, intervalHandle
@@ -546,15 +546,16 @@ async def getIntervalWithPromise(
             future.set_exception(e)
             logger.exception(f"Error in check_callback for {debugKey}: {str(e)}")
 
-    intervalHandle = loop.call_later(
-        pollingInterval / 1000,
-        lambda: (
-            logger.debug("Creating task for check_callback"),
-            asyncio.create_task(check_callback()),
-        )[
-            -1
-        ],  # Return the task itself)
-    )
+    await check_callback()
+    # intervalHandle = loop.call_later(
+    #    pollingInterval / 1000,
+    #    lambda: (
+    #        logger.debug("Creating task for check_callback"),
+    #        asyncio.create_task(check_callback()),
+    #    )[
+    #        -1
+    #    ],  # Return the task itself)
+    # )
 
     async def timeout_handler():
         nonlocal future, intervalHandle

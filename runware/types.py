@@ -90,6 +90,7 @@ class IImage:
     imageUUID: str
     taskUUID: str
     bNSFWContent: bool
+    imageAltText: Optional[str] = None  # For use_cache=True
 
 
 @dataclass
@@ -376,7 +377,11 @@ GetWithPromiseCallBackType = Callable[
 
 class ListenerType:
     def __init__(
-        self, key: str, listener: Callable[[Any], None], group_key: Optional[str] = None
+        self,
+        key: str,
+        listener: Callable[[Any], None],
+        group_key: Optional[str] = None,
+        debug_message: Optional[str] = None,
     ):
         """
         Initialize a new ListenerType instance.
@@ -388,6 +393,13 @@ class ListenerType:
         self.key = key
         self.listener = listener
         self.group_key = group_key
+        self.debug_message = debug_message
+
+    def __str__(self):
+        return f"ListenerType(key={self.key}, listener={self.listener}, group_key={self.group_key}, debug_message={self.debug_message})"
+
+    def __repr__(self):
+        return self.__str__()
 
 
 T = TypeVar("T")
