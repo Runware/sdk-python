@@ -10,8 +10,6 @@ name: Publish Python 🐍 package 📦 to PyPI
 
 on:
   push:
-    branches:
-      - main
     tags:
       - "v*" # This workflow triggers on tags like v1.0, v2.0
 permissions:
