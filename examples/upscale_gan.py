@@ -22,10 +22,13 @@ async def main() -> None:
     upscale_gan_payload = IUpscaleGan(
         image_initiator=image_path, upscale_factor=upscale_factor
     )
-
-    upscaled_images: List[IImage] = await runware.upscaleGan(
-        upscaleGanPayload=upscale_gan_payload
-    )
+    try:
+        upscaled_images: List[IImage] = await runware.upscaleGan(
+            upscaleGanPayload=upscale_gan_payload
+        )
+    except Exception as e:
+        print(f"Error: {e}")
+        return
 
     print(f"Upscaled Images ({upscale_factor}x):")
     # TODO: Does it really return a list of IImage objects or just one IImage object?

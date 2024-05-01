@@ -22,9 +22,13 @@ async def main() -> None:
 
     request_image_to_text_payload = IRequestImageToText(image_initiator=image_path)
 
-    image_to_text: IImageToText = await runware.requestImageToText(
-        requestImageToText=request_image_to_text_payload
-    )
+    try:
+        image_to_text: IImageToText = await runware.requestImageToText(
+            requestImageToText=request_image_to_text_payload
+        )
+    except Exception as e:
+        print(f"Error: {e}")
+        return
 
     print("Description of the image:")
     print(image_to_text.text)

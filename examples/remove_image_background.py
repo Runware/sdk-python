@@ -21,10 +21,13 @@ async def main() -> None:
     image_path = "retriever.jpg"
 
     remove_image_background_payload = IRemoveImageBackground(image_initiator=image_path)
-
-    processed_images: List[IImage] = await runware.removeImageBackground(
-        removeImageBackgroundPayload=remove_image_background_payload
-    )
+    try:
+        processed_images: List[IImage] = await runware.removeImageBackground(
+            removeImageBackgroundPayload=remove_image_background_payload
+        )
+    except Exception as e:
+        print(f"Error: {e}")
+        return
 
     print("Processed Image with the background removed:")
     # TODO: Does it really return List[IImage] or just one IImage object?

@@ -23,10 +23,13 @@ async def main() -> None:
         prompt=prompt,
         prompt_versions=3,
     )
-
-    enhanced_prompts: List[IEnhancedPrompt] = await runware.enhancePrompt(
-        promptEnhancer=prompt_enhancer
-    )
+    try:
+        enhanced_prompts: List[IEnhancedPrompt] = await runware.enhancePrompt(
+            promptEnhancer=prompt_enhancer
+        )
+    except Exception as e:
+        print(f"Error: {e}")
+        return
 
     print("Enhanced Prompts:\n")
     for enhanced_prompt in enhanced_prompts:

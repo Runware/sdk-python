@@ -64,14 +64,17 @@ async def main() -> None:
         number_of_images=4,
         use_cache=False,
     )
-
-    first_images_request, second_images_request, third_image_request = (
-        await asyncio.gather(
-            runware.requestImages(requestImage=request_image1),
-            runware.requestImages(requestImage=request_image2),
-            runware.requestImages(requestImage=request_image3),
+    try:
+        first_images_request, second_images_request, third_image_request = (
+            await asyncio.gather(
+                runware.requestImages(requestImage=request_image1),
+                runware.requestImages(requestImage=request_image2),
+                runware.requestImages(requestImage=request_image3),
+            )
         )
-    )
+    except Exception as e:
+        print(f"Error: {e}")
+        return
 
     print("\nFirst Image Request Results:")
     for image in first_images_request:
