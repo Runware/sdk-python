@@ -1,5 +1,6 @@
 from enum import Enum
 from dataclasses import dataclass, field
+from math import cos
 from typing import List, Union, Optional, Callable, Any, Dict, TypeVar
 
 
@@ -90,6 +91,7 @@ class IImage:
     imageUUID: str
     taskUUID: str
     bNSFWContent: bool
+    cost: float
     imageAltText: Optional[str] = None  # For use_cache=True
 
 
