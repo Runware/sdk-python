@@ -9,6 +9,8 @@ import mimetypes
 import inspect
 from functools import reduce
 from typing import Any, Callable, Dict, List, Union, Optional, TypeVar
+from enum import Enum
+from dataclasses import dataclass, fields
 from .types import (
     Environment,
     EPreProcessor,
@@ -17,6 +19,11 @@ from .types import (
     IControlNet,
     File,
     GetWithPromiseCallBackType,
+    IImage,
+    ETaskType,
+    IImageToText,
+    IEnhancedPrompt,
+    IError,
 )
 import logging
 
@@ -42,6 +49,25 @@ POLLING_INTERVAL = 1000  # 1 seconds
 
 class LISTEN_TO_IMAGES_KEY:
     REQUEST_IMAGES = "REQUEST_IMAGES"
+
+
+class RunwareAPIError(Exception):
+    def __init__(self, error_data: dict):
+        self.code = error_data.get("code")
+        self.error_data = error_data
+        super().__init__(str(error_data))
+
+    def __str__(self):
+        return f"RunwareAPIError: {self.error_data}"
+
+
+class RunwareError(Exception):
+    def __init__(self, ierror: IError):
+        self.ierror = ierror
+        super().__init__(f"Runware Error: {ierror.error_message}")
+
+    def __str__(self):
+        return f"Runware Error (Task UUID: {self.ierror.task_uuid}): {self.ierror.error_message}"
 
 
 class Blob:
@@ -440,40 +466,121 @@ def accessDeepObject(
     logger.debug(f"accessDeepObject data: {data}")
 
     default_value = 0 if useZero else None
-    keys = re.split(r"\.|\[", key)
-    keys = [k.replace("]", "") for k in keys]
 
-    logger.debug(f"accessDeepObject keys: {keys}")
+    # if "data" in data and isinstance(data["data"], list):
+    #     # Iterate through each item in the data list
+    #     for item in data["data"]:
+    #         # Check if 'taskType' is in the item and matches the target_task_type
+    #         if "taskType" in item and item["taskType"] == key:
+    #             # Return the entire item if there's a match
+    #             matching_tasks.append(item)
+    matching_tasks = []
 
-    current_value = data
-    for k in keys:
-        logger.debug(f"accessDeepObject key: {k}")
-        # logger.debug(
-        #     "isinstance(current_value, (dict, list))",
-        #     str(isinstance(current_value, (dict, list))),
-        # )
-        if isinstance(current_value, (dict, list)):
-            logger.debug(f"accessDeepObject current_value: {current_value}")
-            logger.debug(f"k in current_value: {k in current_value}")
-            if k.isdigit() and isinstance(current_value, list):
-                index = int(k)
-                if 0 <= index < len(current_value):
-                    current_value = current_value[index]
+    # Check for successful messages
+    if "data" in data and isinstance(data["data"], list):
+        for item in data["data"]:
+            if "taskUUID" in item and item["taskUUID"] == key:
+                matching_tasks.append(item)
+
+    # Check for error messages
+    if "errors" in data and isinstance(data["errors"], list):
+        for error in data["errors"]:
+            if "taskUUID" in error and error["taskUUID"] == key:
+                matching_tasks.append(error)
+
+    if len(matching_tasks) == 0:
+        return default_value
+
+    logger.debug(f"accessDeepObject matching_tasks: {matching_tasks}")
+
+    if shouldReturnString and isinstance(matching_tasks, (dict, list)):
+        return json.dumps(matching_tasks)
+
+    return matching_tasks
+
+    # keys = re.split(r"\.|\[", key)
+    # keys = [k.replace("]", "") for k in keys]
+
+    # logger.debug(f"accessDeepObject keys: {keys}")
+
+    # current_value = data
+    # for k in keys:
+    #     logger.debug(f"accessDeepObject key: {k}")
+    #     # logger.debug(
+    #     #     "isinstance(current_value, (dict, list))",
+    #     #     str(isinstance(current_value, (dict, list))),
+    #     # )
+    #     if isinstance(current_value, (dict, list)):
+    #         logger.debug(f"accessDeepObject current_value: {current_value}")
+    #         logger.debug(f"k in current_value: {k in current_value}")
+    #         if k.isdigit() and isinstance(current_value, list):
+    #             index = int(k)
+    #             if 0 <= index < len(current_value):
+    #                 current_value = current_value[index]
+    #             else:
+    #                 return default_value
+    #         elif k in current_value:
+    #             current_value = current_value[k]
+    #         else:
+    #             return default_value
+    #     else:
+    #         return default_value
+
+    # logger.debug(f"accessDeepObject current_value: {current_value}")
+
+    # if shouldReturnString and isinstance(current_value, (dict, list)):
+    #     return json.dumps(current_value)
+
+    # return current_value
+
+
+def createEnhancedPromptsFromResponse(response: List[dict]) -> List[IEnhancedPrompt]:
+    def process_single_prompt(prompt_data: dict) -> IEnhancedPrompt:
+        processed_fields = {}
+
+        for field in fields(IEnhancedPrompt):
+            if field.name in prompt_data:
+                if field.name == "taskType":
+                    processed_fields[field.name] = ETaskType(prompt_data[field.name])
+                elif field.type == float or field.type == Optional[float]:
+                    processed_fields[field.name] = float(prompt_data[field.name])
                 else:
-                    return default_value
-            elif k in current_value:
-                current_value = current_value[k]
+                    processed_fields[field.name] = prompt_data[field.name]
+
+        return IEnhancedPrompt(**processed_fields)
+
+    return [process_single_prompt(prompt) for prompt in response]
+
+
+def createImageFromResponse(response: dict) -> IImage:
+    processed_fields = {}
+
+    for field in fields(IImage):
+        if field.name in response:
+            if field.type == bool or field.type == Optional[bool]:
+                processed_fields[field.name] = bool(response[field.name])
+            elif field.type == float or field.type == Optional[float]:
+                processed_fields[field.name] = float(response[field.name])
             else:
-                return default_value
-        else:
-            return default_value
+                processed_fields[field.name] = response[field.name]
 
-    logger.debug(f"accessDeepObject current_value: {current_value}")
+    return IImage(**processed_fields)
 
-    if shouldReturnString and isinstance(current_value, (dict, list)):
-        return json.dumps(current_value)
 
-    return current_value
+def createImageToTextFromResponse(response: dict) -> IImageToText:
+    processed_fields = {}
+
+    for field in fields(IImageToText):
+        if field.name in response:
+            if field.name == "taskType":
+                # Convert string to ETaskType enum
+                processed_fields[field.name] = ETaskType(response[field.name])
+            elif field.type == float or field.type == Optional[float]:
+                processed_fields[field.name] = float(response[field.name])
+            else:
+                processed_fields[field.name] = response[field.name]
+
+    return IImageToText(**processed_fields)
 
 
 async def getIntervalWithPromise(
@@ -522,13 +629,16 @@ async def getIntervalWithPromise(
             if not future.done():
                 # logger.debug(f"Checking callback for {debugKey}")
                 # logger.debug(f"Future done: {future.done()}")
+                # logger.debug(f"Future callback: {callback}")
                 # logger.debug(f"Future result: {future.result}")
+
                 # logger.debug(f"Future exception: {future.exception}")
                 # logger.debug(f"callback: {callback}")
 
                 result = callback(
                     future.set_result, future.set_exception, intervalHandle
                 )
+
                 if result:
                     if intervalHandle:
                         intervalHandle.cancel()
@@ -550,7 +660,7 @@ async def getIntervalWithPromise(
                 )
         except Exception as e:
             future.set_exception(e)
-            logger.exception(f"Error in check_callback for {debugKey}: {str(e)}")
+            logger.exception(f"Error in check_callback 2 for {debugKey}: {str(e)}")
 
     await check_callback()
     # intervalHandle = loop.call_later(

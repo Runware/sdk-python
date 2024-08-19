@@ -1,6 +1,8 @@
 import asyncio
 from doctest import debug
 import json
+from os import error
+import re
 import uuid
 import inspect
 from typing import List, Union, Optional, Callable, Any, Dict
@@ -16,6 +18,11 @@ from .utils import (
     getTaskType,
     fileToBase64,
     isValidUUID,
+    createImageFromResponse,
+    createImageToTextFromResponse,
+    createEnhancedPromptsFromResponse,
+    RunwareAPIError,
+    RunwareError,
 )
 from .async_retry import asyncRetry
 from .types import (
@@ -32,13 +39,13 @@ from .types import (
     IControlNet,
     IControlNetWithUUID,
     IError,
-    IRequestImage,
-    IRequestImageToText,
+    IImageInference,
+    IImageCaption,
     IImageToText,
-    IRemoveImageBackground,
-    IPromptEnhancer,
+    IImageBackgroundRemoval,
+    IPromptEnhance,
     IEnhancedPrompt,
-    IUpscaleGan,
+    IImageUpscale,
     ReconnectingWebsocketProps,
     UploadImageType,
     GetWithPromiseCallBackType,
@@ -49,6 +56,7 @@ from .types import (
     RequireOnlyOne,
     ListenerType,
     File,
+    ETaskType,
 )
 
 from typing import List, Optional, Union, Callable, Any, Dict
@@ -148,8 +156,8 @@ class RunwareBase:
         )
         self._invalidAPIkey = None
 
-    async def requestImages(
-        self, requestImage: IRequestImage
+    async def imageInference(
+        self, requestImage: IImageInference
     ) -> Union[List[IImage], None]:
         let_lis: Optional[Any] = None
         request_object: Optional[Dict[str, Any]] = None
@@ -162,22 +170,20 @@ class RunwareBase:
             image_mask_initiator_uuid: Optional[str] = None
             control_net_data: List[IControlNetWithUUID] = []
 
-            if requestImage.image_initiator:
-                uploaded_image = await self.uploadImage(requestImage.image_initiator)
+            if requestImage.seedImage:
+                uploaded_image = await self.uploadImage(requestImage.seedImage)
                 if not uploaded_image:
                     return []
                 image_initiator_uuid = uploaded_image.new_image_uuid
 
-            if requestImage.image_mask_initiator:
-                uploaded_mask_initiator = await self.uploadImage(
-                    requestImage.image_mask_initiator
-                )
+            if requestImage.maskImage:
+                uploaded_mask_initiator = await self.uploadImage(requestImage.maskImage)
                 if not uploaded_mask_initiator:
                     return []
                 image_mask_initiator_uuid = uploaded_mask_initiator.new_image_uuid
 
-            if requestImage.control_net:
-                for control_data in requestImage.control_net:
+            if requestImage.controlNet:
+                for control_data in requestImage.controlNet:
                     any_control_data = (
                         control_data  # Type cast to access additional attributes
                     )
@@ -224,22 +230,16 @@ class RunwareBase:
                         )
                     )
 
-            prompt = f"{requestImage.positive_prompt} {'-no ' + requestImage.negative_prompt if requestImage.negative_prompt else ''}".strip()
+            prompt = f"{requestImage.positivePrompt}".strip()
             request_object = {
                 "offset": 0,
-                "modelId": requestImage.model_id,
-                "promptText": prompt,
-                "numberResults": requestImage.number_of_images,
-                "sizeId": requestImage.image_size,
-                "taskType": getTaskType(
-                    prompt=prompt,
-                    controlNet=requestImage.control_net,
-                    imageMaskInitiator=requestImage.image_mask_initiator,
-                    imageInitiator=requestImage.image_initiator,
-                ),
-                "useCache": requestImage.use_cache,
-                "schedulerId": 22,
-                "gScale": 7,
+                "modelId": requestImage.model,
+                "positivePrompt": prompt,
+                "numberResults": requestImage.numberResults,
+                "height": requestImage.height,
+                "width": requestImage.width,
+                "taskType": ETaskType.IMAGE_INFERENCE.value,
+                "useCache": requestImage.useCache,
                 **({"steps": requestImage.steps} if requestImage.steps else {}),
                 **(
                     {"imageInitiatorUUID": image_initiator_uuid}
@@ -252,10 +252,18 @@ class RunwareBase:
                     else {}
                 ),
                 **({"controlNet": control_net_data} if control_net_data else {}),
-                **({"lora": requestImage.lora} if requestImage.lora else {}),
+                **(
+                    {
+                        "lora": [
+                            {"model": lora.model, "weight": lora.weight}
+                            for lora in requestImage.lora
+                        ]
+                    }
+                    if requestImage.lora
+                    else {}
+                ),
                 **({"seed": requestImage.seed} if requestImage.seed else {}),
             }
-            # print(f"Request object: {request_object}")
 
             return await asyncRetry(
                 lambda: self._requestImages(
@@ -263,8 +271,8 @@ class RunwareBase:
                     task_uuids=task_uuids,
                     let_lis=let_lis,
                     retry_count=retry_count,
-                    number_of_images=requestImage.number_of_images,
-                    on_partial_images=requestImage.on_partial_images,
+                    number_of_images=requestImage.numberResults,
+                    on_partial_images=requestImage.onPartialImages,
                 )
             )
         except Exception as e:
@@ -315,13 +323,15 @@ class RunwareBase:
 
         let_lis["destroy"]()
 
+        if "code" in images:
+            # This indicates an error response
+            raise RunwareAPIError(images)
+
         return [IImage(**image_data) for image_data in images]
 
         # return images
 
-    async def requestImageToText(
-        self, requestImageToText: IRequestImageToText
-    ) -> IImageToText:
+    async def imageCaption(self, requestImageToText: IImageCaption) -> IImageToText:
         try:
             await self.ensureConnection()
             return await asyncRetry(
@@ -331,34 +341,37 @@ class RunwareBase:
             raise e
 
     async def _requestImageToText(
-        self, requestImageToText: IRequestImageToText
+        self, requestImageToText: IImageCaption
     ) -> IImageToText:
-        image_initiator = requestImageToText.image_initiator
+        inputImage = requestImageToText.inputImage
 
-        image_uploaded = await self.uploadImage(image_initiator)
+        image_uploaded = await self.uploadImage(inputImage)
 
-        if not image_uploaded or not image_uploaded.newImageUUID:
+        if not image_uploaded or not image_uploaded.imageUUID:
             return None
 
-        task_uuid = getUUID()
+        taskUUID = getUUID()
 
-        await self.send(
-            {
-                "newReverseImageClip": {
-                    "imageUUID": image_uploaded.newImageUUID,
-                    "taskUUID": task_uuid,
-                }
-            }
-        )
+        # Create a dictionary with mandatory parameters
+        task_params = {
+            "taskType": ETaskType.IMAGE_CAPTION.value,
+            "taskUUID": taskUUID,
+            "inputImage": image_uploaded.imageUUID,
+        }
+
+        # Add optional parameters if they are provided
+        if requestImageToText.includeCost:
+            task_params["includeCost"] = requestImageToText.includeCost
+
+        # Send the task with all applicable parameters
+        await self.send([task_params])
 
         lis = self.globalListener(
-            responseKey="newReverseClip",
-            taskKey="newReverseClip.texts",
-            taskUUID=task_uuid,
+            taskUUID=taskUUID,
         )
 
         def check(resolve: callable, reject: callable, *args: Any) -> bool:
-            response = self._globalMessages.get(task_uuid)
+            response = self._globalMessages.get(taskUUID)
             # TODO: Check why I need a conversion here?
             if response:
                 image_to_text = response[0]
@@ -369,7 +382,7 @@ class RunwareBase:
                 return True
 
             if image_to_text:
-                del self._globalMessages[task_uuid]
+                del self._globalMessages[taskUUID]
                 resolve(image_to_text)
                 return True
 
@@ -379,13 +392,17 @@ class RunwareBase:
 
         lis["destroy"]()
 
+        if "code" in response:
+            # This indicates an error response
+            raise RunwareAPIError(response)
+
         if response:
-            return IImageToText(task_uuid=response["taskUUID"], text=response["text"])
+            return createImageToTextFromResponse(response)
         else:
             return None
 
-    async def removeImageBackground(
-        self, removeImageBackgroundPayload: IRemoveImageBackground
+    async def imageBackgroundRemoval(
+        self, removeImageBackgroundPayload: IImageBackgroundRemoval
     ) -> List[IImage]:
         try:
             await self.ensureConnection()
@@ -396,30 +413,58 @@ class RunwareBase:
             raise e
 
     async def _removeImageBackground(
-        self, removeImageBackgroundPayload: IRemoveImageBackground
+        self, removeImageBackgroundPayload: IImageBackgroundRemoval
     ) -> List[IImage]:
-        image_initiator = removeImageBackgroundPayload.image_initiator
+        inputImage = removeImageBackgroundPayload.inputImage
 
-        image_uploaded = await self.uploadImage(image_initiator)
+        image_uploaded = await self.uploadImage(inputImage)
 
-        if not image_uploaded or not image_uploaded.newImageUUID:
+        if not image_uploaded or not image_uploaded.imageUUID:
             return []
 
         taskUUID = getUUID()
 
-        await self.send(
-            {
-                "newRemoveBackground": {
-                    "imageUUID": image_uploaded.newImageUUID,
-                    "taskUUID": taskUUID,
-                    "taskType": 8,
-                }
-            }
-        )
+        # Create a dictionary with mandatory parameters
+        task_params = {
+            "taskType": ETaskType.IMAGE_BACKGROUND_REMOVAL.value,
+            "taskUUID": taskUUID,
+            "inputImage": image_uploaded.imageUUID,
+        }
+
+        # Add optional parameters if they are provided
+        if removeImageBackgroundPayload.outputType is not None:
+            task_params["outputType"] = removeImageBackgroundPayload.outputType
+        if removeImageBackgroundPayload.outputFormat is not None:
+            task_params["outputFormat"] = removeImageBackgroundPayload.outputFormat
+        if removeImageBackgroundPayload.rgba:
+            task_params["rgba"] = removeImageBackgroundPayload.rgba
+        if removeImageBackgroundPayload.postProcessMask:
+            task_params["postProcessMask"] = (
+                removeImageBackgroundPayload.postProcessMask
+            )
+        if removeImageBackgroundPayload.returnOnlyMask:
+            task_params["returnOnlyMask"] = removeImageBackgroundPayload.returnOnlyMask
+        if removeImageBackgroundPayload.alphaMatting:
+            task_params["alphaMatting"] = removeImageBackgroundPayload.alphaMatting
+        if removeImageBackgroundPayload.alphaMattingForegroundThreshold is not None:
+            task_params["alphaMattingForegroundThreshold"] = (
+                removeImageBackgroundPayload.alphaMattingForegroundThreshold
+            )
+        if removeImageBackgroundPayload.alphaMattingBackgroundThreshold is not None:
+            task_params["alphaMattingBackgroundThreshold"] = (
+                removeImageBackgroundPayload.alphaMattingBackgroundThreshold
+            )
+        if removeImageBackgroundPayload.alphaMattingErodeSize is not None:
+            task_params["alphaMattingErodeSize"] = (
+                removeImageBackgroundPayload.alphaMattingErodeSize
+            )
+        if removeImageBackgroundPayload.includeCost:
+            task_params["includeCost"] = removeImageBackgroundPayload.includeCost
+
+        # Send the task with all applicable parameters
+        await self.send([task_params])
 
         lis = self.globalListener(
-            responseKey="newRemoveBackground",
-            taskKey="newRemoveBackground.images",
             taskUUID=taskUUID,
         )
 
@@ -447,48 +492,53 @@ class RunwareBase:
 
         lis["destroy"]()
 
-        image_list: List[IImage] = [
-            IImage(
-                imageSrc=response["imageSrc"],
-                imageUUID=response["imageUUID"],
-                taskUUID=response["taskUUID"],
-                bNSFWContent=response["bNSFWContent"],
-            )
-        ]
+        if "code" in response:
+            # This indicates an error response
+            raise RunwareAPIError(response)
+
+        image = createImageFromResponse(response)
+        image_list: List[IImage] = [image]
 
         return image_list
 
-    async def upscaleGan(self, upscaleGanPayload: IUpscaleGan) -> List[IImage]:
+    async def imageUpscale(self, upscaleGanPayload: IImageUpscale) -> List[IImage]:
         try:
             await self.ensureConnection()
             return await asyncRetry(lambda: self._upscaleGan(upscaleGanPayload))
         except Exception as e:
             raise e
 
-    async def _upscaleGan(self, upscaleGanPayload: IUpscaleGan) -> List[IImage]:
-        image_initiator = upscaleGanPayload.image_initiator
-        upscale_factor = upscaleGanPayload.upscale_factor
+    async def _upscaleGan(self, upscaleGanPayload: IImageUpscale) -> List[IImage]:
+        inputImage = upscaleGanPayload.inputImage
+        upscaleFactor = upscaleGanPayload.upscaleFactor
 
-        image_uploaded = await self.uploadImage(image_initiator)
+        image_uploaded = await self.uploadImage(inputImage)
 
-        if not image_uploaded or not image_uploaded.newImageUUID:
+        if not image_uploaded or not image_uploaded.imageUUID:
             return []
 
         taskUUID = getUUID()
 
-        await self.send(
-            {
-                "newUpscaleGan": {
-                    "imageUUID": image_uploaded.newImageUUID,
-                    "taskUUID": taskUUID,
-                    "upscaleFactor": upscale_factor,
-                }
-            }
-        )
+        # Create a dictionary with mandatory parameters
+        task_params = {
+            "taskType": ETaskType.IMAGE_UPSCALE.value,
+            "taskUUID": taskUUID,
+            "inputImage": image_uploaded.imageUUID,
+            "upscaleFactor": upscaleGanPayload.upscaleFactor,
+        }
+
+        # Add optional parameters if they are provided
+        if upscaleGanPayload.outputType is not None:
+            task_params["outputType"] = upscaleGanPayload.outputType
+        if upscaleGanPayload.outputFormat is not None:
+            task_params["outputFormat"] = upscaleGanPayload.outputFormat
+        if upscaleGanPayload.includeCost:
+            task_params["includeCost"] = upscaleGanPayload.includeCost
+
+        # Send the task with all applicable parameters
+        await self.send([task_params])
 
         lis = self.globalListener(
-            responseKey="newUpscaleGan",
-            taskKey="newUpscaleGan.images",
             taskUUID=taskUUID,
         )
 
@@ -514,20 +564,17 @@ class RunwareBase:
 
         lis["destroy"]()
 
-        # TODO: The respones has an upscaleImageUUID field, should I return it as well?
-        image_list: List[IImage] = [
-            IImage(
-                imageSrc=response["imageSrc"],
-                imageUUID=response["imageUUID"],
-                taskUUID=response["taskUUID"],
-                bNSFWContent=response["bNSFWContent"],
-            )
-        ]
+        if "code" in response:
+            # This indicates an error response
+            raise RunwareAPIError(response)
 
+        image = createImageFromResponse(response)
+        # TODO: The respones has an upscaleImageUUID field, should I return it as well?
+        image_list: List[IImage] = [image]
         return image_list
 
-    async def enhancePrompt(
-        self, promptEnhancer: IPromptEnhancer
+    async def promptEnhance(
+        self, promptEnhancer: IPromptEnhance
     ) -> List[IEnhancedPrompt]:
         """
         Enhance the given prompt by generating multiple versions of it.
@@ -543,7 +590,7 @@ class RunwareBase:
             raise e
 
     async def _enhancePrompt(
-        self, promptEnhancer: IPromptEnhancer
+        self, promptEnhancer: IPromptEnhance
     ) -> List[IEnhancedPrompt]:
         """
         Internal method to perform the actual prompt enhancement.
@@ -552,27 +599,28 @@ class RunwareBase:
         :return: A list of IEnhancedPrompt objects representing the enhanced versions of the prompt.
         """
         prompt = promptEnhancer.prompt
-        promptMaxLength = promptEnhancer.prompt_max_length or 380
-        promptLanguageId = promptEnhancer.prompt_language_id or 1
-        promptVersions = promptEnhancer.prompt_versions or 1
+        promptMaxLength = promptEnhancer.promptMaxLength or 380
+        promptVersions = promptEnhancer.promptVersions or 1
 
         taskUUID = getUUID()
 
-        await self.send(
-            {
-                "newPromptEnhance": {
-                    "prompt": prompt,
-                    "taskUUID": taskUUID,
-                    "promptMaxLength": promptMaxLength,
-                    "promptVersions": promptVersions,
-                    "promptLanguageId": promptLanguageId,
-                }
-            }
-        )
+        # Create a dictionary with mandatory parameters
+        task_params = {
+            "taskType": ETaskType.PROMPT_ENHANCE.value,
+            "taskUUID": taskUUID,
+            "prompt": prompt,
+            "promptMaxLength": promptMaxLength,
+            "promptVersions": promptVersions,
+        }
+
+        # Add optional parameters if they are provided
+        if promptEnhancer.includeCost:
+            task_params["includeCost"] = promptEnhancer.includeCost
+
+        # Send the task with all applicable parameters
+        await self.send([task_params])
 
         lis = self.globalListener(
-            responseKey="newPromptEnhancer",
-            taskKey="newPromptEnhancer.texts",
             taskUUID=taskUUID,
         )
 
@@ -581,7 +629,8 @@ class RunwareBase:
             if isinstance(response, dict) and response.get("error"):
                 reject(response)
                 return True
-            if response and len(response) >= promptVersions:
+            # if response and len(response) >= promptVersions:
+            if response:
                 del self._globalMessages[taskUUID]
                 resolve(response)
                 return True
@@ -592,11 +641,12 @@ class RunwareBase:
 
         lis["destroy"]()
 
+        if "code" in response[0]:
+            # This indicates an error response
+            raise RunwareAPIError(response[0])
+
         # Transform the response to a list of IEnhancedPrompt objects
-        enhanced_prompts = [
-            IEnhancedPrompt(task_uuid=prompt["taskUUID"], text=prompt["text"])
-            for prompt in response
-        ]
+        enhanced_prompts = createEnhancedPromptsFromResponse(response)
 
         return enhanced_prompts
 
@@ -612,31 +662,31 @@ class RunwareBase:
 
         if isinstance(file, str) and isValidUUID(file):
             return UploadImageType(
-                new_image_uuid=file,
-                new_image_src=file,
-                task_uuid=task_uuid,
+                imageUUID=file,
+                imageURL=file,
+                taskUUID=task_uuid,
             )
 
         image_base64 = await fileToBase64(file) if isinstance(file, str) else file
 
         await self.send(
-            {
-                "newImageUpload": {
-                    "imageBase64": image_base64,
+            [
+                {
+                    "taskType": ETaskType.IMAGE_UPLOAD.value,
                     "taskUUID": task_uuid,
-                    "taskType": 7,
+                    "image": image_base64,
                 }
-            }
+            ]
         )
 
         lis = self.globalListener(
-            responseKey="newUploadedImageUUID",
-            taskKey="newUploadedImageUUID",
             taskUUID=task_uuid,
         )
 
         def check(resolve: callable, reject: callable, *args: Any) -> bool:
-            uploaded_image = self._globalMessages.get(task_uuid)
+            uploaded_image_list = self._globalMessages.get(task_uuid)
+            # TODO: Update to support multiple images
+            uploaded_image = uploaded_image_list[0] if uploaded_image_list else None
 
             if uploaded_image and uploaded_image.get("error"):
                 reject(uploaded_image)
@@ -653,15 +703,18 @@ class RunwareBase:
 
         lis["destroy"]()
 
+        if "code" in response:
+            # This indicates an error response
+            raise RunwareAPIError(response)
+
         if response:
             image = UploadImageType(
-                newImageUUID=response["newImageUUID"],
-                newImageSrc=response["newImageSrc"],
+                imageUUID=response["imageUUID"],
+                imageURL=response["imageURL"],
                 taskUUID=response["taskUUID"],
             )
         else:
             image = None
-
         return image
 
     async def uploadUnprocessedImage(
@@ -700,49 +753,73 @@ class RunwareBase:
         logger.debug("Setting up images listener for taskUUID: %s", taskUUID)
 
         def listen_to_images_lis(m: Dict[str, Any]) -> None:
-            if m.get("newImages") and m["newImages"].get("images"):
+            # Handle successful image generation
+            if isinstance(m.get("data"), list):
                 images = [
                     img
-                    for img in m["newImages"]["images"]
-                    if img["taskUUID"] == taskUUID
+                    for img in m["data"]
+                    if img.get("taskType") == "imageInference"
+                    and img.get("taskUUID") == taskUUID
                 ]
 
-                if m.get("error"):
-                    self._globalError = m
-                else:
+                if images:
                     self._globalImages.extend(images)
-                # print(f"Images listener: {images}")
-                if len(images) > 0:
                     try:
                         partial_images = [IImage(**image_data) for image_data in images]
                         if onPartialImages:
-                            onPartialImages(partial_images, m.get("error"))
+                            onPartialImages(
+                                partial_images, None
+                            )  # No error in this case
                     except Exception as e:
                         print(
                             f"Error occurred in user on_partial_images callback function: {e}"
                         )
-                    # print(f"Images listener: {images}")
+
+            # Handle error messages
+            elif isinstance(m.get("errors"), list):
+                errors = [
+                    error for error in m["errors"] if error.get("taskUUID") == taskUUID
+                ]
+                if errors:
+                    error = IError(
+                        error=True,  # Since this is an error message, we set this to True
+                        error_message=errors[0].get("message", "Unknown error"),
+                        task_uuid=errors[0].get("taskUUID", ""),
+                    )
+                    self._globalError = (
+                        error  # Store the first error related to this task
+                    )
+                    if onPartialImages:
+                        onPartialImages(
+                            [], self._globalError
+                        )  # Empty list for images, pass the error
 
         def listen_to_images_check(m):
             logger.debug("Images check message: %s", m)
-            return m.get("newImages") and m["newImages"].get("images")
+            # Check for successful image inference messages
+            image_inference_check = isinstance(m.get("data"), list) and any(
+                item.get("taskType") == "imageInference" for item in m["data"]
+            )
+            # Check for error messages with matching taskUUID
+            error_check = isinstance(m.get("errors"), list) and any(
+                error.get("taskUUID") == taskUUID for error in m["errors"]
+            )
+
+            response = image_inference_check or error_check
+            return response
 
         temp_listener = self.addListener(
             check=listen_to_images_check, lis=listen_to_images_lis, groupKey=groupKey
         )
 
-        logger.debug("Temp listener: %s", temp_listener)
+        logger.debug("listenToImages :: Temp listener: %s", temp_listener)
 
         return temp_listener
 
-    def globalListener(
-        self, responseKey: str, taskKey: str, taskUUID: str
-    ) -> Dict[str, Callable[[], None]]:
+    def globalListener(self, taskUUID: str) -> Dict[str, Callable[[], None]]:
         """
-        Set up a global listener to capture specific messages based on the provided keys.
+        Set up a global listener to capture specific messages based on the provided taskUUID.
 
-        :param responseKey: The key to check for the presence of the desired response data.
-        :param taskKey: The key to extract the relevant data from the received message.
         :param taskUUID: The unique identifier of the task associated with the listener.
         :return: A dictionary containing a 'destroy' function to remove the listener.
         """
@@ -751,13 +828,15 @@ class RunwareBase:
         def global_lis(m: Dict[str, Any]) -> None:
             logger.debug("Global listener message: %s", m)
             logger.debug("Global listener taskUUID: %s", taskUUID)
-            logger.debug("Global listener taskKey: %s", taskKey)
+            # logger.debug("Global listener taskKey: %s", taskKey)
 
             if m.get("error"):
                 self._globalMessages[taskUUID] = m
                 return
 
-            value = accessDeepObject(taskKey, m)
+            value = accessDeepObject(
+                taskUUID, m
+            )  # I think this is the taskType now, and it returns the content of 'data'
 
             if isinstance(value, list):
                 for v in value:
@@ -774,14 +853,12 @@ class RunwareBase:
 
         def global_check(m):
             logger.debug("Global check message: %s", m)
-            return accessDeepObject(responseKey, m)
+            return accessDeepObject(taskUUID, m)
 
-        logger.debug("Global Listener responseKey: %s", responseKey)
         logger.debug("Global Listener taskUUID: %s", taskUUID)
-        logger.debug("Global Listener taskKey: %s", taskKey)
 
         temp_listener = self.addListener(check=global_check, lis=global_lis)
-        logger.debug("Temp listener: %s", temp_listener)
+        logger.debug("globalListener :: Temp listener: %s", temp_listener)
 
         return temp_listener
 
@@ -853,29 +930,39 @@ class RunwareBase:
             reject: Callable[[IError], None],
             intervalId: Any,
         ) -> Optional[bool]:
-            # print(f"Task UUIDs: {taskUUIDs}")
-            # print(f"Global images: {self._globalImages}")
-
+            # print(f"Check # Task UUIDs: {taskUUIDs}")
+            # print(f"Check # Global images: {self._globalImages}")
+            # print(f"Check # reject: {reject}")
+            # print(f"Check # resolve: {resolve}")
+            logger.debug(f"Check # Global images: {self._globalImages}")
             imagesWithSimilarTask = [
-                img for img in self._globalImages if img["taskUUID"] in taskUUIDs
+                img
+                for img in self._globalImages
+                if img.get("taskType") == "imageInference"
+                and img.get("taskUUID") in taskUUIDs
             ]
-
-            # print(f"No images with similar task: {len(imagesWithSimilarTask)}")
-            # print(f"numberOfImages: {numberOfImages}")
+            logger.debug(f"Check # imagesWithSimilarTask: {imagesWithSimilarTask}")
 
             if self._globalError:
-                newData = self._globalError
+                logger.debug(f"Check # _globalError: {self._globalError}")
+
+                error = self._globalError
                 self._globalError = None
-                reject(newData)
+                logger.debug(f"Rejecting with error: {error}")
+                logger.debug(f"Rejecting function: {reject}")
+
+                reject(RunwareError(error))
                 return True
             elif len(imagesWithSimilarTask) >= numberOfImages:
                 resolve(imagesWithSimilarTask[:numberOfImages])
                 self._globalImages = [
                     img
                     for img in self._globalImages
-                    if img["taskUUID"] not in taskUUIDs
+                    if img.get("taskType") == "imageInference"
+                    and img.get("taskUUID") not in taskUUIDs
                 ]
                 return True
+            # return False
 
         return await getIntervalWithPromise(
             check, debugKey="getting images", shouldThrowError=shouldThrowError

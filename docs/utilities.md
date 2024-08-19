@@ -8,15 +8,15 @@ Images can be uploaded to be used as seed to reverse prompts and get image to te
 
 For detailed information on how to use the Image Upload utility, see the [Image Upload documentation](utilities_image_upload.md).
 
-## Image to Text (Image interrogator)
+## Image to Text
 
-Image to text (Image interrogator) allows you to upload an image and generate the prompt used to create similar images.
+Image to text allows you to upload an image and generate the prompt used to create similar images.
 
 To learn more about the Image to Text utility and how to use it in your code, refer to the [Image to Text documentation](utilities_image_to_text.md).
 
-## Prompt Enhancer (Magic prompt)
+## Prompt Enhancer
 
-Prompt enhancer (Magic prompt) can be used to add keywords to prompts that are meant to increase the quality or variety of results.
+Prompt enhancer can be used to add keywords to prompts that are meant to increase the quality or variety of results.
 
 For a comprehensive guide on using the Prompt Enhancer utility, see the [Prompt Enhancer documentation](utilities_prompt_enhancer.md).
 

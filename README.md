@@ -1,6 +1,6 @@
 # Python Runware SDK
 
-The Python Runware SDK is used to run image inference with the Runware API, powered by the RunWare inference platform. It can be used to generate imaged with text-to-image and image-to-image. It also allows the use of an existing gallery of models or selecting any model or LoRA from the CivitAI gallery. The API also supports upscaling, background removal, inpainting and outpainting, and a series of other ControlNet models.
+The Python Runware SDK is used to run image inference with the Runware API, powered by the Runware inference platform. It can be used to generate images with text-to-image and image-to-image. It also allows the use of an existing gallery of models or selecting any model or LoRA from the CivitAI gallery. The API also supports upscaling, background removal, inpainting and outpainting, and a series of other ControlNet models.
 
 ## Get API Access
 
@@ -33,75 +33,77 @@ RUNWARE_API_KEY = "your_api_key_here"
 
 ### Generating Images
 
-To generate images using the Runware API, you can use the `requestImages` method of the `Runware` class. Here's an example:
+To generate images using the Runware API, you can use the `imageInference` method of the `Runware` class. Here's an example:
 
 ```python
-from runware import Runware, IRequestImage
+from runware import Runware, IImageInference
 
 async def main() -> None:
     runware = Runware(api_key=RUNWARE_API_KEY)
     await runware.connect()
 
-    request_image = IRequestImage(
-        positive_prompt="A beautiful sunset over the mountains",
-        image_size=1,
-        model_id=13,
-        number_of_images=5,
-        negative_prompt="cloudy, rainy",
-        use_cache=False,
+    request_image = IImageInference(
+        positivePrompt="a beautiful sunset over the mountains",
+        model="civitai:36520@76907",  
+        numberResults=4,  
+        negativePrompt="cloudy, rainy",
+        useCache=False,
+        height=512,  
+        width=512, 
     )
 
-    images = await runware.requestImages(requestImage=request_image)
+    images = await runware.imageInference(requestImage=request_image)
     for image in images:
-        print(f"Image URL: {image.imageSrc}")
+        print(f"Image URL: {image.imageURL}")
 ```
 
 ### Enhancing Prompts
 
-To enhance prompts using the Runware API, you can use the `enhancePrompt` method of the `Runware` class. Here's an example:
+To enhance prompts using the Runware API, you can use the `promptEnhance` method of the `Runware` class. Here's an example:
 
 ```python
-from runware import Runware, IPromptEnhancer
+from runware import Runware, IPromptEnhance
 
 async def main() -> None:
     runware = Runware(api_key=RUNWARE_API_KEY)
     await runware.connect()
 
     prompt = "A beautiful sunset over the mountains"
-    prompt_enhancer = IPromptEnhancer(
+    prompt_enhancer = IPromptEnhance(
         prompt=prompt,
-        prompt_versions=3,
+        promptVersions=3,
+        promptMaxLength=64,
     )
 
-    enhanced_prompts = await runware.enhancePrompt(promptEnhancer=prompt_enhancer)
+    enhanced_prompts = await runware.promptEnhance(promptEnhancer=prompt_enhancer)
     for enhanced_prompt in enhanced_prompts:
         print(enhanced_prompt.text)
 ```
 
 ### Removing Image Background
 
-To remove the background from an image using the Runware API, you can use the `removeImageBackground` method of the `Runware` class. Here's an example:
+To remove the background from an image using the Runware API, you can use the `imageBackgroundRemoval` method of the `Runware` class. Here's an example:
 
 ```python
-from runware import Runware, IRemoveImageBackground
+from runware import Runware, IImageBackgroundRemoval
 
 async def main() -> None:
     runware = Runware(api_key=RUNWARE_API_KEY)
     await runware.connect()
 
     image_path = "image.jpg"
-    remove_image_background_payload = IRemoveImageBackground(image_initiator=image_path)
+    remove_image_background_payload = IImageBackgroundRemoval(image_initiator=image_path)
 
-    processed_images = await runware.removeImageBackground(
+    processed_images = await runware.imageBackgroundRemoval(
         removeImageBackgroundPayload=remove_image_background_payload
     )
     for image in processed_images:
-        print(image.imageSrc)
+        print(image.imageURL)
 ```
 
 ### Image-to-Text Conversion
 
-To convert an image to text using the Runware API, you can use the `requestImageToText` method of the `Runware` class. Here's an example:
+To convert an image to text using the Runware API, you can use the `imageCaption` method of the `Runware` class. Here's an example:
 
 ```python
 from runware import Runware, IRequestImageToText
@@ -111,9 +113,9 @@ async def main() -> None:
     await runware.connect()
 
     image_path = "image.jpg"
-    request_image_to_text_payload = IRequestImageToText(image_initiator=image_path)
+    request_image_to_text_payload = IImageCaption(image_initiator=image_path)
 
-    image_to_text = await runware.requestImageToText(
+    image_to_text = await runware.imageCaption(
         requestImageToText=request_image_to_text_payload
     )
     print(image_to_text.text)
@@ -121,10 +123,10 @@ async def main() -> None:
 
 ### Upscaling Images
 
-To upscale an image using the Runware API, you can use the `upscaleGan` method of the `Runware` class. Here's an example:
+To upscale an image using the Runware API, you can use the `imageUpscale` method of the `Runware` class. Here's an example:
 
 ```python
-from runware import Runware, IUpscaleGan
+from runware import Runware, IImageUpscale
 
 async def main() -> None:
     runware = Runware(api_key=RUNWARE_API_KEY)
@@ -133,10 +135,10 @@ async def main() -> None:
     image_path = "image.jpg"
     upscale_factor = 4
 
-    upscale_gan_payload = IUpscaleGan(
-        image_initiator=image_path, upscale_factor=upscale_factor
+    upscale_gan_payload = IImageUpscale(
+        inputImage=image_path, upscaleFactor=upscale_factor
     )
-    upscaled_images = await runware.upscaleGan(upscaleGanPayload=upscale_gan_payload)
+    upscaled_images = await runware.imageUpscale(upscaleGanPayload=upscale_gan_payload)
     for image in upscaled_images:
         print(image.imageSrc)
 ```

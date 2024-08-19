@@ -13,6 +13,7 @@ build/
 venv/
 .venv/
 .env
+examples/log.txt
 
 # IDE and editor files
 .vscode/
@@ -33,3 +34,4 @@ debug.log
 
 # Research
 rnd/
+knowledge/

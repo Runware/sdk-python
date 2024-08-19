@@ -1,45 +1,51 @@
-# Image upload
+# Image Upload
 
-## Images can be uploaded to be used as seed to reverse prompts and get image to text results
+Image upload is necessary for using images as seeds for new image generation, or to run image-to-text operations and obtain prompts that would generate similar images.
 
-## Image upload request
+## Request
 
-Uploading images is necessary in order to use them as seeds for new image generation, or to run image to text and obtain prompts that would generate similar images. To upload an image send a request in the following format:
+Image upload requests must have the following format:
 
 ```json
-{
-    "newImageUpload": {
-        "imageBase64": "data:image/png;base64,iVBORw0KGgoAAAA...",
-        "taskUUID": "50836053-a0ee-4cf5-b9d6-ae7c5d140ada"
-    }
-}
+[
+  {
+    "taskType": "imageUpload",
+    "taskUUID": "50836053-a0ee-4cf5-b9d6-ae7c5d140ada",
+    "image": "data:image/png;base64,iVBORw0KGgo..."
+  }
+]
 ```
 
-| Parameter   | Type          | Use                                                                                                |
-|-------------|---------------|----------------------------------------------------------------------------------------------------|
-| imageBase64 | string        | Represents is the image file in the base64 format. Supported formats are: PNG, JPG, WEBP           |
-| taskUUID    | UUIDv4 string | Task ID must be sent to match async responses with corresponding tasks.                            |
+### Parameters
 
-## Request response
+| Parameter | Type          | Description                                                                           |
+|-----------|--------------|---------------------------------------------------------------------------------------|
+| taskType  | string       | Must be set to "imageUpload" for this operation.                                      |
+| taskUUID  | UUIDv4 string | Unique identifier for the task, used to match async responses.                        |
+| image     | string       | The image file in base64 format. Supported formats are: PNG, JPG, WEBP.               |
+
+## Response
 
 The response to the image upload request will have the following format:
 
 ```json
 {
-    "newUploadedImageUUID": {
-        "newImageUUID": "989ba605-1449-4e1e-b462-cd83ec9c1a67",
-        "newImageSrc": "https://im.runware.dev/image/ii/989ba605-1449-4e1e-b462-cd83ec9c1a67.png",
-        "taskUUID": "9ed8a593-5515-46f3-9cd7-81ab0508176c"
+  "data": [
+    {
+      "taskType": "imageUpload",
+      "taskUUID": "50836053-a0ee-4cf5-b9d6-ae7c5d140ada",
+      "imageUUID": "989ba605-1449-4e1e-b462-cd83ec9c1a67",
+      "imageURL": "https://im.runware.ai/image/ws/0.5/ii/989ba605-1449-4e1e-b462-cd83ec9c1a67.jpg"
     }
+  ]
 }
 ```
 
-| Parameter     | Type          | Use                                                                                     |
-|---------------|---------------|-----------------------------------------------------------------------------------------|
-| newImageUUID  | UUIDv4 string | Image ID. Can be used to reference the image in image-to-image (seeded generation) or image-to-prompt tasks. |
-| newImageSrc   | string        | The image URL. It can be used to visualize it or display the image in UIs.              |
-| taskUUID      | UUIDv4 string | Task ID must be sent to match async responses with corresponding tasks.                  |
+### Response Parameters
 
-## Image storage & retention
-
-Images are saved in PNG format and downscaled to max. 2048 pixels in either width or height. Used images are currently retained indefinitely. Unused images are automatically deleted in 60 days.
+| Parameter | Type          | Description                                                                                    |
+|-----------|---------------|------------------------------------------------------------------------------------------------|
+| taskType  | string        | The type of task, in this case "imageUpload".                                                  |
+| taskUUID  | UUIDv4 string | The unique identifier matching the original request.                                           |
+| imageUUID | UUIDv4 string | Unique identifier for the uploaded image. Use this for referencing in other operations.        |
+| imageURL  | string        | The URL of the uploaded image. Can be used to visualize or display the image in UIs.           |

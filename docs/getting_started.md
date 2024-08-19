@@ -1,56 +1,113 @@
-# WebSockets Endpoint, API key, and connections
+# WebSockets Endpoint, API Key, and Connections
 
-## How to get the API key and endpoint, connect to the WebSockets API, authenticate, create and resume sessions
+This guide explains how to authenticate, connect to, and interact with the Runware WebSocket API.
 
-## Using WebSockets
+## Authentication
 
-We currently support WebSocket connections as they are more efficient, faster, and less resource intensive. They are, however, a little harder to manage because of their async nature. We have however made our WebSocket connections easy to work with, as each response contains the request ID. So it's possible to easily match request → response.
+To interact with the Runware API, you need to authenticate your requests using an API key. This key is unique to your account and identifies you when making requests.
 
-> For your convenience we provide an asynchronous SDK to access the Runware api using javascript. See `@runware.ai/sdk-js` on npm.
->
-> The project README.md is kept up to date and should support integrating the API using the SDK.
+- You can create multiple keys for different projects or environments (development, production, staging).
+- Keys can have descriptions and can be revoked at any time.
+- With the new teams feature, you can share keys with your team members.
 
-**WebSocket endpoint:** wss://ws-api.runware.ai/v1/
+To create an API key:
 
-## New connections & authentication
+1. Sign up on Runware
+2. Visit the "API Keys" page
+3. Click "Create Key"
+4. Fill in the details for your new key
 
-WebSocket connections are point-to-point. So there's no need for each request to contain an authentication header. Instead, the first request must always be an authentication request that includes the API key. This way we can identify which subsequent requests are arriving from the same user.
+## WebSockets
+
+We currently support WebSocket connections as they are more efficient, faster, and less resource-intensive. Our WebSocket connections are designed to be easy to work with, as each response contains the request ID, allowing for easy matching of requests to responses.
+
+- The API uses a bidirectional protocol that encodes all messages as JSON objects.
+- You can connect using one of our provided SDKs (Python, JavaScript, Go) or manually.
+- If connecting manually, the endpoint URL is `wss://ws-api.runware.ai/v1`.
+
+## New Connections
+
+WebSocket connections are point-to-point, so there's no need for each request to contain an authentication header. Instead, the first request must always be an authentication request that includes the API key.
+
+### Authentication Request
+
+```json
+[
+  {
+    "taskType": "authentication",
+    "apiKey": "<YOUR_API_KEY>"
+  }
+]
+```
+
+### Authentication Response
+
+On successful authentication, you'll receive a response with a `connectionSessionUUID`:
 
 ```json
 {
-   "newConnection":{
-      "apiKey":"<APIKEY>"
-   }
+  "data": [
+    {
+      "taskType": "authentication",
+      "connectionSessionUUID": "f40c2aeb-f8a7-4af7-a1ab-7594c9bf778f"
+    }
+  ]
 }
 ```
 
-## How to get the API key
-
-To create an API key, simply sign up to Runware and visit the ‘API Keys’ page, then click to create a key. You can give it a name, a description, and create multiple keys if you need to for multiple environments (dev, prod, staging), and for different projects.
-
-## WebSockets Session IDs
-
-After you’ve made the authentication request the API will return a `connectionSessionUUID` in the following format:
+In case of an error, you'll receive an object with an error message:
 
 ```json
 {
-   "newConnectionSessionUUID":{
-      "connectionSessionUUID":"f40c2aeb-f8a7-4af7-a1ab-7594c9bf778f"
-   }
+  "error": true,
+  "errorMessageContentId": 1212,
+  "errorId": 19,
+  "errorMessage": "Invalid api key"
 }
 ```
 
-## Message buffer & resuming connections
+## Keeping Connection Alive
 
-If any service, server, or network is unresponsive, for instance due to a restart, all the images or tasks that could not be delivered are kept in a buffer memory for 2 minutes. It's possible to reconnect and have these messages delivered by providing in the initial authentication connection request the connectionSessionUUID, like in this example:
+The WebSocket connection is kept open for 120 seconds from the last message exchanged. If you don't send any messages for 120 seconds, the connection will be closed automatically.
+
+To keep the connection active, you can send a `ping` message:
+
+```json
+[
+  {
+    "taskType": "ping",
+    "ping": true
+  }
+]
+```
+
+The server will respond with a `pong`:
 
 ```json
 {
-   "newConnection":{
-      "apiKey":"<APIKEY>",
-      "connectionSessionUUID":"f40c2aeb-f8a7-4af7-a1ab-7594c9bf778f"
-   }
+  "data": [
+    {
+      "taskType": "ping",
+      "pong": true
+    }
+  ]
 }
 ```
 
-After the connection is made it's possible to send different tasks to the API - e.g. text2img, img2img, inpainting, upscale, image2text, imageUpload, etc.
+## Resuming Connections
+
+If any service, server, or network becomes unresponsive, all undelivered images or tasks are kept in a buffer memory for 120 seconds. You can reconnect and receive these messages by including the `connectionSessionUUID` in the authentication request:
+
+```json
+[
+  {
+    "taskType": "authentication",
+    "apiKey": "<YOUR_API_KEY>",
+    "connectionSessionUUID": "f40c2aeb-f8a7-4af7-a1ab-7594c9bf778f"
+  }
+]
+```
+
+This means you don't need to resend the initial request; it will be delivered when reconnecting. SDK libraries handle reconnections automatically.
+
+After establishing a connection, you can send various tasks to the API, such as text-to-image, image-to-image, inpainting, upscaling, image-to-text, image upload, etc.

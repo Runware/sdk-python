@@ -8,7 +8,7 @@ from runware.types import (
     IControlNetA,
     IControlNetCanny,
     IControlNetHandsAndFace,
-    IRequestImage,
+    IImageInference,
     File,
     RequireAtLeastOne,
     RequireOnlyOne,
@@ -44,7 +44,7 @@ def test_icontrol_net_union():
 
 
 def test_irequest_image():
-    request_image = IRequestImage(
+    request_image = IImageInference(
         positive_prompt="A beautiful landscape",
         image_size=512,
         model_id=1,

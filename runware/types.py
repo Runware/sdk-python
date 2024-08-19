@@ -1,7 +1,7 @@
 from enum import Enum
 from dataclasses import dataclass, field
 from math import cos
-from typing import List, Union, Optional, Callable, Any, Dict, TypeVar
+from typing import List, Union, Optional, Callable, Any, Dict, TypeVar, Literal
 
 
 class Environment(Enum):
@@ -19,6 +19,17 @@ class EControlMode(Enum):
     BALANCED = "balanced"
     PROMPT = "prompt"
     CONTROL_NET = "controlnet"
+
+
+class ETaskType(Enum):
+    IMAGE_INFERENCE = "imageInference"
+    IMAGE_UPLOAD = "imageUpload"
+    IMAGE_UPSCALE = "imageUpscale"
+    IMAGE_BACKGROUND_REMOVAL = "imageBackgroundRemoval"
+    IMAGE_CAPTION = "imageCaption"
+    IMAGE_CONTROL_NET_PRE_PROCESS = "imageControlNetPreProcess"
+    PROMPT_ENHANCE = "promptEnhance"
+    AUTHENTICATION = "authentication"
 
 
 class EPreProcessorGroup(Enum):
@@ -74,6 +85,11 @@ class EOpenPosePreProcessor(Enum):
     openpose_hand = "openpose_hand"
 
 
+# Define the types using Literal
+IOutputType = Literal["base64Data", "dataURI", "URL"]
+IOutputFormat = Literal["JPG", "PNG", "WEBP"]
+
+
 @dataclass
 class File:
     data: bytes
@@ -87,17 +103,20 @@ class RunwareBaseType:
 
 @dataclass
 class IImage:
-    imageSrc: str
+    taskType: str
     imageUUID: str
     taskUUID: str
-    bNSFWContent: bool
-    cost: float
-    imageAltText: Optional[str] = None  # For use_cache=True
+    inputImageUUID: Optional[str] = None
+    imageURL: Optional[str] = None
+    imageBase64Data: Optional[str] = None
+    imageDataURI: Optional[str] = None
+    NSFWContent: Optional[bool] = None
+    cost: Optional[float] = None
 
 
 @dataclass
 class ILora:
-    modelId: str
+    model: str
     weight: float
 
 
@@ -251,46 +270,67 @@ class IError:
 
 
 @dataclass
-class IRequestImage:
-    positive_prompt: str
-    image_size: int
-    model_id: int
-    number_of_images: Optional[int] = 1  # default set to 1
-    negative_prompt: Optional[str] = None
-    use_cache: Optional[bool] = None
-    lora: Optional[List["ILora"]] = field(default_factory=list)
-    control_net: Optional[List["IControlNet"]] = field(default_factory=list)
-    image_initiator: Optional[Union[File, str]] = None
-    image_mask_initiator: Optional[Union[File, str]] = None
+class IImageInference:
+    positivePrompt: str
+    model: Union[int, str]
+    outputType: Optional[IOutputType] = None
+    outputFormat: Optional[IOutputFormat] = None
+    uploadEndpoint: Optional[str] = None
+    checkNsfw: Optional[bool] = None
+    negativePrompt: Optional[str] = None
+    seedImage: Optional[Union[File, str]] = None
+    maskImage: Optional[Union[File, str]] = None
+    strength: Optional[float] = None
+    height: Optional[int] = None
+    width: Optional[int] = None
     steps: Optional[int] = None
-    on_partial_images: Optional[
-        Callable[[List["IImage"], Optional["IError"]], None]
-    ] = None
+    scheduler: Optional[str] = None
     seed: Optional[int] = None
+    CFGScale: Optional[float] = None
+    clipSkip: Optional[int] = None
+    usePromptWeighting: Optional[bool] = None
+    numberResults: Optional[int] = 1  # default to 1
+    controlNet: Optional[List[IControlNet]] = field(default_factory=list)
+    lora: Optional[List[ILora]] = field(default_factory=list)
+    includeCost: Optional[bool] = None
+    useCache: Optional[bool] = None
+    onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]] = None
 
 
 @dataclass
-class IRequestImageToText:
-    image_initiator: Optional[Union[File, str]] = None
+class IImageCaption:
+    inputImage: Optional[Union[File, str]] = None
+    includeCost: bool = False
 
 
 @dataclass
 class IImageToText:
-    task_uuid: str
+    taskType: ETaskType
+    taskUUID: str
     text: str
+    cost: Optional[float] = None
 
 
 @dataclass
-class IRemoveImageBackground(IRequestImageToText):
-    pass
+class IImageBackgroundRemoval(IImageCaption):
+    outputType: Optional[IOutputType] = None
+    outputFormat: Optional[IOutputFormat] = None
+    rgba: Optional[List[int]] = field(default_factory=lambda: [])
+    postProcessMask: bool = False
+    returnOnlyMask: bool = False
+    alphaMatting: bool = False
+    alphaMattingForegroundThreshold: Optional[int] = None
+    alphaMattingBackgroundThreshold: Optional[int] = None
+    alphaMattingErodeSize: Optional[int] = None
+    includeCost: bool = False
 
 
 @dataclass
-class IPromptEnhancer:
-    prompt_max_length: Optional[int] = None
-    prompt_language_id: Optional[int] = None
-    prompt_versions: Optional[int] = None
-    prompt: str = ""
+class IPromptEnhance:
+    promptMaxLength: int
+    promptVersions: int
+    prompt: str
+    includeCost: bool = False
 
 
 @dataclass
@@ -299,10 +339,12 @@ class IEnhancedPrompt(IImageToText):
 
 
 @dataclass
-class IUpscaleGan:
-    image_initiator: Union[File, str]
-    upscale_factor: int
-    is_image_uuid: Optional[bool] = None
+class IImageUpscale:
+    inputImage: Union[str, File]
+    upscaleFactor: int
+    outputType: Optional[IOutputType] = None
+    outputFormat: Optional[IOutputFormat] = None
+    includeCost: bool = False
 
 
 class ReconnectingWebsocketProps:
@@ -321,8 +363,8 @@ class ReconnectingWebsocketProps:
 
 @dataclass
 class UploadImageType:
-    newImageUUID: str
-    newImageSrc: str
+    imageUUID: str
+    imageURL: str
     taskUUID: str
 
 

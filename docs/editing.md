@@ -1,49 +1,63 @@
-# Image upscaling
+# Image Upscaling
 
-## Used to the resolution of generated images or download images at higher resolution
+Enhance the resolution and quality of your images using Runware's advanced upscaling API. Transform low-resolution images into sharp, high-definition visuals.
+Upscaling refers to the process of enhancing the resolution and overall quality of images. This technique is particularly useful for improving the visual clarity and detail of lower-resolution images, making them suitable for various high-definition applications.
 
-Image upscaling can be performed on previously generated or uploaded images.
+## Request
 
 To upscale an image, send a request in the following format:
 
 ```json
-{
-    "newUpscaleGan": {
-        "imageUUID": "fd613011-3872-4f37-b4aa-0d343c051a27",
-        "taskUUID": "19abad0d-6ec5-40a6-b7af-203775fa5b7f",
-        "upscaleFactor": 4
-    }
-}
+[
+  {
+    "taskType": "imageUpscale",
+    "taskUUID": "19abad0d-6ec5-40a6-b7af-203775fa5b7f",
+    "inputImage": "fd613011-3872-4f37-b4aa-0d343c051a27",
+    "outputType": "URL",
+    "outputFormat": "JPG",
+    "upscaleFactor": 2
+  }
+]
 ```
 
-| Parameter     | Type          | Use                                                                                                         |
-|---------------|---------------|-------------------------------------------------------------------------------------------------------------|
-| imageUUID     | UUIDv4 string | The UUID of the interrogated image. Will be either the UUID of an uploaded image or a generated image.      |
-| taskUUID      | UUIDv4 string | Used to identify the async responses to this task. It must be sent to match the response to the task.       |
-| upscaleFactor | integer       | Is the level of upscaling performed. Can take values of: 2, 3, 4. Each will increase the size of the image by the corresponding factor. For instance, an upscaleFactor of 2 will 2x image size. |
+### Parameters
 
-Responses will be received in the following format:
+| Parameter     | Type          | Description                                                                                                   |
+|---------------|---------------|---------------------------------------------------------------------------------------------------------------|
+| taskType      | string        | Must be set to "imageUpscale" for this operation.                                                             |
+| taskUUID      | UUIDv4 string | Unique identifier for the task, used to match async responses.                                                |
+| inputImage    | UUIDv4 string | The UUID of the image to be upscaled. Can be from a previously uploaded or generated image.                   |
+| upscaleFactor | integer       | The level of upscaling to be performed. Can be 2, 3, or 4. Each will increase the image size by that factor.  |
+| outputFormat  | string        | Specifies the format of the output image. Supported formats are: PNG, JPG and WEBP.                           |
+| includeCost   | boolean       | Optional. If set to true, the response will include the cost of the operation.                                |
+
+## Response
+
+Responses will be delivered in the following format:
 
 ```json
 {
-    "newUpscaleGan": {
-        "images": [
-            {
-                "bNSFWContent": false,
-                "imageSrc": "https://im.runware.ai/image/ii/088f2c24-68d3-4407-98d1-bb09bf2e0f56.jpg",
-                "imageUUID": "088f2c24-68d3-4407-98d1-bb09bf2e0f56",
-                "taskUUID": "19abad0d-6ec5-40a6-b7af-203775fa5b7f"
-            }
-        ]
+  "data": [
+    {
+      "taskType": "imageUpscale",
+      "taskUUID": "19abad0d-6ec5-40a6-b7af-203775fa5b7f",
+      "imageUUID": "e0b6ed2b-311d-4abc-aa01-8f3fdbdb8860",
+      "inputImageUUID": "fd613011-3872-4f37-b4aa-0d343c051a27",
+      "imageURL": "https://im.runware.ai/image/ws/0.5/ii/e0b6ed2b-311d-4abc-aa01-8f3fdbdb8860.jpg",
+      "cost": 0
     }
+  ]
 }
 ```
 
-An array of objects will be returned with the following parameters:
+### Response Parameters
 
-| Parameter    | Type          | Use                                                                                                                                                                    |
-|--------------|---------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| imageSrc     | string        | The URL that the upscaled image can be downloaded from.                                                                                                                |
-| imageUUID    | UUIDv4 string | The UUID of the upscaled image.                                                                                                                                        |
-| taskUUID     | UUIDv4 string | Used to identify the async responses to this task. It must be sent to match the response to the task.                                                                   |
-| bNSFWContent | boolean       | Used to inform if the image has been flagged as potentially sensitive content. True indicates the image has been flagged (is a sensitive image). False indicates the image has not been flagged. The filter occasionally returns false positives and very rarely false negatives. |
+| Parameter    | Type          | Description                                                                                    |
+|--------------|---------------|------------------------------------------------------------------------------------------------|
+| taskType     | string        | The type of task, in this case "imageUpscale".                                                 |
+| taskUUID     | UUIDv4 string | The unique identifier matching the original request.                                           |
+| imageUUID    | UUIDv4 string | The UUID of the upscaled image.                                                                |
+| imageURL     | string        | The URL where the upscaled image can be downloaded from.                                       |
+| cost         | number        | The cost of the operation (included if `includeCost` was set to true).                         |
+
+Note: The NSFW filter occasionally returns false positives and very rarely false negatives.

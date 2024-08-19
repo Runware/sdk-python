@@ -63,8 +63,10 @@ class RunwareServer(RunwareBase):
             async def on_open(ws):
 
                 def login_check(m):
-                    return m.get("newConnectionSessionUUID", {}).get(
-                        "connectionSessionUUID"
+                    return (
+                        m.get("data", [])[0].get("connectionSessionUUID")
+                        if m.get("data")
+                        else None
                     )
 
                 def login_lis(m):
@@ -75,9 +77,9 @@ class RunwareServer(RunwareBase):
                             self._invalidAPIkey = "Error connection"
                         return
 
-                    self._connectionSessionUUID = m.get(
-                        "newConnectionSessionUUID", {}
-                    ).get("connectionSessionUUID")
+                    self._connectionSessionUUID = m.get("data", [])[0].get(
+                        "connectionSessionUUID"
+                    )
                     self._invalidAPIkey = None
                     self._connection_session_uuid_event.set()  # Set the event when _connectionSessionUUID is received
 
@@ -87,10 +89,10 @@ class RunwareServer(RunwareBase):
                     )
 
                 def pong_check(m):
-                    return m.get("pong")
+                    return m.get("data", [])[0].get("pong") if m.get("data") else None
 
                 def pong_lis(m):
-                    if m.get("pong"):
+                    if m.get("data", [])[0].get("pong"):
                         self._last_pong_time = asyncio.get_event_loop().time()
 
                 self._connection_session_uuid_event = asyncio.Event()
@@ -108,16 +110,24 @@ class RunwareServer(RunwareBase):
                         "Starting new connection with connectionSessionUUID"
                     )
                     await self.send(
-                        {
-                            "newConnection": {
+                        [
+                            {
+                                "taskType": "authentication",
                                 "apiKey": self._apiKey,
                                 "connectionSessionUUID": self._connectionSessionUUID,
                             }
-                        }
+                        ]
                     )
                 elif self.isWebsocketReadyState():
                     self.logger.info("Starting new connection with apiKey only")
-                    await self.send({"newConnection": {"apiKey": self._apiKey}})
+                    await self.send(
+                        [
+                            {
+                                "taskType": "authentication",
+                                "apiKey": self._apiKey,
+                            }
+                        ]
+                    )
 
                 if self.isWebsocketReadyState():
                     self.logger.info("Starting heartbeat task")
@@ -170,7 +180,6 @@ class RunwareServer(RunwareBase):
                 f"Starting message handler task {self._message_handler_task}"
             )
             async for message in self._ws:
-                # print(f"Message: {message}")
                 try:
                     await self.on_message(self._ws, message)
                 except Exception as e:
@@ -279,7 +288,7 @@ class RunwareServer(RunwareBase):
             if self.isWebsocketReadyState():
                 self.logger.debug("Sending ping")
                 try:
-                    await self.send({"ping": True})
+                    await self.send([{"taskType": "ping", "ping": True}])
                 except websockets.exceptions.ConnectionClosedError as e:
                     self.logger.error(
                         f"Error sending ping: {e}. Connection likely closed."

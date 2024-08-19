@@ -1,45 +1,52 @@
-# Image to text (Image interrogator)
+# Image to Text
 
-## Upload an image and generate the prompt used to create similar images.
+Image to text, also known as image captioning, allows you to obtain descriptive text prompts based on uploaded or previously generated images. This process is instrumental in generating textual descriptions that can be used to create additional images or provide detailed insights into visual content.
 
-Image to text is used to obtain a text prompt that can be then selected for generating additional, similar images. Previously uploaded or generated images can be used for running image to text requests.
+## Request
 
-## Request format
+Image to text requests must have the following format:
 
-Send image to text requests in the following format:
+```json
+[
+  {
+    "taskType": "imageCaption",
+    "taskUUID": "f0a5574f-d653-47f1-ab42-e2c1631f1a47",
+    "inputImage": "5788104a-1ca7-4b7e-8a16-b27b57e86f87"
+  }
+]
+```
+
+### Parameters
+
+| Parameter   | Type          | Description                                                                           |
+|-------------|--------------|---------------------------------------------------------------------------------------|
+| taskType    | string       | Must be set to "imageCaption" for this operation.                                     |
+| taskUUID    | UUIDv4 string | Unique identifier for the task, used to match async responses.                        |
+| inputImage  | UUIDv4 string | The UUID of the image to be analyzed. Can be from an uploaded or generated image.     |
+| includeCost | boolean      | Optional. If set to true, the response will include the cost of the operation.        |
+
+## Response
+
+Results will be delivered in the following format:
 
 ```json
 {
-    "newReverseImageClip": {
-        "imageUUID": "96eeec33-8e74-4a9f-a06c-ae58acbc3529",
-        "taskUUID": "d121dd89-4621-462c-8e6a-937099fa1dcb"
+  "data": [
+    {
+      "taskType": "imageCaption",
+      "taskUUID": "f0a5574f-d653-47f1-ab42-e2c1631f1a47",
+      "text": "arafed troll in the jungle with a backpack and a stick, cgi animation, cinematic movie image, gremlin, pixie character, nvidia promotional image, park background, with lots of scumbling, hollywood promotional image, on island, chesley, green fog, post-nuclear",
+      "cost": 0
     }
+  ]
 }
 ```
 
-| Parameter | Type          | Use                                                                                             |
-|-----------|---------------|-------------------------------------------------------------------------------------------------|
-| imageUUID | UUIDv4 string | The UUID of the interrogated image. Will be either the UUID of an uploaded image or a generated image. |
-| taskUUID  | UUIDv4 string | Used to identify the async responses to this task. It must be sent to match the response to the task. |
+### Response Parameters
 
-## Results format
-
-Responses will arrive in the following format:
-
-```json
-{
-    "newReverseClip": {
-        "texts": [
-            {
-                "taskUUID": "48ec44fc-c484-47a4-9032-cb552976152d",
-                "text": "'country house on top of a hill, idyllic, french countryside, beautiful, nature, warm lighting, crisp detail, high definition'"
-            }
-        ]
-    }
-}
-```
-
-| Parameter | Type          | Use                                                                 |
-|-----------|---------------|---------------------------------------------------------------------|
-| taskUUID  | UUIDv4 string | Used to identify the async responses to this task. It must be sent to match the response to the task. |
-| text      | string        | The resulting text or prompt from interrogating the image.           |
+| Parameter | Type          | Description                                                           |
+|-----------|---------------|-----------------------------------------------------------------------|
+| taskType  | string        | The type of task, in this case "imageCaption".                        |
+| taskUUID  | UUIDv4 string | The unique identifier matching the original request.                  |
+| text      | string        | The resulting text prompt from analyzing the image.                   |
+| cost      | number        | The cost of the operation (included if `includeCost` was set to true).|
