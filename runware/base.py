@@ -265,6 +265,14 @@ class RunwareBase:
                 **({"seed": requestImage.seed} if requestImage.seed else {}),
             }
 
+            # Add optional parameters if they are provided
+            if requestImage.outputType is not None:
+                request_object["outputType"] = requestImage.outputType
+            if requestImage.outputFormat is not None:
+                request_object["outputFormat"] = requestImage.outputFormat
+            if requestImage.includeCost:
+                request_object["includeCost"] = requestImage.includeCost
+
             return await asyncRetry(
                 lambda: self._requestImages(
                     request_object=request_object,
@@ -941,7 +949,7 @@ class RunwareBase:
                 if img.get("taskType") == "imageInference"
                 and img.get("taskUUID") in taskUUIDs
             ]
-            logger.debug(f"Check # imagesWithSimilarTask: {imagesWithSimilarTask}")
+            # logger.debug(f"Check # imagesWithSimilarTask: {imagesWithSimilarTask}")
 
             if self._globalError:
                 logger.debug(f"Check # _globalError: {self._globalError}")

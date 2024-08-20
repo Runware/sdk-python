@@ -62,23 +62,25 @@ async def main() -> None:
     request_image1 = IImageInference(
         positivePrompt="a beautiful sunset over the mountains",
         model="civitai:36520@76907",
-        numberResults=4,
+        numberResults=2,
         negativePrompt="cloudy, rainy",
         useCache=False,
         onPartialImages=on_partial_images,
         height=512,
         width=512,
+        outputFormat="PNG",
     )
 
     request_image2 = IImageInference(
         positivePrompt="a cozy hut in the woods",
         model="civitai:30240@102996",
-        numberResults=2,
+        numberResults=1,
         negativePrompt="modern, city",
         lora=lora_1,
         useCache=True,
         height=1024,
         width=1024,
+        outputType="base64Data",
     )
 
     request_image3 = IImageInference(
@@ -109,7 +111,7 @@ async def main() -> None:
     if second_images_request:
         print("\nSecond Image Request Results:")
         for image in second_images_request:
-            print(f"Image URL: {image.imageURL}")
+            print(f"imageBase64Data: {image.imageBase64Data[:100]}...")
     else:
         print("Second Image Request Failed")
 
