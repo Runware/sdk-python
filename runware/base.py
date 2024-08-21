@@ -222,17 +222,10 @@ class RunwareBase:
                 "taskUUID": requestImage.taskUUID,
                 "modelId": requestImage.model,
                 "positivePrompt": prompt,
-                "negativePrompt": requestImage.negativePrompt,
                 "numberResults": requestImage.numberResults,
                 "height": requestImage.height,
                 "width": requestImage.width,
                 "taskType": ETaskType.IMAGE_INFERENCE.value,
-                "seedImage": requestImage.seedImage,
-                "maskImage": requestImage.maskImage,
-                "strength": requestImage.strength,
-                "checkNsfw": requestImage.checkNsfw,
-                "CFGScale": requestImage.CFGScale,
-                "includeCost": requestImage.includeCost,
                 "useCache": requestImage.useCache,
                 **({"steps": requestImage.steps} if requestImage.steps else {}),
                 **({"controlNet": control_net_data} if control_net_data else {}),
@@ -256,6 +249,19 @@ class RunwareBase:
                 request_object["outputFormat"] = requestImage.outputFormat
             if requestImage.includeCost:
                 request_object["includeCost"] = requestImage.includeCost
+            if requestImage.checkNsfw:
+                request_object["checkNsfw"] = requestImage.checkNsfw
+
+            if requestImage.negativePrompt:
+                request_object["negativePrompt"] = requestImage.negativePrompt
+            if requestImage.CFGScale:
+                request_object["CFGScale"] = requestImage.CFGScale
+            if requestImage.seedImage:
+                request_object["seedImage"] = requestImage.seedImage
+            if requestImage.maskImage:
+                request_object["maskImage"] = requestImage.maskImage
+            if requestImage.strength:
+                request_object["strength"] = requestImage.strength
 
             return await asyncRetry(
                 lambda: self._requestImages(
