@@ -122,10 +122,10 @@ class ILora:
 
 @dataclass
 class IControlNetGeneral:
-    weight: float
-    start_step: int
-    end_step: int
-    control_mode: EControlMode
+    weight: Optional[float]
+    start_step: Optional[int]
+    end_step: Optional[int]
+    control_mode: Optional[EControlMode]
     preprocessor: EPreProcessor
     guide_image: Optional[Union[str, File]] = None
     guide_image_unprocessed: Optional[Union[str, File]] = None
@@ -145,12 +145,12 @@ class IControlNetA(IControlNetGeneral):
 
 @dataclass
 class IControlNetCanny:
-    weight: float
-    start_step: int
-    end_step: int
-    control_mode: EControlMode
-    low_threshold_canny: int
-    high_threshold_canny: int
+    weight: Optional[float]
+    start_step: Optional[int]
+    end_step: Optional[int]
+    control_mode: Optional[EControlMode]
+    low_threshold_canny: Optional[int]
+    high_threshold_canny: Optional[int]
     preprocessor: EPreProcessor = EPreProcessor.canny
     guide_image: Optional[Union[str, File]] = None
     guide_image_unprocessed: Optional[Union[str, File]] = None
@@ -169,11 +169,10 @@ class IControlNetCanny:
 class IControlNetHandsAndFace:
     preprocessor: EOpenPosePreProcessor
     include_hands_and_face_open_pose: bool
-    weight: float
-    start_step: int
-    end_step: int
-    control_mode: EControlMode
-    preprocessor: EPreProcessor
+    weight: Optional[float]
+    start_step: Optional[int]
+    end_step: Optional[int]
+    control_mode: Optional[EControlMode]
     guide_image: Optional[Union[str, File]] = None
     guide_image_unprocessed: Optional[Union[str, File]] = None
 
@@ -189,16 +188,14 @@ class IControlNetHandsAndFace:
 
 @dataclass
 class IControlNetCannyWithUUID:
-    guide_image_uuid: str
-    weight: float
-    start_step: int
-    end_step: int
-    control_mode: EControlMode
+    weight: Optional[float]
+    start_step: Optional[int]
+    end_step: Optional[int]
+    control_mode: Optional[EControlMode]
     low_threshold_canny: int
     high_threshold_canny: int
     guide_image: Optional[Union[str, File]] = None
     preprocessor: EPreProcessor = EPreProcessor.canny
-    guide_image: Optional[Union[str, File]] = None
     guide_image_unprocessed: Optional[Union[str, File]] = None
 
     def __post_init__(self):
@@ -239,7 +236,6 @@ class IControlNetHandsAndFaceWithUUID:
     start_step: int
     end_step: int
     control_mode: EControlMode
-    preprocessor: EPreProcessor
     preprocessor: EOpenPosePreProcessor
     include_hands_and_face_open_pose: bool
     guide_image_uuid: str
