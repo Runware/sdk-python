@@ -166,21 +166,7 @@ class RunwareBase:
 
         try:
             await self.ensureConnection()
-            image_initiator_uuid: Optional[str] = None
-            image_mask_initiator_uuid: Optional[str] = None
             control_net_data: List[IControlNetWithUUID] = []
-
-            if requestImage.seedImage:
-                uploaded_image = await self.uploadImage(requestImage.seedImage)
-                if not uploaded_image:
-                    return []
-                image_initiator_uuid = uploaded_image.imageUUID
-
-            if requestImage.maskImage:
-                uploaded_mask_initiator = await self.uploadImage(requestImage.maskImage)
-                if not uploaded_mask_initiator:
-                    return []
-                image_mask_initiator_uuid = uploaded_mask_initiator.imageUUID
 
             if requestImage.controlNet:
                 for control_data in requestImage.controlNet:
@@ -239,18 +225,10 @@ class RunwareBase:
                 "height": requestImage.height,
                 "width": requestImage.width,
                 "taskType": ETaskType.IMAGE_INFERENCE.value,
+                "seedImage": requestImage.seedImage,
+                "maskImage": requestImage.maskImage,
                 "useCache": requestImage.useCache,
                 **({"steps": requestImage.steps} if requestImage.steps else {}),
-                **(
-                    {"imageInitiatorUUID": image_initiator_uuid}
-                    if image_initiator_uuid
-                    else {}
-                ),
-                **(
-                    {"imageMaskInitiatorUUID": image_mask_initiator_uuid}
-                    if image_mask_initiator_uuid
-                    else {}
-                ),
                 **({"controlNet": control_net_data} if control_net_data else {}),
                 **(
                     {
