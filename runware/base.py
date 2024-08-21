@@ -174,13 +174,13 @@ class RunwareBase:
                 uploaded_image = await self.uploadImage(requestImage.seedImage)
                 if not uploaded_image:
                     return []
-                image_initiator_uuid = uploaded_image.new_image_uuid
+                image_initiator_uuid = uploaded_image.imageUUID
 
             if requestImage.maskImage:
                 uploaded_mask_initiator = await self.uploadImage(requestImage.maskImage)
                 if not uploaded_mask_initiator:
                     return []
-                image_mask_initiator_uuid = uploaded_mask_initiator.new_image_uuid
+                image_mask_initiator_uuid = uploaded_mask_initiator.imageUUID
 
             if requestImage.controlNet:
                 for control_data in requestImage.controlNet:
@@ -220,7 +220,7 @@ class RunwareBase:
 
                     control_net_data.append(
                         IControlNetWithUUID(
-                            guide_image_uuid=image_uploaded.new_image_uuid,
+                            guide_image_uuid=image_uploaded.imageUUID,
                             end_step=end_step,
                             preprocessor=preprocessor,
                             start_step=start_step,
@@ -737,9 +737,9 @@ class RunwareBase:
     ) -> Optional[UploadImageType]:
         # Create a dummy UploadImageType object
         uploaded_unprocessed_image = UploadImageType(
-            new_image_uuid=str(uuid.uuid4()),
-            new_image_src="https://example.com/uploaded_unprocessed_image.jpg",
-            task_uuid=str(uuid.uuid4()),
+            imageUUID=str(uuid.uuid4()),
+            imageURL="https://example.com/uploaded_unprocessed_image.jpg",
+            taskUUID=str(uuid.uuid4()),
         )
 
         return uploaded_unprocessed_image
