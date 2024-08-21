@@ -219,14 +219,20 @@ class RunwareBase:
             prompt = f"{requestImage.positivePrompt}".strip()
             request_object = {
                 "offset": 0,
+                "taskUUID": requestImage.taskUUID,
                 "modelId": requestImage.model,
                 "positivePrompt": prompt,
+                "negativePrompt": requestImage.negativePrompt,
                 "numberResults": requestImage.numberResults,
                 "height": requestImage.height,
                 "width": requestImage.width,
                 "taskType": ETaskType.IMAGE_INFERENCE.value,
                 "seedImage": requestImage.seedImage,
                 "maskImage": requestImage.maskImage,
+                "strength": requestImage.strength,
+                "checkNsfw": requestImage.checkNsfw,
+                "CFGScale": requestImage.CFGScale,
+                "includeCost": requestImage.includeCost,
                 "useCache": requestImage.useCache,
                 **({"steps": requestImage.steps} if requestImage.steps else {}),
                 **({"controlNet": control_net_data} if control_net_data else {}),
@@ -284,8 +290,13 @@ class RunwareBase:
         images_with_similar_task = [
             img for img in self._globalImages if img.task_uuid in task_uuids
         ]
-        task_uuid = getUUID()
+
+        task_uuid = request_object.get("taskUUID")
+        if task_uuid is None:
+            task_uuid = getUUID()
+
         task_uuids.append(task_uuid)
+
         image_remaining = number_of_images - len(images_with_similar_task)
         new_request_object = {
             "newTask": {
