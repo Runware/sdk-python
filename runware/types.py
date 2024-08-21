@@ -273,6 +273,7 @@ class IError:
 class IImageInference:
     positivePrompt: str
     model: Union[int, str]
+    taskUUID: Optional[str] = None
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IOutputFormat] = None
     uploadEndpoint: Optional[str] = None
