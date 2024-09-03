@@ -6,6 +6,7 @@ import re
 import uuid
 import inspect
 from typing import List, Union, Optional, Callable, Any, Dict
+from urllib.parse import urlparse
 
 
 from .utils import (
@@ -325,12 +326,13 @@ class RunwareBase:
         )
 
         let_lis["destroy"]()
+        # TODO: NameError("name 'image_path' is not defined"). I think I remove the images when I have onPartialImages
+        if images:
+            if "code" in images:
+                # This indicates an error response
+                raise RunwareAPIError(images)
 
-        if "code" in images:
-            # This indicates an error response
-            raise RunwareAPIError(images)
-
-        return [IImage(**image_data) for image_data in images]
+            return [IImage(**image_data) for image_data in images]
 
         # return images
 
@@ -662,8 +664,21 @@ class RunwareBase:
 
     async def _uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
         task_uuid = getUUID()
+        local_file = True
+        if isinstance(file, str):
+            # Check if the string is a valid UUID
+            if isValidUUID(file):
+                local_file = False
+            # Check if the string is a valid URL
+            parsed_url = urlparse(file)
+            if parsed_url.scheme and parsed_url.netloc:
+                local_file = False  # Use the URL as is
+            # Check if it's a base64 string (with or without data URI prefix)
+            if file.startswith("data:") or re.match(r"^[A-Za-z0-9+/]+={0,2}$", file):
+                # Assume it's a base64 string (with or without data URI prefix)
+                local_file = False
 
-        if isinstance(file, str) and isValidUUID(file):
+        if not local_file:
             return UploadImageType(
                 imageUUID=file,
                 imageURL=file,

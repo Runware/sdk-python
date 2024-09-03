@@ -15,19 +15,19 @@ RUNWARE_API_KEY = os.environ.get("RUNWARE_API_KEY")
 async def main() -> None:
     # Initialize the Runware client
     runware = Runware(api_key=os.environ.get("RUNWARE_API_KEY"))
-    # The image requires for the seed image. It can be the UUID of previously generated image or an a file image.
-    # image_path = "log.txt"
-    image_path = "dalmatian.jpg"
+    # Specifies the input image to be processed https://docs.runware.ai/en/image-editing/upscaling#inputimage
+    inputImage = "dalmatian.jpg"
+    inputImage = "https://img.freepik.com/free-photo/macro-picture-red-leaf-lights-against-black-background_181624-32636.jpg"
     upscale_factor = 4
 
     # With only mandatory parameters
     upscale_gan_payload = IImageUpscale(
-        inputImage=image_path, upscaleFactor=upscale_factor
+        inputImage=inputImage, upscaleFactor=upscale_factor
     )
 
     # With all parameters
     upscale_gan_payload = IImageUpscale(
-        inputImage=image_path,
+        inputImage=inputImage,
         upscaleFactor=upscale_factor,
         outputType="URL",
         outputFormat="PNG",
@@ -44,8 +44,8 @@ async def main() -> None:
         print(f"Unexpected Error: {e}")
     else:
         print(f"Upscaled Images ({upscale_factor}x):")
-        for image in upscaled_images:
-            print(image.imageURL)
+        for inputImage in upscaled_images:
+            print(inputImage.imageURL)
 
 
 if __name__ == "__main__":

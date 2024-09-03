@@ -1,4 +1,5 @@
 import asyncio
+from doctest import debug
 import os
 import logging
 from typing import List, Optional
@@ -12,21 +13,19 @@ RUNWARE_API_KEY = os.environ.get("RUNWARE_API_KEY")
 
 
 async def main() -> None:
-    # Create an instance of RunwareServer
-    runware = Runware(api_key=RUNWARE_API_KEY)
+    # Initialize the Runware client
+    runware = Runware(api_key=os.environ.get("RUNWARE_API_KEY"))
+    # Specifies the input image to be processed https://docs.runware.ai/en/image-editing/background-removal#inputimage
 
-    # Connect to the Runware service
-    await runware.connect()
-
-    image_path = "retriever.jpg"
-    image_path = "dalmatian.jpg"
-    # image_path = "cb969e10-ef6f-449c-9f1a-cc3c2778a951"
+    inputImage = "retriever.jpg"
+    inputImage = "ca9ef3d0-9863-4c55-a07c-34079f9f6608"
+    # inputImage = "dalmatian.jpg"
 
     # With only mandatory parameters
-    remove_image_background_payload = IImageBackgroundRemoval(inputImage=image_path)
+    remove_image_background_payload = IImageBackgroundRemoval(inputImage=inputImage)
     # With all parameters
     remove_image_background_payload = IImageBackgroundRemoval(
-        inputImage=image_path,
+        inputImage=inputImage,
         outputType="URL",
         outputFormat="PNG",
         rgba=[255, 255, 255, 0],
