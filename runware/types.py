@@ -110,6 +110,7 @@ class IImage:
     imageURL: Optional[str] = None
     imageBase64Data: Optional[str] = None
     imageDataURI: Optional[str] = None
+    imageAltText: Optional[str] = None
     NSFWContent: Optional[bool] = None
     cost: Optional[float] = None
 
