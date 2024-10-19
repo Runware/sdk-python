@@ -251,7 +251,7 @@ class RunwareBase:
             if requestImage.includeCost:
                 request_object["includeCost"] = requestImage.includeCost
             if requestImage.checkNsfw:
-                request_object["checkNsfw"] = requestImage.checkNsfw
+                request_object["checkNSFW"] = requestImage.checkNsfw
 
             if requestImage.negativePrompt:
                 request_object["negativePrompt"] = requestImage.negativePrompt
