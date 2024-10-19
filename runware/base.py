@@ -604,7 +604,8 @@ class RunwareBase:
         :return: A list of IEnhancedPrompt objects representing the enhanced versions of the prompt.
         """
         prompt = promptEnhancer.prompt
-        promptMaxLength = promptEnhancer.promptMaxLength or 380
+        promptMaxLength = getattr(promptEnhancer, 'promptMaxLength', 380)
+
         promptVersions = promptEnhancer.promptVersions or 1
 
         taskUUID = getUUID()
