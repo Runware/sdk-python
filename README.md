@@ -47,7 +47,6 @@ async def main() -> None:
         model="civitai:36520@76907",  
         numberResults=4,  
         negativePrompt="cloudy, rainy",
-        useCache=False,
         height=512,  
         width=512, 
     )

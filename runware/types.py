@@ -291,7 +291,6 @@ class IImageInference:
     controlNet: Optional[List[IControlNet]] = field(default_factory=list)
     lora: Optional[List[ILora]] = field(default_factory=list)
     includeCost: Optional[bool] = None
-    useCache: Optional[bool] = None
     onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]] = None
 
     def __post_init__(self):

@@ -227,7 +227,6 @@ class RunwareBase:
                 "height": requestImage.height,
                 "width": requestImage.width,
                 "taskType": ETaskType.IMAGE_INFERENCE.value,
-                "useCache": requestImage.useCache,
                 **({"steps": requestImage.steps} if requestImage.steps else {}),
                 **({"controlNet": control_net_data} if control_net_data else {}),
                 **(
