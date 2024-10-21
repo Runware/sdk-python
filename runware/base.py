@@ -804,6 +804,10 @@ class RunwareBase:
                         error=True,  # Since this is an error message, we set this to True
                         error_message=errors[0].get("message", "Unknown error"),
                         task_uuid=errors[0].get("taskUUID", ""),
+                        error_code=errors[0].get("code"),
+                        error_type=errors[0].get("type"),
+                        parameter=errors[0].get("parameter"),
+                        documentation=errors[0].get("documentation"),
                     )
                     self._globalError = (
                         error  # Store the first error related to this task

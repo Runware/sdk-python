@@ -264,6 +264,10 @@ class IError:
     error: bool
     error_message: str
     task_uuid: str
+    error_code: Optional[str] = None
+    parameter: Optional[str] = None
+    error_type: Optional[str] = None
+    documentation: Optional[str] = None
 
 
 @dataclass
