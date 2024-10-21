@@ -295,7 +295,7 @@ class RunwareBase:
         if let_lis:
             let_lis["destroy"]()
         images_with_similar_task = [
-            img for img in self._globalImages if img.task_uuid in task_uuids
+            img for img in self._globalImages if img.get("taskUUID") in task_uuids
         ]
 
         task_uuid = request_object.get("taskUUID")
