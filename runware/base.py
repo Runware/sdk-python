@@ -823,6 +823,13 @@ class RunwareBase:
             error_check = isinstance(m.get("errors"), list) and any(
                 error.get("taskUUID") == taskUUID for error in m["errors"]
             )
+            error_code_check = True if any([error.get('code') for error in m.get('errors', [])]) else False
+            if error_code_check:
+                self._globalError = IError(
+                    error=True,
+                    error_message=f"Error in image inference: {m.get('errors')}",
+                    task_uuid=taskUUID,
+                )
 
             response = image_inference_check or error_check
             return response
