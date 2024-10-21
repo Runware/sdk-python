@@ -294,6 +294,27 @@ class IImageInference:
     useCache: Optional[bool] = None
     onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]] = None
 
+    def __post_init__(self):
+        if self.clipSkip is not None and (self.clipSkip < 0 or self.clipSkip > 2):
+            raise ValueError(
+                {
+                    "errors": [
+                        {
+                            "code": "invalidClipSkip",
+                            "message": "Invalid value for clipSkip parameter. Layers to skip must be an integer value "
+                                       "between 0 and 2 (Default: 0).",
+                            "parameter": "clipSkip",
+                            "type": "integer",
+                            "min": 0,
+                            "max": 2,
+                            "default": 0,
+                            "documentation": "https://docs.runware.ai/en/image-inference#clipskip",
+                            "taskUUID": self.taskUUID
+                        }
+                    ]
+                }
+            )
+
 
 @dataclass
 class IImageCaption:
