@@ -263,6 +263,8 @@ class RunwareBase:
                 request_object["maskImage"] = requestImage.maskImage
             if requestImage.strength:
                 request_object["strength"] = requestImage.strength
+            if requestImage.scheduler:
+                request_object["scheduler"] = requestImage.scheduler
 
             return await asyncRetry(
                 lambda: self._requestImages(
