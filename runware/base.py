@@ -2,6 +2,7 @@ import asyncio
 from doctest import debug
 import json
 from os import error
+import os
 import re
 import uuid
 import inspect
@@ -668,17 +669,32 @@ class RunwareBase:
         task_uuid = getUUID()
         local_file = True
         if isinstance(file, str):
-            # Check if the string is a valid UUID
-            if isValidUUID(file):
-                local_file = False
-            # Check if the string is a valid URL
-            parsed_url = urlparse(file)
-            if parsed_url.scheme and parsed_url.netloc:
-                local_file = False  # Use the URL as is
-            # Check if it's a base64 string (with or without data URI prefix)
-            if file.startswith("data:") or re.match(r"^[A-Za-z0-9+/]+={0,2}$", file):
-                # Assume it's a base64 string (with or without data URI prefix)
-                local_file = False
+            if os.path.exists(file):
+                local_file = True
+            else:
+                # Check if the string is a valid UUID
+                if isValidUUID(file):
+                    local_file = False
+                # Check if the string is a valid URL
+                parsed_url = urlparse(file)
+                if parsed_url.scheme and parsed_url.netloc:
+                    local_file = False  # Use the URL as is
+                else:
+                    # Handle case with no scheme and no netloc
+                    if not parsed_url.scheme and not parsed_url.netloc:
+                        # Assume it's a URL without scheme (e.g., 'example.com/some/path')
+                        # Add 'https://' in front and treat it as a valid URL
+                        file = f"https://{file}"
+                        parsed_url = urlparse(file)
+                        if parsed_url.netloc:  # Now it should have a valid netloc
+                            local_file = False
+                        else:
+                            raise FileNotFoundError(f"File or URL '{file}' not found.")
+
+                # Check if it's a base64 string (with or without data URI prefix)
+                if file.startswith("data:") or re.match(r"^[A-Za-z0-9+/]+={0,2}$", file):
+                    # Assume it's a base64 string (with or without data URI prefix)
+                    local_file = False
 
         if not local_file:
             return UploadImageType(
