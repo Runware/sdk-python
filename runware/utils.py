@@ -29,6 +29,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+if not mimetypes.guess_type("test.webp")[0]:
+    mimetypes.add_type('image/webp', '.webp')
+
 BASE_RUNWARE_URLS = {
     Environment.PRODUCTION: "wss://ws-api.runware.ai/v1",
     Environment.TEST: "ws://localhost:8080",
@@ -277,6 +280,10 @@ async def fileToBase64(file_path: str) -> str:
         async with aiofiles.open(file_path, "rb") as file:
             file_contents = await file.read()
             mime_type, _ = mimetypes.guess_type(file_path)
+
+            if mime_type is None:
+                raise ValueError(f"Unable to determine the MIME type for file: {file_path}")
+
             base64_content = base64.b64encode(file_contents).decode("utf-8")
             return f"data:{mime_type};base64,{base64_content}"
     except FileNotFoundError:
