@@ -69,8 +69,22 @@ class RunwareError(Exception):
         self.ierror = ierror
         super().__init__(f"Runware Error: {ierror.error_message}")
 
+    def format_error(self):
+        return {
+            "errors": [
+                {
+                    "code": self.ierror.error_code,
+                    "message": self.ierror.error_message,
+                    "parameter": self.ierror.parameter,
+                    "type": self.ierror.error_type,
+                    "documentation": self.ierror.documentation,
+                    "taskUUID": self.ierror.task_uuid
+                }
+            ]
+        }
+
     def __str__(self):
-        return f"Runware Error (Task UUID: {self.ierror.task_uuid}): {self.ierror.error_message}"
+        return f"Runware Error: {self.format_error()}"
 
 
 class Blob:
