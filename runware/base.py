@@ -3,6 +3,7 @@ from doctest import debug
 import json
 from os import error
 import re
+import base64
 import uuid
 import inspect
 from typing import List, Union, Optional, Callable, Any, Dict
@@ -168,6 +169,10 @@ class RunwareBase:
         try:
             await self.ensureConnection()
             control_net_data: List[IControlNetWithUUID] = []
+
+            if requestImage.maskImage:
+                if not requestImage.maskImage.startswith("http"):
+                    requestImage.maskImage = await fileToBase64(requestImage.maskImage)
 
             if requestImage.controlNet:
                 for control_data in requestImage.controlNet:
