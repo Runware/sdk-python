@@ -665,6 +665,34 @@ class RunwareBase:
         except Exception as e:
             raise e
 
+    async def _isLocalFile(self, file):
+        # Check if the string is a valid UUID
+        if isValidUUID(file):
+            return False
+
+        # Check if the string is a valid URL
+        parsed_url = urlparse(file)
+        if parsed_url.scheme and parsed_url.netloc:
+            return False  # Use the URL as is
+        else:
+            # Handle case with no scheme and no netloc
+            if not parsed_url.scheme and not parsed_url.netloc:
+                # Assume it's a URL without scheme (e.g., 'example.com/some/path')
+                # Add 'https://' in front and treat it as a valid URL
+                file = f"https://{file}"
+                parsed_url = urlparse(file)
+                if parsed_url.netloc:  # Now it should have a valid netloc
+                    return False
+                else:
+                    raise FileNotFoundError(f"File or URL '{file}' not found.")
+
+        # Check if it's a base64 string (with or without data URI prefix)
+        if file.startswith("data:") or re.match(r"^[A-Za-z0-9+/]+={0,2}$", file):
+            # Assume it's a base64 string (with or without data URI prefix)
+            return False
+
+        raise FileNotFoundError(f"File or URL '{file}' not valid or not found.")
+
     async def _uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
         task_uuid = getUUID()
         local_file = True
@@ -672,24 +700,7 @@ class RunwareBase:
             if os.path.exists(file):
                 local_file = True
             else:
-                # Check if the string is a valid UUID
-                if isValidUUID(file):
-                    local_file = False
-                # Check if the string is a valid URL
-                parsed_url = urlparse(file)
-                if parsed_url.scheme and parsed_url.netloc:
-                    local_file = False  # Use the URL as is
-                else:
-                    # Handle case with no scheme and no netloc
-                    if not parsed_url.scheme and not parsed_url.netloc:
-                        # Assume it's a URL without scheme (e.g., 'example.com/some/path')
-                        # Add 'https://' in front and treat it as a valid URL
-                        file = f"https://{file}"
-                        parsed_url = urlparse(file)
-                        if parsed_url.netloc:  # Now it should have a valid netloc
-                            local_file = False
-                        else:
-                            raise FileNotFoundError(f"File or URL '{file}' not found.")
+                local_file = self._isLocalFile(file)
 
                 # Check if it's a base64 string (with or without data URI prefix)
                 if file.startswith("data:") or re.match(r"^[A-Za-z0-9+/]+={0,2}$", file):
