@@ -298,6 +298,10 @@ class IImageInference:
     onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]] = None
 
     def __post_init__(self):
+        self.validate_clip_skip()
+        self.validate_number_results()
+
+    def validate_clip_skip(self):
         if self.clipSkip is not None and (self.clipSkip < 0 or self.clipSkip > 2):
             raise ValueError(
                 {
@@ -312,6 +316,28 @@ class IImageInference:
                             "max": 2,
                             "default": 0,
                             "documentation": "https://docs.runware.ai/en/image-inference#clipskip",
+                            "taskUUID": self.taskUUID
+                        }
+                    ]
+                }
+            )
+
+    def validate_number_results(self):
+        if self.numberResults is None or not isinstance(self.numberResults,
+                                                        int) or self.numberResults < 1 or self.numberResults > 20:
+            raise ValueError(
+                {
+                    "errors": [
+                        {
+                            "code": "invalidNumberResults",
+                            "message": "Invalid value for numberResults parameter. The number of images requested "
+                                       "must be an integer value between 1 and 20 (Default: 1).",
+                            "parameter": "numberResults",
+                            "type": "integer",
+                            "min": 1,
+                            "max": 20,
+                            "default": 1,
+                            "documentation": "https://docs.runware.ai/en/image-inference#request-numberresults",
                             "taskUUID": self.taskUUID
                         }
                     ]
