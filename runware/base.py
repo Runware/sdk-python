@@ -172,9 +172,7 @@ class RunwareBase:
 
             if requestImage.maskImage:
                 if not requestImage.maskImage.startswith("http"):
-                    with open(requestImage.maskImage, "rb") as image_file:
-                        encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
-                        requestImage.maskImage = f"data:image/png;base64,{encoded_string}"
+                    requestImage.maskImage = await fileToBase64(requestImage.maskImage)
 
             if requestImage.controlNet:
                 for control_data in requestImage.controlNet:
