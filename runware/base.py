@@ -670,7 +670,7 @@ class RunwareBase:
         except Exception as e:
             raise e
 
-    async def _isLocalFile(self, file):
+    def _isLocalFile(self, file):
         # Check if the string is a valid UUID
         if isValidUUID(file):
             return False
@@ -682,6 +682,11 @@ class RunwareBase:
         else:
             # Handle case with no scheme and no netloc
             if not parsed_url.scheme and not parsed_url.netloc:
+                # Check if it's a base64 string (with or without data URI prefix)
+                if file.startswith("data:") or re.match(r"^[A-Za-z0-9+/]+={0,2}$", file):
+                    # Assume it's a base64 string (with or without data URI prefix)
+                    return False
+
                 # Assume it's a URL without scheme (e.g., 'example.com/some/path')
                 # Add 'https://' in front and treat it as a valid URL
                 file = f"https://{file}"
@@ -690,11 +695,6 @@ class RunwareBase:
                     return False
                 else:
                     raise FileNotFoundError(f"File or URL '{file}' not found.")
-
-        # Check if it's a base64 string (with or without data URI prefix)
-        if file.startswith("data:") or re.match(r"^[A-Za-z0-9+/]+={0,2}$", file):
-            # Assume it's a base64 string (with or without data URI prefix)
-            return False
 
         raise FileNotFoundError(f"File or URL '{file}' not valid or not found.")
 
