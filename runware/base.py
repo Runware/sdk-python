@@ -670,7 +670,7 @@ class RunwareBase:
         except Exception as e:
             raise e
 
-    async def _isLocalFile(self, file):
+    def _isLocalFile(self, file):
         # Check if the string is a valid UUID
         if isValidUUID(file):
             return False
