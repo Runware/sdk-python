@@ -2,10 +2,13 @@ import logging
 
 
 def add_console_handler(logger, formatter):
+    # does it already exist? if so, return None
+    for handler in logger.handlers:
+        if isinstance(handler, logging.StreamHandler):
+            return None
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
-
 
 def configure_logging(log_level=logging.DEBUG):
     # Create a formatter
