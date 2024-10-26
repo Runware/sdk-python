@@ -175,6 +175,10 @@ class RunwareBase:
                 if not requestImage.maskImage.startswith("http"):
                     requestImage.maskImage = await fileToBase64(requestImage.maskImage)
 
+            if requestImage.seedImage:
+                if not requestImage.seedImage.startswith("http"):
+                    requestImage.seedImage = await fileToBase64(requestImage.seedImage)
+
             if requestImage.controlNet:
                 for control_data in requestImage.controlNet:
                     any_control_data = (
