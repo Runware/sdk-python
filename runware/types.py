@@ -106,7 +106,7 @@ class IImage:
     taskType: str
     imageUUID: str
     taskUUID: str
-    seed: int
+    seed: Optional[int] = None
     inputImageUUID: Optional[str] = None
     imageURL: Optional[str] = None
     imageBase64Data: Optional[str] = None
