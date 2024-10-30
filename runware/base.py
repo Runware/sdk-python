@@ -172,12 +172,14 @@ class RunwareBase:
             control_net_data: List[IControlNetWithUUID] = []
 
             if requestImage.maskImage:
-                if not requestImage.maskImage.startswith("http"):
-                    requestImage.maskImage = await fileToBase64(requestImage.maskImage)
+                if self._isLocalFile(requestImage.maskImage):
+                    if not requestImage.maskImage.startswith("http"):
+                        requestImage.maskImage = await fileToBase64(requestImage.maskImage)
 
             if requestImage.seedImage:
-                if not requestImage.seedImage.startswith("http"):
-                    requestImage.seedImage = await fileToBase64(requestImage.seedImage)
+                if self._isLocalFile(requestImage.seedImage):
+                    if not requestImage.seedImage.startswith("http"):
+                        requestImage.seedImage = await fileToBase64(requestImage.seedImage)
 
             if requestImage.controlNet:
                 for control_data in requestImage.controlNet:
