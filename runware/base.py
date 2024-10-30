@@ -687,7 +687,7 @@ class RunwareBase:
             return False  # Use the URL as is
         else:
             # Handle case with no scheme and no netloc
-            if not parsed_url.scheme and not parsed_url.netloc:
+            if not parsed_url.scheme and not parsed_url.netloc or parsed_url.scheme == 'data':
                 # Check if it's a base64 string (with or without data URI prefix)
                 if file.startswith("data:") or re.match(r"^[A-Za-z0-9+/]+={0,2}$", file):
                     # Assume it's a base64 string (with or without data URI prefix)
