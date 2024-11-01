@@ -757,8 +757,6 @@ def instantiateDataclassList(dataclass_type: Type[Any], data_list: List[dict]) -
     :return: A list of instantiated dataclass objects.
     """
     # Get the set of valid field names for the dataclass
-    if type(data_list) is dict:
-        data_list = [data_list]
     instances = []
     for data in data_list:
         instances.append(instantiateDataclass(dataclass_type, data))
