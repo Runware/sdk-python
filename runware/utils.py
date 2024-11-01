@@ -568,7 +568,7 @@ def createEnhancedPromptsFromResponse(response: List[dict]) -> List[IEnhancedPro
                 else:
                     processed_fields[field.name] = prompt_data[field.name]
 
-        return instantiateDataclassList(IEnhancedPrompt, processed_fields)
+        return instantiateDataclass(IEnhancedPrompt, processed_fields)
 
     return [process_single_prompt(prompt) for prompt in response]
 
@@ -585,7 +585,7 @@ def createImageFromResponse(response: dict) -> IImage:
             else:
                 processed_fields[field.name] = response[field.name]
 
-    return instantiateDataclassList(IImage, processed_fields)
+    return instantiateDataclass(IImage, processed_fields)
 
 
 def createImageToTextFromResponse(response: dict) -> IImageToText:
@@ -601,7 +601,7 @@ def createImageToTextFromResponse(response: dict) -> IImageToText:
             else:
                 processed_fields[field.name] = response[field.name]
 
-    return instantiateDataclassList(IImageToText, processed_fields)
+    return instantiateDataclass(IImageToText, processed_fields)
 
 
 async def getIntervalWithPromise(
@@ -733,6 +733,20 @@ async def getIntervalWithPromise(
 
     return await future
 
+def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
+    """
+    Instantiates a dataclass object from a dictionary, filtering out any unknown attributes.
+
+    :param dataclass_type: The dataclass type to instantiate.
+    :param data: A dictionary with data.
+    :return: An instantiated dataclass object.
+    """
+    # Get the set of valid field names for the dataclass
+    valid_fields = {f.name for f in fields(dataclass_type)}
+    # Filter the data to include only valid fields
+    filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+    return dataclass_type(**filtered_data)
+
 def instantiateDataclassList(dataclass_type: Type[Any], data_list: List[dict]) -> List[Any]:
     """
     Instantiates a list of dataclass objects from a list of dictionaries,
@@ -743,12 +757,9 @@ def instantiateDataclassList(dataclass_type: Type[Any], data_list: List[dict]) -
     :return: A list of instantiated dataclass objects.
     """
     # Get the set of valid field names for the dataclass
-    valid_fields = {f.name for f in fields(dataclass_type)}
-    
+    if type(data_list) is dict:
+        data_list = [data_list]
     instances = []
     for data in data_list:
-        # Filter the data to include only valid fields
-        filtered_data = {k: v for k, v in data.items() if k in valid_fields}
-        instance = dataclass_type(**filtered_data)
-        instances.append(instance)
+        instances.append(instantiateDataclass(dataclass_type, data))
     return instances
