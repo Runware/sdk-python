@@ -568,7 +568,7 @@ def createEnhancedPromptsFromResponse(response: List[dict]) -> List[IEnhancedPro
                 else:
                     processed_fields[field.name] = prompt_data[field.name]
 
-        return IEnhancedPrompt(**processed_fields)
+        return instantiateDataclassList(IEnhancedPrompt, processed_fields)
 
     return [process_single_prompt(prompt) for prompt in response]
 
@@ -585,7 +585,7 @@ def createImageFromResponse(response: dict) -> IImage:
             else:
                 processed_fields[field.name] = response[field.name]
 
-    return IImage(**processed_fields)
+    return instantiateDataclassList(IImage, processed_fields)
 
 
 def createImageToTextFromResponse(response: dict) -> IImageToText:
@@ -601,7 +601,7 @@ def createImageToTextFromResponse(response: dict) -> IImageToText:
             else:
                 processed_fields[field.name] = response[field.name]
 
-    return IImageToText(**processed_fields)
+    return instantiateDataclassList(IImageToText, processed_fields)
 
 
 async def getIntervalWithPromise(
