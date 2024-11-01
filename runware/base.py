@@ -24,6 +24,7 @@ from .utils import (
     createImageFromResponse,
     createImageToTextFromResponse,
     createEnhancedPromptsFromResponse,
+    instantiateDataclassList,
     RunwareAPIError,
     RunwareError,
 )
@@ -345,7 +346,7 @@ class RunwareBase:
                 # This indicates an error response
                 raise RunwareAPIError(images)
 
-            return [IImage(**image_data) for image_data in images]
+            return instantiateDataclassList(IImage, images)
 
         # return images
 
@@ -823,7 +824,7 @@ class RunwareBase:
                 if images:
                     self._globalImages.extend(images)
                     try:
-                        partial_images = [IImage(**image_data) for image_data in images]
+                        partial_images = instantiateDataclassList(IImage, images)
                         if onPartialImages:
                             onPartialImages(
                                 partial_images, None
