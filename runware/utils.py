@@ -8,7 +8,7 @@ import json
 import mimetypes
 import inspect
 from functools import reduce
-from typing import Any, Callable, Dict, List, Union, Optional, TypeVar
+from typing import Any, Callable, Dict, List, Union, Optional, TypeVar, Type
 from enum import Enum
 from dataclasses import dataclass, fields
 from .types import (
@@ -732,3 +732,23 @@ async def getIntervalWithPromise(
             logger.debug(f"Timeout canceled for {debugKey}")
 
     return await future
+
+def instantiateDataclassList(dataclass_type: Type[Any], data_list: List[dict]) -> List[Any]:
+    """
+    Instantiates a list of dataclass objects from a list of dictionaries,
+    filtering out any unknown attributes.
+
+    :param dataclass_type: The dataclass type to instantiate.
+    :param data_list: A list of dictionaries with data.
+    :return: A list of instantiated dataclass objects.
+    """
+    # Get the set of valid field names for the dataclass
+    valid_fields = {f.name for f in fields(dataclass_type)}
+    
+    instances = []
+    for data in data_list:
+        # Filter the data to include only valid fields
+        filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+        instance = dataclass_type(**filtered_data)
+        instances.append(instance)
+    return instances
