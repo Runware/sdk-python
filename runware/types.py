@@ -31,6 +31,7 @@ class ETaskType(Enum):
     IMAGE_CONTROL_NET_PRE_PROCESS = "imageControlNetPreProcess"
     PROMPT_ENHANCE = "promptEnhance"
     AUTHENTICATION = "authentication"
+    MODEL_UPLOAD = "modelUpload"
 
 
 class EPreProcessorGroup(Enum):
@@ -454,6 +455,58 @@ class UploadImageType:
     imageUUID: str
     imageURL: str
     taskUUID: str
+
+
+@dataclass
+class IUploadModelBaseType:
+    modelAIR: str
+    modelName: str
+    modelDownloadUrl: str
+    modelUniqueIdentifier: str
+    modelVersion: str
+    modelFormatId: int
+    modelTypeId: int
+    privateModel: bool
+    modelCategory: str
+    modelHeroImageUrl: Optional[str] = None
+    modelTags: Optional[List[str]] = field(default_factory=list)
+    modelShortDescription: Optional[str] = None
+    modelComment: Optional[str] = None
+    modelPositiveTriggerWords: Optional[str] = None
+    retry: Optional[int] = None
+
+
+@dataclass
+class IUploadModelControlNet(IUploadModelBaseType):
+    modelType: str = "controlnet"
+    modelCategory: str = "controlnet"
+
+
+@dataclass
+class IUploadModelCheckPoint(IUploadModelBaseType):
+    modelType: str = "checkpoint"
+    modelCategory: str = "checkpoint"
+    modelDefaultWeight: Optional[float] = None
+    modelPositiveTriggerWords: Optional[str] = None
+    modelDefaultGuidanceScale: Optional[float] = None
+    modelDefaultNumberOfSteps: Optional[int] = None
+    modelDefaultSchedulerId: Optional[int] = None
+    modelNegativeTriggerWords: Optional[str] = None
+
+
+@dataclass
+class IUploadModelLora(IUploadModelBaseType):
+    modelType: str = "lora"
+    modelCategory: str = "lora"
+    modelDefaultWeight: Optional[float] = None
+    modelPositiveTriggerWords: Optional[str] = None
+
+
+@dataclass
+class IUploadModelResponse:
+    modelAIR: str
+    taskUUID: str
+    taskType: str
 
 
 # The GetWithPromiseCallBackType is defined using the Callable type from the typing module. It represents a function that takes a dictionary

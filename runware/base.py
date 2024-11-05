@@ -10,7 +10,6 @@ import inspect
 from typing import List, Union, Optional, Callable, Any, Dict
 from urllib.parse import urlparse
 
-
 from .utils import (
     BASE_RUNWARE_URLS,
     delay,
@@ -51,6 +50,8 @@ from .types import (
     IPromptEnhance,
     IEnhancedPrompt,
     IImageUpscale,
+    IUploadModelBaseType,
+    IUploadModelResponse,
     ReconnectingWebsocketProps,
     UploadImageType,
     GetWithPromiseCallBackType,
@@ -85,7 +86,7 @@ logger = logging.getLogger(__name__)
 
 class RunwareBase:
     def __init__(
-        self, api_key: str, url: str = BASE_RUNWARE_URLS[Environment.PRODUCTION]
+            self, api_key: str, url: str = BASE_RUNWARE_URLS[Environment.PRODUCTION]
     ):
         self._ws: Optional[ReconnectingWebsocketProps] = None
         self._listeners: List[ListenerType] = []
@@ -105,10 +106,10 @@ class RunwareBase:
         return self._connectionSessionUUID is not None
 
     def addListener(
-        self,
-        lis: Callable[[Any], Any],
-        check: Callable[[Any], Any],
-        groupKey: Optional[str] = None,
+            self,
+            lis: Callable[[Any], Any],
+            check: Callable[[Any], Any],
+            groupKey: Optional[str] = None,
     ) -> Dict[str, Callable[[], None]]:
         # Get the current frame
         current_frame = inspect.currentframe()
@@ -253,7 +254,7 @@ class RunwareBase:
                 raise e
 
     async def imageInference(
-        self, requestImage: IImageInference
+            self, requestImage: IImageInference
     ) -> Union[List[IImage], None]:
         let_lis: Optional[Any] = None
         request_object: Optional[Dict[str, Any]] = None
@@ -406,13 +407,13 @@ class RunwareBase:
                 raise e
 
     async def _requestImages(
-        self,
-        request_object: Dict[str, Any],
-        task_uuids: List[str],
-        let_lis: Optional[Any],
-        retry_count: int,
-        number_of_images: int,
-        on_partial_images: Optional[Callable[[List[IImage], Optional[IError]], None]],
+            self,
+            request_object: Dict[str, Any],
+            task_uuids: List[str],
+            let_lis: Optional[Any],
+            retry_count: int,
+            number_of_images: int,
+            on_partial_images: Optional[Callable[[List[IImage], Optional[IError]], None]],
     ) -> List[IImage]:
         retry_count += 1
         if let_lis:
@@ -469,7 +470,7 @@ class RunwareBase:
             raise e
 
     async def _requestImageToText(
-        self, requestImageToText: IImageCaption
+            self, requestImageToText: IImageCaption
     ) -> IImageToText:
         inputImage = requestImageToText.inputImage
 
@@ -530,7 +531,7 @@ class RunwareBase:
             return None
 
     async def imageBackgroundRemoval(
-        self, removeImageBackgroundPayload: IImageBackgroundRemoval
+            self, removeImageBackgroundPayload: IImageBackgroundRemoval
     ) -> List[IImage]:
         try:
             await self.ensureConnection()
@@ -541,7 +542,7 @@ class RunwareBase:
             raise e
 
     async def _removeImageBackground(
-        self, removeImageBackgroundPayload: IImageBackgroundRemoval
+            self, removeImageBackgroundPayload: IImageBackgroundRemoval
     ) -> List[IImage]:
         inputImage = removeImageBackgroundPayload.inputImage
 
@@ -702,7 +703,7 @@ class RunwareBase:
         return image_list
 
     async def promptEnhance(
-        self, promptEnhancer: IPromptEnhance
+            self, promptEnhancer: IPromptEnhance
     ) -> List[IEnhancedPrompt]:
         """
         Enhance the given prompt by generating multiple versions of it.
@@ -718,7 +719,7 @@ class RunwareBase:
             raise e
 
     async def _enhancePrompt(
-        self, promptEnhancer: IPromptEnhance
+            self, promptEnhancer: IPromptEnhance
     ) -> List[IEnhancedPrompt]:
         """
         Internal method to perform the actual prompt enhancement.
@@ -886,14 +887,14 @@ class RunwareBase:
         return image
 
     async def uploadUnprocessedImage(
-        self,
-        file: Union[File, str],
-        preProcessorType: EPreProcessorGroup,
-        width: int = None,
-        height: int = None,
-        lowThresholdCanny: int = None,
-        highThresholdCanny: int = None,
-        includeHandsAndFaceOpenPose: bool = True,
+            self,
+            file: Union[File, str],
+            preProcessorType: EPreProcessorGroup,
+            width: int = None,
+            height: int = None,
+            lowThresholdCanny: int = None,
+            highThresholdCanny: int = None,
+            includeHandsAndFaceOpenPose: bool = True,
     ) -> Optional[UploadImageType]:
         # Create a dummy UploadImageType object
         uploaded_unprocessed_image = UploadImageType(
@@ -905,10 +906,10 @@ class RunwareBase:
         return uploaded_unprocessed_image
 
     async def listenToImages(
-        self,
-        onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]],
-        taskUUID: str,
-        groupKey: LISTEN_TO_IMAGES_KEY,
+            self,
+            onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]],
+            taskUUID: str,
+            groupKey: LISTEN_TO_IMAGES_KEY,
     ) -> Dict[str, Callable[[], None]]:
         """
         Set up a listener to receive partial image updates for a specific task.
@@ -927,7 +928,7 @@ class RunwareBase:
                     img
                     for img in m["data"]
                     if img.get("taskType") == "imageInference"
-                    and img.get("taskUUID") == taskUUID
+                       and img.get("taskUUID") == taskUUID
                 ]
 
                 if images:
@@ -1042,7 +1043,7 @@ class RunwareBase:
         return temp_listener
 
     def handleIncompleteImages(
-        self, taskUUIDs: List[str], error: Any
+            self, taskUUIDs: List[str], error: Any
     ) -> Optional[List[IImage]]:
         """
         Handle scenarios where the requested number of images is not fully received.
@@ -1087,11 +1088,11 @@ class RunwareBase:
             raise self._invalidAPIkey or "Could not connect to server. Ensure your API key is correct"
 
     async def getSimililarImage(
-        self,
-        taskUUID: Union[str, List[str]],
-        numberOfImages: int,
-        shouldThrowError: bool = False,
-        lis: Optional[ListenerType] = None,
+            self,
+            taskUUID: Union[str, List[str]],
+            numberOfImages: int,
+            shouldThrowError: bool = False,
+            lis: Optional[ListenerType] = None,
     ) -> Union[List[IImage], IError]:
         """
         Retrieve similar images based on the provided task UUID(s) and desired number of images.
@@ -1105,9 +1106,9 @@ class RunwareBase:
         taskUUIDs = taskUUID if isinstance(taskUUID, list) else [taskUUID]
 
         def check(
-            resolve: Callable[[List[IImage]], None],
-            reject: Callable[[IError], None],
-            intervalId: Any,
+                resolve: Callable[[List[IImage]], None],
+                reject: Callable[[IError], None],
+                intervalId: Any,
         ) -> Optional[bool]:
             # print(f"Check # Task UUIDs: {taskUUIDs}")
             # print(f"Check # Global images: {self._globalImages}")
@@ -1118,7 +1119,7 @@ class RunwareBase:
                 img
                 for img in self._globalImages
                 if img.get("taskType") == "imageInference"
-                and img.get("taskUUID") in taskUUIDs
+                   and img.get("taskUUID") in taskUUIDs
             ]
             # logger.debug(f"Check # imagesWithSimilarTask: {imagesWithSimilarTask}")
 
@@ -1138,7 +1139,7 @@ class RunwareBase:
                     img
                     for img in self._globalImages
                     if img.get("taskType") == "imageInference"
-                    and img.get("taskUUID") not in taskUUIDs
+                       and img.get("taskUUID") not in taskUUIDs
                 ]
                 return True
             # return False
@@ -1146,6 +1147,104 @@ class RunwareBase:
         return await getIntervalWithPromise(
             check, debugKey="getting images", shouldThrowError=shouldThrowError
         )
+
+    async def _uploadModel(self, requestModel: IUploadModelBaseType) -> Optional[IUploadModelResponse]:
+        task_uuid = getUUID()
+        request_object: Optional[Dict[str, Any]] = None
+
+        request_object = {
+            "taskType": ETaskType.MODEL_UPLOAD.value,
+            "taskUUID": task_uuid,
+            "air": requestModel.modelAIR,
+            "name": requestModel.modelName,
+            "downloadUrl": requestModel.modelDownloadUrl,
+            "uniqueIdentifier": requestModel.modelUniqueIdentifier,
+            "version": requestModel.modelVersion,
+            "format": requestModel.modelFormatId,
+            "type": requestModel.modelTypeId,
+            "private": requestModel.privateModel,
+            "category": requestModel.modelCategory,
+        }
+
+        if requestModel.retry is not None:
+            request_object["retry"] = requestModel.retry
+
+        if requestModel.modelHeroImageUrl is not None:
+            request_object["heroImageUrl"] = requestModel.modelHeroImageUrl
+
+        if requestModel.modelTags is not None:
+            request_object["tags"] = requestModel.modelTags
+
+        if requestModel.modelShortDescription is not None:
+            request_object["shortDescription"] = requestModel.modelShortDescription
+
+        if requestModel.modelComment is not None:
+            request_object["comment"] = requestModel.modelComment
+
+        if requestModel.modelPositiveTriggerWords is not None:
+            request_object["positiveTriggerWords"] = requestModel.modelPositiveTriggerWords
+
+        if hasattr(requestModel, "modelNegativeTriggerWords") and requestModel.modelNegativeTriggerWords is not None:
+            request_object["negativeTriggerWords"] = requestModel.modelNegativeTriggerWords
+
+        if hasattr(requestModel, "modelDefaultWeight") and requestModel.modelDefaultWeight is not None:
+            request_object["defaultWeight"] = requestModel.modelDefaultWeight
+
+        if hasattr(requestModel, "modelDefaultGuidanceScale") and requestModel.modelDefaultGuidanceScale is not None:
+            request_object["defaultCFGScale"] = requestModel.modelDefaultGuidanceScale
+
+        if hasattr(requestModel, "modelDefaultNumberOfSteps") and requestModel.modelDefaultNumberOfSteps is not None:
+            request_object["defaultSteps"] = requestModel.modelDefaultNumberOfSteps
+
+        if hasattr(requestModel, "modelDefaultSchedulerId") and requestModel.modelDefaultSchedulerId is not None:
+            request_object["defaultScheduler"] = requestModel.modelDefaultSchedulerId
+
+        await self.send(
+            [
+                request_object
+            ]
+        )
+
+        lis = self.globalListener(
+            taskUUID=task_uuid,
+        )
+
+        def check(resolve: callable, reject: callable, *args: Any) -> bool:
+            uploaded_model_list = self._globalMessages.get(task_uuid)
+            # TODO: Update to support multiple images
+            uploaded_model = uploaded_model_list[0] if uploaded_model_list else None
+
+            if uploaded_model and uploaded_model.get("error"):
+                reject(uploaded_model)
+                return True
+
+            if uploaded_model:
+                del self._globalMessages[task_uuid]
+                resolve(uploaded_model)
+                return True
+
+            return False
+
+        response = await getIntervalWithPromise(check, debugKey="upload-model")
+
+        lis["destroy"]()
+
+        if response:
+            image = IUploadModelResponse(
+                modelAIR=response["imageUUID"],
+                taskType=response["type"],
+                taskUUID=response["taskUUID"],
+            )
+        else:
+            image = None
+        return image
+
+    async def uploadModel(self, requestModel: IUploadModelBaseType) -> Optional[IUploadModelResponse]:
+        try:
+            await self.ensureConnection()
+            return await asyncRetry(lambda: self._uploadModel(requestModel))
+        except Exception as e:
+            raise e
 
     def connected(self) -> bool:
         """
