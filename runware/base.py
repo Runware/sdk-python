@@ -253,6 +253,19 @@ class RunwareBase:
                     else {}
                 ),
                 **({"seed": requestImage.seed} if requestImage.seed else {}),
+                "refiner": {
+                    "model": requestImage.refiner.model,
+                    **(
+                        {"startStep": requestImage.refiner.startStep}
+                        if requestImage.refiner.startStep is not None
+                        else {}
+                    ),
+                    **(
+                        {"startStepPercentage": requestImage.refiner.startStepPercentage}
+                        if requestImage.refiner.startStepPercentage is not None
+                        else {}
+                    ),
+                } if requestImage.refiner else {},
             }
 
             # Add optional parameters if they are provided

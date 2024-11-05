@@ -122,6 +122,13 @@ class ILora:
 
 
 @dataclass
+class IRefiner:
+    model: Union[int, str]
+    startStep: Optional[int] = None
+    startStepPercentage: Optional[float] = None
+
+
+@dataclass
 class IControlNetGeneral:
     weight: Optional[float]
     start_step: Optional[int]
@@ -297,6 +304,7 @@ class IImageInference:
     lora: Optional[List[ILora]] = field(default_factory=list)
     includeCost: Optional[bool] = None
     onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]] = None
+    refiner: Optional[IRefiner] = None
 
     def __post_init__(self):
         self.validate_clip_skip()
@@ -443,6 +451,7 @@ GetWithPromiseCallBackType = Callable[
     [Dict[str, Union[Callable[[Any], None], Any]]], Union[bool, None]
 ]
 
+
 # The ListenerType class is defined to represent the structure of a listener.
 # The key parameter is a string that represents a unique identifier for the listener.
 # The listener parameter is a callable function that takes a single argument msg of type Any and returns None.
@@ -470,11 +479,11 @@ GetWithPromiseCallBackType = Callable[
 
 class ListenerType:
     def __init__(
-        self,
-        key: str,
-        listener: Callable[[Any], None],
-        group_key: Optional[str] = None,
-        debug_message: Optional[str] = None,
+            self,
+            key: str,
+            listener: Callable[[Any], None],
+            group_key: Optional[str] = None,
+            debug_message: Optional[str] = None,
     ):
         """
         Initialize a new ListenerType instance.
