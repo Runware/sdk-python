@@ -23,6 +23,7 @@ class EControlMode(Enum):
 
 class ETaskType(Enum):
     IMAGE_INFERENCE = "imageInference"
+    PHOTO_MAKER = "photoMaker"
     IMAGE_UPLOAD = "imageUpload"
     IMAGE_UPSCALE = "imageUpscale"
     IMAGE_BACKGROUND_REMOVAL = "imageBackgroundRemoval"
@@ -272,6 +273,35 @@ class IError:
 
 
 @dataclass
+class IPhotoMaker:
+    positivePrompt: str
+    height: int
+    width: int
+    numberResults: int = 1
+    steps: Optional[int] = None
+    inputImages: List[Union[str, File]] = field(default_factory=list)
+    style: Optional[str] = None
+    strength: Optional[float] = None
+    outputFormat: Optional[IOutputFormat] = None
+    includeCost: Optional[bool] = None
+    taskUUID: Optional[str] = None
+
+    def __post_init__(self):
+        # Validate `inputImages` to ensure it has a maximum of 4 elements
+        if len(self.inputImages) > 4:
+            raise ValueError("inputImages can contain a maximum of 4 elements.")
+
+        # Validate `style` to ensure it matches one of the allowed case-sensitive options
+        valid_styles = {
+            "No style", "Cinematic", "Disney Character", "Digital Art",
+            "Photographic", "Fantasy art", "Neonpunk", "Enhance",
+            "Comic book", "Lowpoly", "Line art"
+        }
+        if self.style and self.style not in valid_styles:
+            raise ValueError(f"style must be one of the following: {', '.join(valid_styles)}.")
+
+
+@dataclass
 class IImageInference:
     positivePrompt: str
     model: Union[int, str]
@@ -443,6 +473,7 @@ GetWithPromiseCallBackType = Callable[
     [Dict[str, Union[Callable[[Any], None], Any]]], Union[bool, None]
 ]
 
+
 # The ListenerType class is defined to represent the structure of a listener.
 # The key parameter is a string that represents a unique identifier for the listener.
 # The listener parameter is a callable function that takes a single argument msg of type Any and returns None.
@@ -470,11 +501,11 @@ GetWithPromiseCallBackType = Callable[
 
 class ListenerType:
     def __init__(
-        self,
-        key: str,
-        listener: Callable[[Any], None],
-        group_key: Optional[str] = None,
-        debug_message: Optional[str] = None,
+            self,
+            key: str,
+            listener: Callable[[Any], None],
+            group_key: Optional[str] = None,
+            debug_message: Optional[str] = None,
     ):
         """
         Initialize a new ListenerType instance.

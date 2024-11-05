@@ -44,6 +44,7 @@ from .types import (
     IControlNetWithUUID,
     IError,
     IImageInference,
+    IPhotoMaker,
     IImageCaption,
     IImageToText,
     IImageBackgroundRemoval,
@@ -159,6 +160,55 @@ class RunwareBase:
             "connectionSessionUUID"
         )
         self._invalidAPIkey = None
+
+    async def photoMaker(self, requestPhotoMaker: IPhotoMaker):
+        request_object: Optional[Dict[str, Any]] = None
+        task_uuids: List[str] = []
+        retry_count = 0
+
+        try:
+            await self.ensureConnection()
+
+            for i, image in enumerate(requestPhotoMaker.inputImages):
+                if self._isLocalFile(image) and not str(image).startswith("http"):
+                    requestPhotoMaker.inputImages[i] = await fileToBase64(image)
+
+            prompt = f"{requestPhotoMaker.positivePrompt}".strip()
+            request_object = {
+                "taskUUID": requestPhotoMaker.taskUUID,
+                "positivePrompt": prompt,
+                "numberResults": requestPhotoMaker.numberResults,
+                "height": requestPhotoMaker.height,
+                "width": requestPhotoMaker.width,
+                "taskType": ETaskType.PHOTO_MAKER.value,
+                "style": requestPhotoMaker.style,
+                "strength": requestPhotoMaker.strength,
+                **({"inputImages": requestPhotoMaker.inputImages} if requestPhotoMaker.inputImages else {}),
+                **({"steps": requestPhotoMaker.steps} if requestPhotoMaker.steps else {}),
+            }
+
+            if requestPhotoMaker.outputFormat is not None:
+                request_object["outputFormat"] = requestPhotoMaker.outputFormat
+            if requestPhotoMaker.includeCost:
+                request_object["includeCost"] = requestPhotoMaker.includeCost
+
+            return await asyncRetry(
+                lambda: self._requestImages(
+                    request_object=request_object,
+                    task_uuids=task_uuids,
+                    let_lis=None,
+                    retry_count=retry_count,
+                    number_of_images=requestPhotoMaker.numberResults,
+                    on_partial_images=None,
+                )
+            )
+        except Exception as e:
+            if retry_count >= 2:
+                self.logger.error(f"Error in photoMaker request: {e}")
+                exit()
+                return self.handle_incomplete_images(task_uuids=task_uuids, error=e)
+            else:
+                raise e
 
     async def imageInference(
         self, requestImage: IImageInference
