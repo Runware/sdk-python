@@ -142,4 +142,73 @@ async def main() -> None:
         print(image.imageSrc)
 ```
 
+### Photo Maker
+
+Use the `photoMaker` method of the `Runware` class. Here's an example:
+
+```python
+from runware import Runware, IPhotoMaker
+import uuid
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    request_image = IPhotoMaker(
+        positivePrompt="img of a beautiful lady in a forest",
+        steps=35,
+        numberResults=1,
+        height=512,
+        width=512,
+        style="No style",
+        strength=40,
+        outputFormat="WEBP",
+        includeCost=True,
+        taskUUID=str(uuid.uuid4()),
+        inputImages=[
+            "https://im.runware.ai/image/ws/0.5/ii/74723926-22f6-417c-befb-f2058fc88c13.webp",
+            "https://im.runware.ai/image/ws/0.5/ii/64acee31-100d-4aa1-a47e-6f8b432e7188.webp",
+            "https://im.runware.ai/image/ws/0.5/ii/1b39b0e0-6bf7-4c9a-8134-c0251b5ede01.webp",
+            "https://im.runware.ai/image/ws/0.5/ii/f4b4cec3-66d9-4c02-97c5-506b8813182a.webp"
+        ],
+    )
+    
+    
+     photos = await runware.photoMaker(requestPhotoMaker=request_image)
+     for photo in photos:
+         print(f"Image URL: {photo.imageURL}")
+```
+
+### Generating Images with refiner
+
+To generate images using the Runware API with refiner support, you can use the `imageInference` method of the `Runware` class. Here's an example:
+
+```python
+from runware import Runware, IImageInference, IRefiner
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+    
+    refiner = IRefiner(
+        model="civitai:101055@128080",
+        startStep=a,
+        startStepPercentage=None,
+    )
+
+    request_image = IImageInference(
+        positivePrompt="a beautiful sunset over the mountains",
+        model="civitai:36520@76907",  
+        numberResults=4,  
+        negativePrompt="cloudy, rainy",
+        height=512,  
+        width=512, 
+        refiner=refiner
+    )
+
+    images = await runware.imageInference(requestImage=request_image)
+    for image in images:
+        print(f"Image URL: {image.imageURL}")
+```
+
 For more detailed usage and additional examples, please refer to the examples directory.
