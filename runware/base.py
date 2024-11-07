@@ -191,6 +191,8 @@ class RunwareBase:
                 request_object["outputFormat"] = requestPhotoMaker.outputFormat
             if requestPhotoMaker.includeCost:
                 request_object["includeCost"] = requestPhotoMaker.includeCost
+            if requestPhotoMaker.outputType:
+                request_object["outputType"] = requestPhotoMaker.outputType
 
             return await asyncRetry(
                 lambda: self._requestImages(

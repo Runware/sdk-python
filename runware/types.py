@@ -279,6 +279,7 @@ class IPhotoMaker:
     width: int
     numberResults: int = 1
     steps: Optional[int] = None
+    outputType: Optional[IOutputType] = None
     inputImages: List[Union[str, File]] = field(default_factory=list)
     style: Optional[str] = None
     strength: Optional[float] = None
