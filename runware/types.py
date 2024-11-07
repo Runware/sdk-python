@@ -23,6 +23,7 @@ class EControlMode(Enum):
 
 class ETaskType(Enum):
     IMAGE_INFERENCE = "imageInference"
+    PHOTO_MAKER = "photoMaker"
     IMAGE_UPLOAD = "imageUpload"
     IMAGE_UPSCALE = "imageUpscale"
     IMAGE_BACKGROUND_REMOVAL = "imageBackgroundRemoval"
@@ -276,6 +277,36 @@ class IError:
     parameter: Optional[str] = None
     error_type: Optional[str] = None
     documentation: Optional[str] = None
+
+
+@dataclass
+class IPhotoMaker:
+    positivePrompt: str
+    height: int
+    width: int
+    numberResults: int = 1
+    steps: Optional[int] = None
+    outputType: Optional[IOutputType] = None
+    inputImages: List[Union[str, File]] = field(default_factory=list)
+    style: Optional[str] = None
+    strength: Optional[float] = None
+    outputFormat: Optional[IOutputFormat] = None
+    includeCost: Optional[bool] = None
+    taskUUID: Optional[str] = None
+
+    def __post_init__(self):
+        # Validate `inputImages` to ensure it has a maximum of 4 elements
+        if len(self.inputImages) > 4:
+            raise ValueError("inputImages can contain a maximum of 4 elements.")
+
+        # Validate `style` to ensure it matches one of the allowed case-sensitive options
+        valid_styles = {
+            "No style", "Cinematic", "Disney Character", "Digital Art",
+            "Photographic", "Fantasy art", "Neonpunk", "Enhance",
+            "Comic book", "Lowpoly", "Line art"
+        }
+        if self.style and self.style not in valid_styles:
+            raise ValueError(f"style must be one of the following: {', '.join(valid_styles)}.")
 
 
 @dataclass
