@@ -211,4 +211,39 @@ async def main() -> None:
         print(f"Image URL: {image.imageURL}")
 ```
 
+### Model Upload
+
+To upload model using the Runware API, you can use the `uploadModel` method of the `Runware` class. Here's an example:
+
+```python
+from runware import Runware, IImageInference, IRefiner, IUploadModelCheckPoint
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+    
+    payload = IUploadModelCheckPoint(
+        modelAIR='qatests:68487@08629',
+        modelName='yWO8IaKwez',
+        modelHeroImageUrl='https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/image.jpg',
+        modelDownloadUrl= 'https://repo-controlnets-r2.runware.ai/controlnet-zoe-depth-sdxl-1.0.safetensors'
+                          '/controlnet-zoe-depth-sdxl-1.0.safetensors.part-001-1',
+        modelUniqueIdentifier='aq2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1234',
+        modelVersion='1.0',
+        modelTags=['tag1', 'tag2', 'tag2'],
+        modelArchitecture='flux1d',
+        modelTypeId='base',
+        modelDefaultWeight=0.8,
+        modelFormatId='safetensors',
+        modelPositiveTriggerWords='my trigger word',
+        modelShortDescription='a model description',
+        privateModel=False,
+        modelDefaultSchedulerId='Default',
+        modelComment='some comments if you want to add for internal use',
+    )
+
+    uploaded = await runware.uploadModel(payload)
+    print(f"Response : {uploaded}")
+```
+
 For more detailed usage and additional examples, please refer to the examples directory.

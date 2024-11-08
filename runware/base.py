@@ -1164,6 +1164,7 @@ class RunwareBase:
             "type": requestModel.modelTypeId,
             "private": requestModel.privateModel,
             "category": requestModel.modelCategory,
+            "architecture": requestModel.modelArchitecture,
         }
 
         if requestModel.retry is not None:
@@ -1231,8 +1232,8 @@ class RunwareBase:
 
         if response:
             image = IUploadModelResponse(
-                modelAIR=response["imageUUID"],
-                taskType=response["type"],
+                modelAIR=response["air"],
+                taskType=response["taskType"],
                 taskUUID=response["taskUUID"],
             )
         else:

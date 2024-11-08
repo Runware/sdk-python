@@ -460,6 +460,7 @@ class UploadImageType:
 @dataclass
 class IUploadModelBaseType:
     modelAIR: str
+    modelArchitecture: str
     modelName: str
     modelDownloadUrl: str
     modelUniqueIdentifier: str
