@@ -1,3 +1,4 @@
+from abc import ABC
 from enum import Enum
 from dataclasses import dataclass, field
 from math import cos
@@ -158,6 +159,7 @@ class IControlNetCanny:
     start_step: Optional[int]
     end_step: Optional[int]
     control_mode: Optional[EControlMode]
+    model: Union[int, str]
     low_threshold_canny: Optional[int]
     high_threshold_canny: Optional[int]
     preprocessor: EPreProcessor = EPreProcessor.canny
@@ -196,8 +198,12 @@ class IControlNetHandsAndFace:
             )
 
 
+class IControlNetBaseWithUUID(ABC):
+    pass
+
+
 @dataclass
-class IControlNetCannyWithUUID:
+class IControlNetCannyWithUUID(IControlNetBaseWithUUID):
     weight: Optional[float]
     start_step: Optional[int]
     end_step: Optional[int]
@@ -219,7 +225,7 @@ class IControlNetCannyWithUUID:
 
 
 @dataclass
-class IControlNetAWithUUID:
+class IControlNetAWithUUID(IControlNetBaseWithUUID):
     guide_image_uuid: str
     weight: float
     start_step: int
@@ -240,7 +246,7 @@ class IControlNetAWithUUID:
 
 
 @dataclass
-class IControlNetHandsAndFaceWithUUID:
+class IControlNetHandsAndFaceWithUUID(IControlNetBaseWithUUID):
     guide_image_uuid: str
     weight: float
     start_step: int
