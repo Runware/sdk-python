@@ -1230,6 +1230,10 @@ class RunwareBase:
 
         lis["destroy"]()
 
+        if "code" in response:
+            # This indicates an error response
+            raise RunwareAPIError(response)
+
         if response:
             image = IUploadModelResponse(
                 modelAIR=response["air"],
