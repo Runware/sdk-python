@@ -1243,14 +1243,21 @@ class RunwareBase:
             raise RunwareAPIError(response)
 
         if response:
-            image = IUploadModelResponse(
-                air=response["air"],
-                taskType=response["taskType"],
-                taskUUID=response["taskUUID"],
-            )
+            if not isinstance(response, list):
+                response = [response]
+
+            models = []
+            for item in response:
+                models.append({
+                    'taskType': item.get('taskType'),
+                    'taskUUID': item.get('taskUUID'),
+                    'status': item.get('status'),
+                    'message': item.get('message'),
+                    'air': item.get('air')
+                })
         else:
-            image = None
-        return image
+            models = None
+        return models
 
     async def uploadModel(self, requestModel: IUploadModelBaseType) -> Optional[IUploadModelResponse]:
         try:
