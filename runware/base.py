@@ -1161,7 +1161,6 @@ class RunwareBase:
             "uniqueIdentifier": requestModel.modelUniqueIdentifier,
             "version": requestModel.modelVersion,
             "format": requestModel.modelFormatId,
-            "type": requestModel.modelTypeId,
             "private": requestModel.privateModel,
             "category": requestModel.modelCategory,
             "architecture": requestModel.modelArchitecture,
@@ -1184,6 +1183,9 @@ class RunwareBase:
 
         if requestModel.modelPositiveTriggerWords is not None:
             request_object["positiveTriggerWords"] = requestModel.modelPositiveTriggerWords
+
+        if hasattr(requestModel, "modelTypeId") and requestModel.modelTypeId is not None:
+            request_object["type"] = requestModel.modelTypeId
 
         if hasattr(requestModel, "modelNegativeTriggerWords") and requestModel.modelNegativeTriggerWords is not None:
             request_object["negativeTriggerWords"] = requestModel.modelNegativeTriggerWords

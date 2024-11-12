@@ -466,11 +466,8 @@ class IUploadModelBaseType:
     modelUniqueIdentifier: str
     modelVersion: str
     modelFormatId: int
-    modelTypeId: int
     privateModel: bool
     modelCategory: str
-    modelDefaultSchedulerId: Optional[str] = None
-    modelConditioning: Optional[str] = None
     modelHeroImageUrl: Optional[str] = None
     modelTags: Optional[List[str]] = field(default_factory=list)
     modelShortDescription: Optional[str] = None
@@ -483,20 +480,32 @@ class IUploadModelBaseType:
 class IUploadModelControlNet(IUploadModelBaseType):
     modelType: str = "controlnet"
     modelCategory: str = "controlnet"
-    modelConditioning: str
+    modelConditioning: Optional[str] = None
+
+    def __post_init__(self):
+        if self.modelConditioning is None:
+            raise ValueError("modelConditioning is required for IUploadModelCheckPoint")
 
 
 @dataclass
 class IUploadModelCheckPoint(IUploadModelBaseType):
     modelType: str = "checkpoint"
     modelCategory: str = "checkpoint"
-    modelDefaultSchedulerId: str
+    modelDefaultSchedulerId: Optional[str] = None
+    modelTypeId: Optional[str] = None
     modelDefaultStrength: Optional[float] = None
     modelDefaultWeight: Optional[float] = None
     modelPositiveTriggerWords: Optional[str] = None
     modelDefaultGuidanceScale: Optional[float] = None
     modelDefaultNumberOfSteps: Optional[int] = None
     modelNegativeTriggerWords: Optional[str] = None
+
+    def __post_init__(self):
+        if self.modelTypeId is None:
+            raise ValueError("modelTypeId is required for IUploadModelCheckPoint")
+
+        if self.modelDefaultSchedulerId is None:
+            raise ValueError("modelDefaultSchedulerId is required for IUploadModelCheckPoint")
 
 
 @dataclass
