@@ -1181,7 +1181,7 @@ class RunwareBase:
         if requestModel.comment is not None:
             request_object["comment"] = requestModel.comment
 
-        if requestModel.positiveTriggerWords is not None:
+        if hasattr(requestModel, "positiveTriggerWords") and requestModel.positiveTriggerWords is not None:
             request_object["positiveTriggerWords"] = requestModel.positiveTriggerWords
 
         if hasattr(requestModel, "type") and requestModel.type is not None:
