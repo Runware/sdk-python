@@ -1148,7 +1148,7 @@ class RunwareBase:
             check, debugKey="getting images", shouldThrowError=shouldThrowError
         )
 
-    async def _uploadModel(self, requestModel: IUploadModelBaseType) -> Optional[IUploadModelResponse]:
+    async def _modelUpload(self, requestModel: IUploadModelBaseType) -> Optional[IUploadModelResponse]:
         task_uuid = getUUID()
         base_fields = {
             "taskType": ETaskType.MODEL_UPLOAD.value,
@@ -1225,10 +1225,10 @@ class RunwareBase:
             models = None
         return models
 
-    async def uploadModel(self, requestModel: IUploadModelBaseType) -> Optional[IUploadModelResponse]:
+    async def modelUpload(self, requestModel: IUploadModelBaseType) -> Optional[IUploadModelResponse]:
         try:
             await self.ensureConnection()
-            return await asyncRetry(lambda: self._uploadModel(requestModel))
+            return await asyncRetry(lambda: self._modelUpload(requestModel))
         except Exception as e:
             raise e
 

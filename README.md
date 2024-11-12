@@ -218,16 +218,17 @@ To upload model using the Runware API, you can use the `uploadModel` method of t
 ```python
 from runware import Runware, IImageInference, IRefiner, IUploadModelCheckPoint
 
+
 async def main() -> None:
     runware = Runware(api_key=RUNWARE_API_KEY)
     await runware.connect()
-    
+
     payload = IUploadModelCheckPoint(
         air='qatests:68487@08629',
         name='yWO8IaKwez',
         heroImageUrl='https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/image.jpg',
-        downloadUrl= 'https://repo-controlnets-r2.runware.ai/controlnet-zoe-depth-sdxl-1.0.safetensors'
-                          '/controlnet-zoe-depth-sdxl-1.0.safetensors.part-001-1',
+        downloadUrl='https://repo-controlnets-r2.runware.ai/controlnet-zoe-depth-sdxl-1.0.safetensors'
+                    '/controlnet-zoe-depth-sdxl-1.0.safetensors.part-001-1',
         uniqueIdentifier='aq2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1234',
         version='1.0',
         tags=['tag1', 'tag2', 'tag2'],
@@ -242,23 +243,24 @@ async def main() -> None:
         comment='some comments if you want to add for internal use',
     )
 
-    uploaded = await runware.uploadModel(payload)
+    uploaded = await runware.modelUpload(payload)
     print(f"Response : {uploaded}")
 ```
 
 ```python
 from runware import Runware, IImageInference, IRefiner, IUploadModelLora
 
+
 async def main() -> None:
     runware = Runware(api_key=RUNWARE_API_KEY)
     await runware.connect()
-    
+
     payload = IUploadModelLora(
         air='qatests:68487@08629',
         name='yWO8IaKwez',
         heroImageUrl='https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/image.jpg',
         downloadUrl='https://repo-controlnets-r2.runware.ai/controlnet-zoe-depth-sdxl-1.0.safetensors'
-                         '/controlnet-zoe-depth-sdxl-1.0.safetensors.part-001-1',
+                    '/controlnet-zoe-depth-sdxl-1.0.safetensors.part-001-1',
         uniqueIdentifier='aq2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1234',
         version='1.0',
         tags=['tag1', 'tag2', 'tag2'],
@@ -272,23 +274,24 @@ async def main() -> None:
         comment='some comments if you want to add for internal use',
     )
 
-    uploaded = await runware.uploadModel(payload)
+    uploaded = await runware.modelUpload(payload)
     print(f"Response : {uploaded}")
 ```
 
 ```python
 from runware import Runware, IImageInference, IRefiner, IUploadModelControlNet
 
+
 async def main() -> None:
     runware = Runware(api_key=RUNWARE_API_KEY)
     await runware.connect()
-    
-     payload = IUploadModelControlNet(
+
+    payload = IUploadModelControlNet(
         air='qatests:68487@08629',
         name='yWO8IaKwez',
         heroImageUrl='https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/image.jpg',
         downloadUrl='https://repo-controlnets-r2.runware.ai/controlnet-zoe-depth-sdxl-1.0.safetensors'
-                         '/controlnet-zoe-depth-sdxl-1.0.safetensors.part-001-1',
+                    '/controlnet-zoe-depth-sdxl-1.0.safetensors.part-001-1',
         uniqueIdentifier='aq2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1234',
         version='1.0',
         tags=['tag1', 'tag2', 'tag2'],
@@ -301,8 +304,9 @@ async def main() -> None:
         comment='some comments if you want to add for internal use',
     )
 
-    uploaded = await runware.uploadModel(payload)
-    print(f"Response : {uploaded}")
+
+uploaded = await runware.modelUpload(payload)
+print(f"Response : {uploaded}")
 ```
 
 For more detailed usage and additional examples, please refer to the examples directory.
