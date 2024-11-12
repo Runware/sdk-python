@@ -487,6 +487,7 @@ class IUploadModelControlNet(IUploadModelBaseType):
 class IUploadModelCheckPoint(IUploadModelBaseType):
     modelType: str = "checkpoint"
     modelCategory: str = "checkpoint"
+    modelDefaultStrength: Optional[float] = None
     modelDefaultWeight: Optional[float] = None
     modelPositiveTriggerWords: Optional[str] = None
     modelDefaultGuidanceScale: Optional[float] = None

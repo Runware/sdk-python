@@ -1191,6 +1191,9 @@ class RunwareBase:
         if hasattr(requestModel, "modelDefaultWeight") and requestModel.modelDefaultWeight is not None:
             request_object["defaultWeight"] = requestModel.modelDefaultWeight
 
+        if hasattr(requestModel, "modelDefaultStrength") and requestModel.modelDefaultStrength is not None:
+            request_object["defaultStrength"] = requestModel.modelDefaultStrength
+
         if hasattr(requestModel, "modelDefaultGuidanceScale") and requestModel.modelDefaultGuidanceScale is not None:
             request_object["defaultCFGScale"] = requestModel.modelDefaultGuidanceScale
 
