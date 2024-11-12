@@ -1150,9 +1150,7 @@ class RunwareBase:
 
     async def _uploadModel(self, requestModel: IUploadModelBaseType) -> Optional[IUploadModelResponse]:
         task_uuid = getUUID()
-        request_object: Optional[Dict[str, Any]] = None
-
-        request_object = {
+        base_fields = {
             "taskType": ETaskType.MODEL_UPLOAD.value,
             "taskUUID": task_uuid,
             "air": requestModel.air,
@@ -1166,47 +1164,15 @@ class RunwareBase:
             "architecture": requestModel.architecture,
         }
 
-        if requestModel.retry is not None:
-            request_object["retry"] = requestModel.retry
+        optional_fields = [
+            "retry", "heroImageUrl", "tags", "shortDescription", "comment",
+            "positiveTriggerWords", "type", "negativeTriggerWords",
+            "defaultWeight", "defaultStrength", "defaultGuidanceScale",
+            "defaultSteps", "defaultScheduler", "conditioning"
+        ]
 
-        if requestModel.heroImageUrl is not None:
-            request_object["heroImageUrl"] = requestModel.heroImageUrl
-
-        if requestModel.tags is not None:
-            request_object["tags"] = requestModel.tags
-
-        if requestModel.shortDescription is not None:
-            request_object["shortDescription"] = requestModel.shortDescription
-
-        if requestModel.comment is not None:
-            request_object["comment"] = requestModel.comment
-
-        if hasattr(requestModel, "positiveTriggerWords") and requestModel.positiveTriggerWords is not None:
-            request_object["positiveTriggerWords"] = requestModel.positiveTriggerWords
-
-        if hasattr(requestModel, "type") and requestModel.type is not None:
-            request_object["type"] = requestModel.type
-
-        if hasattr(requestModel, "negativeTriggerWords") and requestModel.negativeTriggerWords is not None:
-            request_object["negativeTriggerWords"] = requestModel.negativeTriggerWords
-
-        if hasattr(requestModel, "defaultWeight") and requestModel.defaultWeight is not None:
-            request_object["defaultWeight"] = requestModel.defaultWeight
-
-        if hasattr(requestModel, "defaultStrength") and requestModel.defaultStrength is not None:
-            request_object["defaultStrength"] = requestModel.defaultStrength
-
-        if hasattr(requestModel, "defaultGuidanceScale") and requestModel.defaultGuidanceScale is not None:
-            request_object["defaultGuidanceScale"] = requestModel.defaultGuidanceScale
-
-        if hasattr(requestModel, "defaultSteps") and requestModel.defaultSteps is not None:
-            request_object["defaultSteps"] = requestModel.defaultSteps
-
-        if hasattr(requestModel, "defaultScheduler") and requestModel.defaultScheduler is not None:
-            request_object["defaultScheduler"] = requestModel.defaultScheduler
-
-        if hasattr(requestModel, "conditioning") and requestModel.conditioning is not None:
-            request_object["conditioning"] = requestModel.conditioning
+        request_object = {**base_fields, **{field: getattr(requestModel, field) for field in optional_fields if
+                                            getattr(requestModel, field, None) is not None}}
 
         await self.send(
             [
