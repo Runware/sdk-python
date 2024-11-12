@@ -223,23 +223,23 @@ async def main() -> None:
     await runware.connect()
     
     payload = IUploadModelCheckPoint(
-        modelAIR='qatests:68487@08629',
-        modelName='yWO8IaKwez',
-        modelHeroImageUrl='https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/image.jpg',
-        modelDownloadUrl= 'https://repo-controlnets-r2.runware.ai/controlnet-zoe-depth-sdxl-1.0.safetensors'
+        air='qatests:68487@08629',
+        name='yWO8IaKwez',
+        heroImageUrl='https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/image.jpg',
+        downloadUrl= 'https://repo-controlnets-r2.runware.ai/controlnet-zoe-depth-sdxl-1.0.safetensors'
                           '/controlnet-zoe-depth-sdxl-1.0.safetensors.part-001-1',
-        modelUniqueIdentifier='aq2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1234',
-        modelVersion='1.0',
-        modelTags=['tag1', 'tag2', 'tag2'],
-        modelArchitecture='flux1d',
-        modelTypeId='base',
-        modelDefaultWeight=0.8,
-        modelFormatId='safetensors',
-        modelPositiveTriggerWords='my trigger word',
-        modelShortDescription='a model description',
-        privateModel=False,
-        modelDefaultSchedulerId='Default',
-        modelComment='some comments if you want to add for internal use',
+        uniqueIdentifier='aq2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1234',
+        version='1.0',
+        tags=['tag1', 'tag2', 'tag2'],
+        architecture='flux1d',
+        type='base',
+        defaultWeight=0.8,
+        format='safetensors',
+        positiveTriggerWords='my trigger word',
+        shortDescription='a model description',
+        private=False,
+        defaultScheduler='Default',
+        comment='some comments if you want to add for internal use',
     )
 
     uploaded = await runware.uploadModel(payload)
@@ -254,22 +254,22 @@ async def main() -> None:
     await runware.connect()
     
     payload = IUploadModelLora(
-        modelAIR='qatests:68487@08629',
-        modelName='yWO8IaKwez',
-        modelHeroImageUrl='https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/image.jpg',
-        modelDownloadUrl='https://repo-controlnets-r2.runware.ai/controlnet-zoe-depth-sdxl-1.0.safetensors'
+        air='qatests:68487@08629',
+        name='yWO8IaKwez',
+        heroImageUrl='https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/image.jpg',
+        downloadUrl='https://repo-controlnets-r2.runware.ai/controlnet-zoe-depth-sdxl-1.0.safetensors'
                          '/controlnet-zoe-depth-sdxl-1.0.safetensors.part-001-1',
-        modelUniqueIdentifier='aq2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1234',
-        modelVersion='1.0',
-        modelTags=['tag1', 'tag2', 'tag2'],
-        modelArchitecture='flux1d',
-        modelTypeId='base',
-        modelDefaultWeight=0.8,
-        modelFormatId='safetensors',
-        modelPositiveTriggerWords='my trigger word',
-        modelShortDescription='a model description',
-        privateModel=False,
-        modelComment='some comments if you want to add for internal use',
+        uniqueIdentifier='aq2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1234',
+        version='1.0',
+        tags=['tag1', 'tag2', 'tag2'],
+        architecture='flux1d',
+        type='base',
+        defaultWeight=0.8,
+        format='safetensors',
+        positiveTriggerWords='my trigger word',
+        shortDescription='a model description',
+        private=False,
+        comment='some comments if you want to add for internal use',
     )
 
     uploaded = await runware.uploadModel(payload)
@@ -284,21 +284,21 @@ async def main() -> None:
     await runware.connect()
     
      payload = IUploadModelControlNet(
-        modelAIR='qatests:68487@08629',
-        modelName='yWO8IaKwez',
-        modelHeroImageUrl='https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/image.jpg',
-        modelDownloadUrl='https://repo-controlnets-r2.runware.ai/controlnet-zoe-depth-sdxl-1.0.safetensors'
+        air='qatests:68487@08629',
+        name='yWO8IaKwez',
+        heroImageUrl='https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/image.jpg',
+        downloadUrl='https://repo-controlnets-r2.runware.ai/controlnet-zoe-depth-sdxl-1.0.safetensors'
                          '/controlnet-zoe-depth-sdxl-1.0.safetensors.part-001-1',
-        modelUniqueIdentifier='aq2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1234',
-        modelVersion='1.0',
-        modelTags=['tag1', 'tag2', 'tag2'],
-        modelArchitecture='flux1d',
-        modelTypeId='base',
-        modelFormatId='safetensors',
-        modelPositiveTriggerWords='my trigger word',
-        modelShortDescription='a model description',
-        privateModel=False,
-        modelComment='some comments if you want to add for internal use',
+        uniqueIdentifier='aq2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1234',
+        version='1.0',
+        tags=['tag1', 'tag2', 'tag2'],
+        architecture='flux1d',
+        type='base',
+        format='safetensors',
+        positiveTriggerWords='my trigger word',
+        shortDescription='a model description',
+        private=False,
+        comment='some comments if you want to add for internal use',
     )
 
     uploaded = await runware.uploadModel(payload)

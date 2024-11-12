@@ -1155,58 +1155,58 @@ class RunwareBase:
         request_object = {
             "taskType": ETaskType.MODEL_UPLOAD.value,
             "taskUUID": task_uuid,
-            "air": requestModel.modelAIR,
-            "name": requestModel.modelName,
-            "downloadUrl": requestModel.modelDownloadUrl,
-            "uniqueIdentifier": requestModel.modelUniqueIdentifier,
-            "version": requestModel.modelVersion,
-            "format": requestModel.modelFormatId,
-            "private": requestModel.privateModel,
-            "category": requestModel.modelCategory,
-            "architecture": requestModel.modelArchitecture,
+            "air": requestModel.air,
+            "name": requestModel.name,
+            "downloadUrl": requestModel.downloadUrl,
+            "uniqueIdentifier": requestModel.uniqueIdentifier,
+            "version": requestModel.version,
+            "format": requestModel.format,
+            "private": requestModel.private,
+            "category": requestModel.category,
+            "architecture": requestModel.architecture,
         }
 
         if requestModel.retry is not None:
             request_object["retry"] = requestModel.retry
 
-        if requestModel.modelHeroImageUrl is not None:
-            request_object["heroImageUrl"] = requestModel.modelHeroImageUrl
+        if requestModel.heroImageUrl is not None:
+            request_object["heroImageUrl"] = requestModel.heroImageUrl
 
-        if requestModel.modelTags is not None:
-            request_object["tags"] = requestModel.modelTags
+        if requestModel.tags is not None:
+            request_object["tags"] = requestModel.tags
 
-        if requestModel.modelShortDescription is not None:
-            request_object["shortDescription"] = requestModel.modelShortDescription
+        if requestModel.shortDescription is not None:
+            request_object["shortDescription"] = requestModel.shortDescription
 
-        if requestModel.modelComment is not None:
-            request_object["comment"] = requestModel.modelComment
+        if requestModel.comment is not None:
+            request_object["comment"] = requestModel.comment
 
-        if requestModel.modelPositiveTriggerWords is not None:
-            request_object["positiveTriggerWords"] = requestModel.modelPositiveTriggerWords
+        if requestModel.positiveTriggerWords is not None:
+            request_object["positiveTriggerWords"] = requestModel.positiveTriggerWords
 
-        if hasattr(requestModel, "modelTypeId") and requestModel.modelTypeId is not None:
-            request_object["type"] = requestModel.modelTypeId
+        if hasattr(requestModel, "type") and requestModel.type is not None:
+            request_object["type"] = requestModel.type
 
-        if hasattr(requestModel, "modelNegativeTriggerWords") and requestModel.modelNegativeTriggerWords is not None:
-            request_object["negativeTriggerWords"] = requestModel.modelNegativeTriggerWords
+        if hasattr(requestModel, "negativeTriggerWords") and requestModel.negativeTriggerWords is not None:
+            request_object["negativeTriggerWords"] = requestModel.negativeTriggerWords
 
-        if hasattr(requestModel, "modelDefaultWeight") and requestModel.modelDefaultWeight is not None:
-            request_object["defaultWeight"] = requestModel.modelDefaultWeight
+        if hasattr(requestModel, "defaultWeight") and requestModel.defaultWeight is not None:
+            request_object["defaultWeight"] = requestModel.defaultWeight
 
-        if hasattr(requestModel, "modelDefaultStrength") and requestModel.modelDefaultStrength is not None:
-            request_object["defaultStrength"] = requestModel.modelDefaultStrength
+        if hasattr(requestModel, "defaultStrength") and requestModel.defaultStrength is not None:
+            request_object["defaultStrength"] = requestModel.defaultStrength
 
-        if hasattr(requestModel, "modelDefaultGuidanceScale") and requestModel.modelDefaultGuidanceScale is not None:
-            request_object["defaultCFGScale"] = requestModel.modelDefaultGuidanceScale
+        if hasattr(requestModel, "defaultGuidanceScale") and requestModel.defaultGuidanceScale is not None:
+            request_object["defaultGuidanceScale"] = requestModel.defaultGuidanceScale
 
-        if hasattr(requestModel, "modelDefaultNumberOfSteps") and requestModel.modelDefaultNumberOfSteps is not None:
-            request_object["defaultSteps"] = requestModel.modelDefaultNumberOfSteps
+        if hasattr(requestModel, "defaultSteps") and requestModel.defaultSteps is not None:
+            request_object["defaultSteps"] = requestModel.defaultSteps
 
-        if hasattr(requestModel, "modelDefaultSchedulerId") and requestModel.modelDefaultSchedulerId is not None:
-            request_object["defaultScheduler"] = requestModel.modelDefaultSchedulerId
+        if hasattr(requestModel, "defaultScheduler") and requestModel.defaultScheduler is not None:
+            request_object["defaultScheduler"] = requestModel.defaultScheduler
 
-        if hasattr(requestModel, "modelConditioning") and requestModel.modelConditioning is not None:
-            request_object["conditioning"] = requestModel.modelConditioning
+        if hasattr(requestModel, "conditioning") and requestModel.conditioning is not None:
+            request_object["conditioning"] = requestModel.conditioning
 
         await self.send(
             [
@@ -1244,7 +1244,7 @@ class RunwareBase:
 
         if response:
             image = IUploadModelResponse(
-                modelAIR=response["air"],
+                air=response["air"],
                 taskType=response["taskType"],
                 taskUUID=response["taskUUID"],
             )

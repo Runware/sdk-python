@@ -459,66 +459,62 @@ class UploadImageType:
 
 @dataclass
 class IUploadModelBaseType:
-    modelAIR: str
-    modelArchitecture: str
-    modelName: str
-    modelDownloadUrl: str
-    modelUniqueIdentifier: str
-    modelVersion: str
-    modelFormatId: int
-    privateModel: bool
-    modelCategory: str
-    modelHeroImageUrl: Optional[str] = None
-    modelTags: Optional[List[str]] = field(default_factory=list)
-    modelShortDescription: Optional[str] = None
-    modelComment: Optional[str] = None
-    modelPositiveTriggerWords: Optional[str] = None
+    air: str
+    architecture: str
+    name: str
+    downloadUrl: str
+    uniqueIdentifier: str
+    version: str
+    format: int
+    private: bool
+    category: str
+    heroImageUrl: Optional[str] = None
+    tags: Optional[List[str]] = field(default_factory=list)
+    shortDescription: Optional[str] = None
+    comment: Optional[str] = None
     retry: Optional[int] = None
 
 
 @dataclass
 class IUploadModelControlNet(IUploadModelBaseType):
-    modelType: str = "controlnet"
-    modelCategory: str = "controlnet"
-    modelConditioning: Optional[str] = None
+    category: str = "controlnet"
+    conditioning: Optional[str] = None
 
     def __post_init__(self):
-        if self.modelConditioning is None:
-            raise ValueError("modelConditioning is required for IUploadModelCheckPoint")
+        if self.conditioning is None:
+            raise ValueError("conditioning is required for IUploadModelCheckPoint")
 
 
 @dataclass
 class IUploadModelCheckPoint(IUploadModelBaseType):
-    modelType: str = "checkpoint"
-    modelCategory: str = "checkpoint"
-    modelDefaultSchedulerId: Optional[str] = None
-    modelTypeId: Optional[str] = None
-    modelDefaultStrength: Optional[float] = None
-    modelDefaultWeight: Optional[float] = None
-    modelPositiveTriggerWords: Optional[str] = None
-    modelDefaultGuidanceScale: Optional[float] = None
-    modelDefaultNumberOfSteps: Optional[int] = None
-    modelNegativeTriggerWords: Optional[str] = None
+    category: str = "checkpoint"
+    defaultScheduler: Optional[str] = None
+    type: Optional[str] = None
+    defaultStrength: Optional[float] = None
+    defaultWeight: Optional[float] = None
+    positiveTriggerWords: Optional[str] = None
+    defaultGuidanceScale: Optional[float] = None
+    defaultSteps: Optional[int] = None
+    negativeTriggerWords: Optional[str] = None
 
     def __post_init__(self):
-        if self.modelTypeId is None:
-            raise ValueError("modelTypeId is required for IUploadModelCheckPoint")
+        if self.type is None:
+            raise ValueError("type is required for IUploadModelCheckPoint")
 
-        if self.modelDefaultSchedulerId is None:
-            raise ValueError("modelDefaultSchedulerId is required for IUploadModelCheckPoint")
+        if self.defaultScheduler is None:
+            raise ValueError("defaultScheduler is required for IUploadModelCheckPoint")
 
 
 @dataclass
 class IUploadModelLora(IUploadModelBaseType):
-    modelType: str = "lora"
-    modelCategory: str = "lora"
-    modelDefaultWeight: Optional[float] = None
-    modelPositiveTriggerWords: Optional[str] = None
+    category: str = "lora"
+    defaultWeight: Optional[float] = None
+    positiveTriggerWords: Optional[str] = None
 
 
 @dataclass
 class IUploadModelResponse:
-    modelAIR: str
+    air: str
     taskUUID: str
     taskType: str
 
