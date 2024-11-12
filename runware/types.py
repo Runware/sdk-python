@@ -487,12 +487,12 @@ class IUploadModelControlNet(IUploadModelBaseType):
 class IUploadModelCheckPoint(IUploadModelBaseType):
     modelType: str = "checkpoint"
     modelCategory: str = "checkpoint"
+    modelDefaultSchedulerId: str = "Default"
     modelDefaultStrength: Optional[float] = None
     modelDefaultWeight: Optional[float] = None
     modelPositiveTriggerWords: Optional[str] = None
     modelDefaultGuidanceScale: Optional[float] = None
     modelDefaultNumberOfSteps: Optional[int] = None
-    modelDefaultSchedulerId: Optional[int] = None
     modelNegativeTriggerWords: Optional[str] = None
 
 
