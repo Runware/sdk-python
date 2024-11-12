@@ -1203,6 +1203,9 @@ class RunwareBase:
         if hasattr(requestModel, "modelDefaultSchedulerId") and requestModel.modelDefaultSchedulerId is not None:
             request_object["defaultScheduler"] = requestModel.modelDefaultSchedulerId
 
+        if hasattr(requestModel, "modelConditioning") and requestModel.modelConditioning is not None:
+            request_object["conditioning"] = requestModel.modelConditioning
+
         await self.send(
             [
                 request_object

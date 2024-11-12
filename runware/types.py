@@ -469,6 +469,8 @@ class IUploadModelBaseType:
     modelTypeId: int
     privateModel: bool
     modelCategory: str
+    modelDefaultSchedulerId: Optional[str] = None
+    modelConditioning: Optional[str] = None
     modelHeroImageUrl: Optional[str] = None
     modelTags: Optional[List[str]] = field(default_factory=list)
     modelShortDescription: Optional[str] = None
@@ -481,13 +483,14 @@ class IUploadModelBaseType:
 class IUploadModelControlNet(IUploadModelBaseType):
     modelType: str = "controlnet"
     modelCategory: str = "controlnet"
+    modelConditioning: str
 
 
 @dataclass
 class IUploadModelCheckPoint(IUploadModelBaseType):
     modelType: str = "checkpoint"
     modelCategory: str = "checkpoint"
-    modelDefaultSchedulerId: str = "Default"
+    modelDefaultSchedulerId: str
     modelDefaultStrength: Optional[float] = None
     modelDefaultWeight: Optional[float] = None
     modelPositiveTriggerWords: Optional[str] = None
