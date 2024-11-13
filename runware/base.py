@@ -233,7 +233,7 @@ class RunwareBase:
                 if not isinstance(response, list):
                     response = [response]
 
-            return response
+            return instantiateDataclassList(IImage, response)
 
         except Exception as e:
             if retry_count >= 2:
