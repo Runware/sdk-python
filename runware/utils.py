@@ -497,6 +497,12 @@ def accessDeepObject(
     #             matching_tasks.append(item)
     matching_tasks = []
 
+    for field in ["data", "errors"]:
+        if field in data and isinstance(data[field], list):
+            for item in data[field]:
+                if "taskUUID" in item and item["taskUUID"] == key:
+                    matching_tasks.append(item)
+
     # Check for successful messages
     if "data" in data and isinstance(data["data"], list):
         for item in data["data"]:
