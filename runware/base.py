@@ -162,12 +162,13 @@ class RunwareBase:
         self._invalidAPIkey = None
 
     async def photoMaker(self, requestPhotoMaker: IPhotoMaker):
-        request_object: Optional[Dict[str, Any]] = None
-        task_uuids: List[str] = []
         retry_count = 0
 
         try:
             await self.ensureConnection()
+
+            task_uuid = requestPhotoMaker.taskUUID or getUUID()
+            requestPhotoMaker.taskUUID = task_uuid
 
             for i, image in enumerate(requestPhotoMaker.inputImages):
                 if self._isLocalFile(image) and not str(image).startswith("http"):
@@ -194,16 +195,46 @@ class RunwareBase:
             if requestPhotoMaker.outputType:
                 request_object["outputType"] = requestPhotoMaker.outputType
 
-            return await asyncRetry(
-                lambda: self._requestImages(
-                    request_object=request_object,
-                    task_uuids=task_uuids,
-                    let_lis=None,
-                    retry_count=retry_count,
-                    number_of_images=requestPhotoMaker.numberResults,
-                    on_partial_images=None,
-                )
+            await self.send(
+                [
+                    request_object
+                ]
             )
+
+            lis = self.globalListener(
+                taskUUID=task_uuid,
+            )
+
+            def check(resolve: callable, reject: callable, *args: Any) -> bool:
+                photo_maker_list = self._globalMessages.get(task_uuid)
+
+                if photo_maker_list:
+                    for made_photo in photo_maker_list:
+                        if made_photo.get("error"):
+                            reject(made_photo)
+                            return True
+
+                    for made_photo in photo_maker_list:
+                        resolve(made_photo)
+                    del self._globalMessages[task_uuid]
+                    return True
+
+                return False
+
+            response = await getIntervalWithPromise(check, debugKey="photo-maker")
+
+            lis["destroy"]()
+
+            if "code" in response:
+                # This indicates an error response
+                raise RunwareAPIError(response)
+
+            if response:
+                if not isinstance(response, list):
+                    response = [response]
+
+            return response
+
         except Exception as e:
             if retry_count >= 2:
                 self.logger.error(f"Error in photoMaker request: {e}")
