@@ -1185,18 +1185,28 @@ class RunwareBase:
         )
 
         def check(resolve: callable, reject: callable, *args: Any) -> bool:
-            uploaded_model_list = self._globalMessages.get(task_uuid)
-            # TODO: Update to support multiple images
-            uploaded_model = uploaded_model_list[0] if uploaded_model_list else None
+            uploaded_model_list = self._globalMessages.get(task_uuid, [])
+            unique_statuses = set()
+            all_models = []
 
-            if uploaded_model and uploaded_model.get("error"):
-                reject(uploaded_model)
-                return True
+            for uploaded_model in uploaded_model_list:
+                if uploaded_model.get("error"):
+                    reject(uploaded_model)
+                    return True
 
-            if uploaded_model:
-                del self._globalMessages[task_uuid]
-                resolve(uploaded_model)
-                return True
+                status = uploaded_model.get("status")
+                if status not in unique_statuses:
+                    all_models.append(uploaded_model)
+                    unique_statuses.add(status)
+
+                if status == "ready":
+                    uploaded_model_list.remove(uploaded_model)
+                    if not uploaded_model_list:
+                        del self._globalMessages[task_uuid]
+                    else:
+                        self._globalMessages[task_uuid] = uploaded_model_list
+                    resolve(all_models)
+                    return True
 
             return False
 
