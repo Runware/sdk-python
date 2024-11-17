@@ -205,18 +205,27 @@ class RunwareBase:
                 taskUUID=task_uuid,
             )
 
+            numberOfResults = requestPhotoMaker.numberResults
+
             def check(resolve: callable, reject: callable, *args: Any) -> bool:
-                photo_maker_list = self._globalMessages.get(task_uuid)
+                photo_maker_list = self._globalMessages.get(task_uuid, [])
+                unique_results = {}
 
-                if photo_maker_list:
-                    for made_photo in photo_maker_list:
-                        if made_photo.get("error"):
-                            reject(made_photo)
-                            return True
+                for made_photo in photo_maker_list:
+                    if made_photo.get("error"):
+                        reject(made_photo)
+                        return True
 
-                    for made_photo in photo_maker_list:
-                        resolve(made_photo)
+                    if made_photo.get("taskType") != "photoMaker":
+                        continue
+
+                    image_uuid = made_photo.get("imageUUID")
+                    if image_uuid not in unique_results:
+                        unique_results[image_uuid] = made_photo
+
+                if len(unique_results) >= numberOfResults:
                     del self._globalMessages[task_uuid]
+                    resolve(list(unique_results.values()))
                     return True
 
                 return False
