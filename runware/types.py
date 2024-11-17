@@ -31,6 +31,7 @@ class ETaskType(Enum):
     IMAGE_CONTROL_NET_PRE_PROCESS = "imageControlNetPreProcess"
     PROMPT_ENHANCE = "promptEnhance"
     AUTHENTICATION = "authentication"
+    MODEL_UPLOAD = "modelUpload"
 
 
 class EPreProcessorGroup(Enum):
@@ -454,6 +455,68 @@ class UploadImageType:
     imageUUID: str
     imageURL: str
     taskUUID: str
+
+
+@dataclass
+class IUploadModelBaseType:
+    air: str
+    architecture: str
+    name: str
+    downloadUrl: str
+    uniqueIdentifier: str
+    version: str
+    format: int
+    private: bool
+    category: str
+    heroImageUrl: Optional[str] = None
+    tags: Optional[List[str]] = field(default_factory=list)
+    shortDescription: Optional[str] = None
+    comment: Optional[str] = None
+    retry: Optional[int] = None
+
+
+@dataclass
+class IUploadModelControlNet(IUploadModelBaseType):
+    category: str = "controlnet"
+    conditioning: Optional[str] = None
+
+    def __post_init__(self):
+        if self.conditioning is None:
+            raise ValueError("conditioning is required for IUploadModelCheckPoint")
+
+
+@dataclass
+class IUploadModelCheckPoint(IUploadModelBaseType):
+    category: str = "checkpoint"
+    defaultScheduler: Optional[str] = None
+    type: Optional[str] = None
+    defaultStrength: Optional[float] = None
+    defaultWeight: Optional[float] = None
+    positiveTriggerWords: Optional[str] = None
+    defaultGuidanceScale: Optional[float] = None
+    defaultSteps: Optional[int] = None
+    negativeTriggerWords: Optional[str] = None
+
+    def __post_init__(self):
+        if self.type is None:
+            raise ValueError("type is required for IUploadModelCheckPoint")
+
+        if self.defaultScheduler is None:
+            raise ValueError("defaultScheduler is required for IUploadModelCheckPoint")
+
+
+@dataclass
+class IUploadModelLora(IUploadModelBaseType):
+    category: str = "lora"
+    defaultWeight: Optional[float] = None
+    positiveTriggerWords: Optional[str] = None
+
+
+@dataclass
+class IUploadModelResponse:
+    air: str
+    taskUUID: str
+    taskType: str
 
 
 # The GetWithPromiseCallBackType is defined using the Callable type from the typing module. It represents a function that takes a dictionary
