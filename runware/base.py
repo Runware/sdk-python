@@ -213,9 +213,8 @@ class RunwareBase:
                 unique_results = {}
 
                 for made_photo in photo_maker_list:
-                    if made_photo.get("error"):
-                        reject(made_photo)
-                        return True
+                    if made_photo.get("code"):
+                        raise RunwareAPIError(made_photo)
 
                     if made_photo.get("taskType") != "photoMaker":
                         continue
@@ -1190,9 +1189,8 @@ class RunwareBase:
             all_models = []
 
             for uploaded_model in uploaded_model_list:
-                if uploaded_model.get("error"):
-                    reject(uploaded_model)
-                    return True
+                if uploaded_model.get("code"):
+                    raise RunwareAPIError(uploaded_model)
 
                 status = uploaded_model.get("status")
                 if status not in unique_statuses:
