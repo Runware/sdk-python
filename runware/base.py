@@ -787,6 +787,9 @@ class RunwareBase:
             raise e
 
     def _isLocalFile(self, file):
+        if os.path.isfile(file):
+            return True
+
         # Check if the string is a valid UUID
         if isValidUUID(file):
             return False
