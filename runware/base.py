@@ -777,7 +777,7 @@ class RunwareBase:
         # Transform the response to a list of IEnhancedPrompt objects
         enhanced_prompts = createEnhancedPromptsFromResponse(response)
 
-        return enhanced_prompts
+        return enhanced_prompts[:promptVersions]
 
     async def uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
         try:
