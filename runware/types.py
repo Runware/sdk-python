@@ -426,6 +426,9 @@ class IPromptEnhance:
 class IEnhancedPrompt(IImageToText):
     pass
 
+    def __hash__(self):
+        return hash((self.taskType, self.taskUUID, self.text, self.cost))
+
 
 @dataclass
 class IImageUpscale:
