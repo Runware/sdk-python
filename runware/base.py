@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import asdict
 from doctest import debug
 import json
 from os import error
@@ -62,7 +63,7 @@ from .types import (
     RequireOnlyOne,
     ListenerType,
     File,
-    ETaskType,
+    ETaskType, IControlNetBaseWithUUID, IControlNetCannyWithUUID, IControlNetHandsAndFaceWithUUID, IControlNetAWithUUID,
 )
 
 from typing import List, Optional, Union, Callable, Any, Dict
@@ -252,6 +253,15 @@ class RunwareBase:
             else:
                 raise e
 
+    def create_control_net_with_uuid(self, data: Dict) -> IControlNetBaseWithUUID:
+        # Determine the class based on data keys or attributes
+        if "low_threshold_canny" in data and "high_threshold_canny" in data:
+            return IControlNetCannyWithUUID(**data)
+        elif "include_hands_and_face_open_pose" in data:
+            return IControlNetHandsAndFaceWithUUID(**data)
+        else:
+            return IControlNetAWithUUID(**data)
+
     async def imageInference(
             self, requestImage: IImageInference
     ) -> Union[List[IImage], None]:
@@ -310,19 +320,25 @@ class RunwareBase:
                     if not image_uploaded:
                         return []
 
-                    control_net_data.append(
-                        IControlNetWithUUID(
-                            guide_image_uuid=image_uploaded.imageUUID,
-                            end_step=end_step,
-                            preprocessor=preprocessor,
-                            start_step=start_step,
-                            weight=weight,
-                            control_mode=control_mode or EControlMode.CONTROL_NET,
-                            **get_canny_object(),
-                        )
-                    )
+                    control_net_common_data = {
+                        "guide_image_uuid": image_uploaded.imageUUID,
+                        "end_step": end_step,
+                        "preprocessor": preprocessor.value,
+                        "start_step": start_step,
+                        "guide_image": guide_image,
+                        "guide_image_unprocessed": guide_image_unprocessed,
+                        "weight": weight,
+                        "control_mode": control_mode or EControlMode.CONTROL_NET,
+                        **get_canny_object(),
+                    }
+
+                    control_net_instance = self.create_control_net_with_uuid(control_net_common_data)
+                    control_net_data.append(control_net_instance)
 
             prompt = f"{requestImage.positivePrompt}".strip()
+
+            control_net_data_dicts = [asdict(item) for item in control_net_data]
+
             request_object = {
                 "offset": 0,
                 "taskUUID": requestImage.taskUUID,
@@ -333,7 +349,7 @@ class RunwareBase:
                 "width": requestImage.width,
                 "taskType": ETaskType.IMAGE_INFERENCE.value,
                 **({"steps": requestImage.steps} if requestImage.steps else {}),
-                **({"controlNet": control_net_data} if control_net_data else {}),
+                **({"controlNet": control_net_data_dicts} if control_net_data_dicts else {}),
                 **(
                     {
                         "lora": [
