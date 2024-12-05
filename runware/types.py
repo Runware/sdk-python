@@ -125,6 +125,10 @@ class ILora:
 
 
 @dataclass
+class IEmbedding:
+    model: str
+
+@dataclass
 class IRefiner:
     model: Union[int, str]
     startStep: Optional[int] = None
@@ -344,6 +348,7 @@ class IImageInference:
     onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]] = None
     refiner: Optional[IRefiner] = None
     vae: Optional[str] = None
+    embeddings: Optional[List[IEmbedding]] = field(default_factory=list)
 
     def __post_init__(self):
         self.validate_clip_skip()
