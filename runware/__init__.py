@@ -7,4 +7,4 @@ from .logging_config import *
 from .async_retry import *
 
 __all__ = ["Runware", "IImageBackgroundRemoval"]
-__version__ = "0.3.5"
+__version__ = "0.3.6"
