@@ -360,6 +360,16 @@ class RunwareBase:
                     if requestImage.lora
                     else {}
                 ),
+                **(
+                    {
+                        "embeddings": [
+                            {"model": embedding.model}
+                            for embedding in requestImage.embeddings
+                        ]
+                    }
+                    if requestImage.embeddings
+                    else {}
+                ),
                 **({"seed": requestImage.seed} if requestImage.seed else {}),
                 **(
                     {
