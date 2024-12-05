@@ -402,6 +402,8 @@ class RunwareBase:
                 request_object["strength"] = requestImage.strength
             if requestImage.scheduler:
                 request_object["scheduler"] = requestImage.scheduler
+            if requestImage.vae:
+                request_object["vae"] = requestImage.vae
 
             return await asyncRetry(
                 lambda: self._requestImages(

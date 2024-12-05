@@ -343,6 +343,7 @@ class IImageInference:
     includeCost: Optional[bool] = None
     onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]] = None
     refiner: Optional[IRefiner] = None
+    vae: Optional[str] = None
 
     def __post_init__(self):
         self.validate_clip_skip()
