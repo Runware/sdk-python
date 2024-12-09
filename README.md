@@ -155,6 +155,7 @@ async def main() -> None:
     await runware.connect()
 
     request_image = IPhotoMaker(
+        model="civitai:101055@128080",
         positivePrompt="img of a beautiful lady in a forest",
         steps=35,
         numberResults=1,

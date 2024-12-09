@@ -292,6 +292,7 @@ class IError:
 
 @dataclass
 class IPhotoMaker:
+    model: Union[int, str]
     positivePrompt: str
     height: int
     width: int
