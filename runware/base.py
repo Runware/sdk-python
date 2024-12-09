@@ -179,6 +179,7 @@ class RunwareBase:
             prompt = f"{requestPhotoMaker.positivePrompt}".strip()
             request_object = {
                 "taskUUID": requestPhotoMaker.taskUUID,
+                "model": requestPhotoMaker.model,
                 "positivePrompt": prompt,
                 "numberResults": requestPhotoMaker.numberResults,
                 "height": requestPhotoMaker.height,
