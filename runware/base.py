@@ -1190,7 +1190,7 @@ class RunwareBase:
             "uniqueIdentifier": requestModel.uniqueIdentifier,
             "version": requestModel.version,
             "format": requestModel.format,
-            "private": requestModel.private,
+            "visibility": requestModel.visibility,
             "category": requestModel.category,
             "architecture": requestModel.architecture,
         }

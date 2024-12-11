@@ -482,7 +482,7 @@ class IUploadModelBaseType:
     uniqueIdentifier: str
     version: str
     format: int
-    private: bool
+    visibility: bool
     category: str
     heroImageUrl: Optional[str] = None
     tags: Optional[List[str]] = field(default_factory=list)
