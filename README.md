@@ -239,7 +239,7 @@ async def main() -> None:
         format='safetensors',
         positiveTriggerWords='my trigger word',
         shortDescription='a model description',
-        private=False,
+        visibility=False,
         defaultScheduler='Default',
         comment='some comments if you want to add for internal use',
     )
@@ -271,7 +271,7 @@ async def main() -> None:
         format='safetensors',
         positiveTriggerWords='my trigger word',
         shortDescription='a model description',
-        private=False,
+        visibility=False,
         comment='some comments if you want to add for internal use',
     )
 
@@ -301,7 +301,7 @@ async def main() -> None:
         format='safetensors',
         positiveTriggerWords='my trigger word',
         shortDescription='a model description',
-        private=False,
+        visibility=False,
         comment='some comments if you want to add for internal use',
     )
 
