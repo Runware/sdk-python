@@ -60,6 +60,7 @@ class RunwareServer(RunwareBase):
             self._ws = await websockets.connect(self._url)
             # update close_timeout so that we end the script sooner for inference examples
             self._ws.close_timeout = 1
+            self._ws.max_size = None
             self.logger.info(f"Connected to WebSocket URL: {self._url}")
 
             async def on_open(ws):
