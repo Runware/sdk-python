@@ -225,7 +225,7 @@ class RunwareBase:
                     if image_uuid not in unique_results:
                         unique_results[image_uuid] = made_photo
 
-                if len(unique_results) >= numberOfResults:
+                if 0 < numberOfResults <= len(unique_results):
                     del self._globalMessages[task_uuid]
                     resolve(list(unique_results.values()))
                     return True
