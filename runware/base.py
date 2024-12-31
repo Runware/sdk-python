@@ -26,7 +26,7 @@ from .utils import (
     createEnhancedPromptsFromResponse,
     instantiateDataclassList,
     RunwareAPIError,
-    RunwareError,
+    RunwareError, instantiateDataclass,
 )
 from .async_retry import asyncRetry
 from .types import (
@@ -64,6 +64,7 @@ from .types import (
     ListenerType,
     File,
     ETaskType, IControlNetBaseWithUUID, IControlNetCannyWithUUID, IControlNetHandsAndFaceWithUUID, IControlNetAWithUUID,
+    IModelSearch, IModelSearchResponse,
 )
 
 from typing import List, Optional, Union, Callable, Any, Dict
@@ -1271,6 +1272,47 @@ class RunwareBase:
             return await asyncRetry(lambda: self._modelUpload(requestModel))
         except Exception as e:
             raise e
+
+    async def modelSearch(self, payload: IModelSearch) -> IModelSearchResponse:
+        try:
+            await self.ensureConnection()
+            task_uuid = getUUID()
+
+            request_object = {
+                "taskUUID": task_uuid,
+                **asdict(payload),
+                "taskType": ETaskType.MODEL_SEARCH.value,
+            }
+
+            await self.send([request_object])
+
+            listener = self.globalListener(taskUUID=task_uuid)
+
+            def check(resolve: Callable, reject: Callable, *args: Any) -> bool:
+                response = self._globalMessages.get(task_uuid)
+                if response:
+                    if response[0].get("error"):
+                        reject(response[0])
+                        return True
+                    del self._globalMessages[task_uuid]
+                    resolve(response[0])
+                    return True
+                return False
+
+            response = await getIntervalWithPromise(
+                check, debugKey="model-search"
+            )
+
+            listener["destroy"]()
+
+            if "code" in response:
+                # This indicates an error response
+                raise RunwareAPIError(response)
+
+            return instantiateDataclass(IModelSearchResponse, response)
+
+        except Exception as e:
+            raise RunwareAPIError({"message": str(e)})
 
     def connected(self) -> bool:
         """
