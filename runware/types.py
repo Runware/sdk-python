@@ -354,8 +354,8 @@ class IModelSearch:
     architecture: Optional[EModelArchitecture] = None
     conditioning: Optional[str] = None
     visibility: Optional[Literal["public", "private", "all"]] = None
-    limit: Optional[int] = None
-    offset: Optional[int] = None
+    limit: int = 20
+    offset: int = 0
     customTaskUUID: Optional[str] = None
     retry: Optional[int] = None
     additional_params: Dict[str, Union[str, int, float, bool, None]] = field(default_factory=dict)

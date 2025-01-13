@@ -1280,9 +1280,15 @@ class RunwareBase:
 
             request_object = {
                 "taskUUID": task_uuid,
-                **asdict(payload),
                 "taskType": ETaskType.MODEL_SEARCH.value,
+                **({"tags": payload.tags} if payload.tags else {}),
             }
+
+            request_object.update({
+                key: value
+                for key, value in vars(payload).items()
+                if value is not None and key != "additional_params"
+            })
 
             await self.send([request_object])
 
