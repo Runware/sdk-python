@@ -1318,6 +1318,9 @@ class RunwareBase:
             return instantiateDataclass(IModelSearchResponse, response)
 
         except Exception as e:
+            if isinstance(e, RunwareAPIError):
+                raise
+
             raise RunwareAPIError({"message": str(e)})
 
     def connected(self) -> bool:
