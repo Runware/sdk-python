@@ -33,6 +33,7 @@ class ETaskType(Enum):
     PROMPT_ENHANCE = "promptEnhance"
     AUTHENTICATION = "authentication"
     MODEL_UPLOAD = "modelUpload"
+    MODEL_SEARCH = "modelSearch"
 
 
 class EPreProcessorGroup(Enum):
@@ -127,6 +128,7 @@ class ILora:
 @dataclass
 class IEmbedding:
     model: str
+
 
 @dataclass
 class IRefiner:
@@ -288,6 +290,85 @@ class IError:
     parameter: Optional[str] = None
     error_type: Optional[str] = None
     documentation: Optional[str] = None
+
+
+class EModelArchitecture(Enum):
+    FLUX1D = "flux1d"
+    FLUX1S = "flux1s"
+    PONY = "pony"
+    SDHYPER = "sdhyper"
+    SD1X = "sd1x"
+    SD1XLCM = "sd1xlcm"
+    SD3 = "sd3"
+    SDXL = "sdxl"
+    SDXL_LCM = "sdxllcm"
+    SDXL_DISTILLED = "sdxldistilled"
+    SDXL_HYPER = "sdxlhyper"
+    SDXL_LIGHTNING = "sdxllightning"
+    SDXL_TURBO = "sdxlturbo"
+
+
+@dataclass
+class IModel:
+    air: str
+    name: str
+    version: str
+    category: str
+    architecture: str
+    tags: List[str]
+    heroImage: str
+    private: bool
+    comment: str
+
+    type: Optional[str] = None
+    defaultWidth: Optional[int] = None
+    defaultHeight: Optional[int] = None
+    defaultSteps: Optional[int] = None
+    defaultScheduler: Optional[str] = None
+    defaultCFG: Optional[float] = None
+    defaultStrength: float = 0.0
+    conditioning: Optional[str] = None
+    positiveTriggerWords: Optional[str] = None
+
+    additional_fields: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        for key, value in self.additional_fields.items():
+            setattr(self, key, value)
+
+
+@dataclass
+class IModelSearchResponse:
+    results: List[IModel]
+    taskUUID: str
+    taskType: str
+    totalResults: int
+
+
+@dataclass
+class IModelSearch:
+    search: Optional[str] = None
+    tags: Optional[List[str]] = None
+    category: Optional[Literal["checkpoint", "lora", "controlnet"]] = None
+    type: Optional[str] = None
+    architecture: Optional[EModelArchitecture] = None
+    conditioning: Optional[str] = None
+    visibility: Optional[Literal["public", "private", "all"]] = None
+    limit: int = 20
+    offset: int = 0
+    customTaskUUID: Optional[str] = None
+    retry: Optional[int] = None
+    additional_params: Dict[str, Union[str, int, float, bool, None]] = field(default_factory=dict)
+
+    def __post_init__(self):
+        standard_fields = {
+            "search", "tags", "category", "type", "architecture",
+            "conditioning", "visibility", "limit", "offset",
+            "customTaskUUID", "retry"
+        }
+        for key in list(self.additional_params.keys()):
+            if key in standard_fields:
+                del self.additional_params[key]
 
 
 @dataclass
