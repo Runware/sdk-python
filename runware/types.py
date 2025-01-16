@@ -89,6 +89,11 @@ class EOpenPosePreProcessor(Enum):
     openpose_hand = "openpose_hand"
 
 
+class EPromptWeighting(Enum):
+    sdEmbeds = "sdEmbeds"
+    compel = "compel"
+
+
 # Define the types using Literal
 IOutputType = Literal["base64Data", "dataURI", "URL"]
 IOutputFormat = Literal["JPG", "PNG", "WEBP"]
@@ -422,7 +427,7 @@ class IImageInference:
     seed: Optional[int] = None
     CFGScale: Optional[float] = None
     clipSkip: Optional[int] = None
-    usePromptWeighting: Optional[bool] = None
+    promptWeighting: Optional[EPromptWeighting] = None
     numberResults: Optional[int] = 1  # default to 1
     controlNet: Optional[List[IControlNet]] = field(default_factory=list)
     lora: Optional[List[ILora]] = field(default_factory=list)

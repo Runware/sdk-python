@@ -60,18 +60,18 @@ Requests are sent as an array of objects, each representing a specific task. Her
 
 Additional parameters:
 
-| Parameter           | Type    | Required | Description                                                                     |
-|---------------------|---------|----------|---------------------------------------------------------------------------------|
-| uploadEndpoint      | string  | No       | URL to upload the generated image using HTTP PUT.                               |
-| checkNSFW           | boolean | No       | Enable NSFW content check (adds 0.1s to inference time).                        |
-| includeCost         | boolean | No       | Include the cost of the operation in the response.                              |
-| seedImage           | string  | No*      | Image to use as a starting point (required for Image-to-Image, In/Outpainting). |
-| maskImage           | string  | No*      | Mask image for Inpainting/Outpainting (required for these operations).          |
-| strength            | float   | No       | Influence of the seed image (0-1, default 0.8).                                 |
-| scheduler           | string  | No       | Specify a different scheduler (default is model's own scheduler).               |
-| seed                | integer | No       | Seed for reproducible results (1-9223372036854776000).                          |
-| clipSkip            | integer | No       | Number of CLIP layers to skip (0-2, default 0).                                 |
-| usePromptWeighting  | boolean | No       | Enable advanced prompt weighting (adds 0.2s to inference time).                 |
+| Parameter       | Type    | Required | Description                                                                     |
+|-----------------|---------|----------|---------------------------------------------------------------------------------|
+| uploadEndpoint  | string  | No       | URL to upload the generated image using HTTP PUT.                               |
+| checkNSFW       | boolean | No       | Enable NSFW content check (adds 0.1s to inference time).                        |
+| includeCost     | boolean | No       | Include the cost of the operation in the response.                              |
+| seedImage       | string  | No*      | Image to use as a starting point (required for Image-to-Image, In/Outpainting). |
+| maskImage       | string  | No*      | Mask image for Inpainting/Outpainting (required for these operations).          |
+| strength        | float   | No       | Influence of the seed image (0-1, default 0.8).                                 |
+| scheduler       | string  | No       | Specify a different scheduler (default is model's own scheduler).               |
+| seed            | integer | No       | Seed for reproducible results (1-9223372036854776000).                          |
+| clipSkip        | integer | No       | Number of CLIP layers to skip (0-2, default 0).                                 |
+| promptWeighting | string  | No       | Enable advanced prompt weighting (adds 0.2s to inference time).                 |
 
 ### ControlNet
 
