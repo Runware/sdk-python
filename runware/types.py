@@ -428,6 +428,13 @@ class IInstantID:
 
 
 @dataclass
+class IIpAdapter:
+    model: Union[int, str]
+    guideImage: Union[File, str]
+    weight: Optional[float] = None
+
+
+@dataclass
 class IImageInference:
     positivePrompt: str
     model: Union[int, str]
@@ -460,6 +467,7 @@ class IImageInference:
     embeddings: Optional[List[IEmbedding]] = field(default_factory=list)
     outpaint: Optional[IOutpaint] = None
     instantID: Optional[IInstantID] = None
+    ipAdapters: Optional[List[IIpAdapter]] = field(default_factory=list)
 
     def __post_init__(self):
         self.validate_clip_skip()
