@@ -401,6 +401,13 @@ class IPhotoMaker:
         if self.style and self.style not in valid_styles:
             raise ValueError(f"style must be one of the following: {', '.join(valid_styles)}.")
 
+@dataclass
+class IOutpaint:
+    top: Optional[int] = None
+    right: Optional[int] = None
+    bottom: Optional[int] = None
+    left: Optional[int] = None
+    blur: Optional[int] = None
 
 @dataclass
 class IImageInference:
@@ -431,6 +438,7 @@ class IImageInference:
     refiner: Optional[IRefiner] = None
     vae: Optional[str] = None
     embeddings: Optional[List[IEmbedding]] = field(default_factory=list)
+    outpaint: Optional[IOutpaint] = None
 
     def __post_init__(self):
         self.validate_clip_skip()

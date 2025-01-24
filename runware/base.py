@@ -390,6 +390,37 @@ class RunwareBase:
                         }
                     } if requestImage.refiner else {}
                 ),
+                **(
+                    {
+                        "outpaint": {
+                            **(
+                                {"left": requestImage.outpaint.left}
+                                if requestImage.outpaint.left is not None
+                                else {}
+                            ),
+                            **(
+                                {"right": requestImage.outpaint.right}
+                                if requestImage.outpaint.right is not None
+                                else {}
+                            ),
+                            **(
+                                {"bottom": requestImage.outpaint.bottom}
+                                if requestImage.outpaint.bottom is not None
+                                else {}
+                            ),
+                            **(
+                                {"top": requestImage.outpaint.top}
+                                if requestImage.outpaint.top is not None
+                                else {}
+                            ),
+                            **(
+                                {"blur": requestImage.outpaint.blur}
+                                if requestImage.outpaint.blur is not None
+                                else {}
+                            ),
+                        }
+                    } if requestImage.outpaint else {}
+                ),
             }
 
             # Add optional parameters if they are provided
