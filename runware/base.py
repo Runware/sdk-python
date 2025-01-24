@@ -276,15 +276,13 @@ class RunwareBase:
             await self.ensureConnection()
             control_net_data: List[IControlNetWithUUID] = []
 
-            if requestImage.maskImage:
-                if self._isLocalFile(requestImage.maskImage):
-                    if not requestImage.maskImage.startswith("http"):
-                        requestImage.maskImage = await fileToBase64(requestImage.maskImage)
+            async def process_image(image: Optional[str]) -> Optional[str]:
+                if image and self._isLocalFile(image) and not image.startswith("http"):
+                    return await fileToBase64(image)
+                return image
 
-            if requestImage.seedImage:
-                if self._isLocalFile(requestImage.seedImage):
-                    if not requestImage.seedImage.startswith("http"):
-                        requestImage.seedImage = await fileToBase64(requestImage.seedImage)
+            requestImage.maskImage = await process_image(requestImage.maskImage)
+            requestImage.seedImage = await process_image(requestImage.seedImage)
 
             if requestImage.controlNet:
                 for control_data in requestImage.controlNet:
@@ -341,6 +339,16 @@ class RunwareBase:
 
             control_net_data_dicts = [asdict(item) for item in control_net_data]
 
+            instant_id_data = {}
+            if requestImage.instantID:
+                instant_id_data = {k: v for k, v in vars(requestImage.instantID).items() if v is not None}
+
+                if "inputImage" in instant_id_data:
+                    instant_id_data["inputImage"] = await process_image(instant_id_data["inputImage"])
+
+                if "poseImage" in instant_id_data:
+                    instant_id_data["poseImage"] = await process_image(instant_id_data["poseImage"])
+
             request_object = {
                 "offset": 0,
                 "taskUUID": requestImage.taskUUID,
@@ -390,6 +398,7 @@ class RunwareBase:
                         }
                     } if requestImage.refiner else {}
                 ),
+                **({"instantID": instant_id_data} if instant_id_data else {}),
                 **(
                     {"outpaint": {k: v for k, v in vars(requestImage.outpaint).items() if v is not None}}
                     if requestImage.outpaint else {}

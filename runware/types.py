@@ -406,6 +406,7 @@ class IPhotoMaker:
         if self.style and self.style not in valid_styles:
             raise ValueError(f"style must be one of the following: {', '.join(valid_styles)}.")
 
+
 @dataclass
 class IOutpaint:
     top: Optional[int] = None
@@ -413,6 +414,18 @@ class IOutpaint:
     bottom: Optional[int] = None
     left: Optional[int] = None
     blur: Optional[int] = None
+
+
+@dataclass
+class IInstantID:
+    inputImage: Union[File, str]
+    poseImage: Optional[Union[File, str]] = None
+    identityNetStrength: Optional[float] = None
+    adapterStrength: Optional[float] = None
+    controlNetCannyWeight: Optional[float] = None
+    controlNetDepthWeight: Optional[float] = None
+    enhanceNonFaceRegion: bool = True
+
 
 @dataclass
 class IImageInference:
@@ -446,6 +459,7 @@ class IImageInference:
     outputQuality: Optional[int] = None
     embeddings: Optional[List[IEmbedding]] = field(default_factory=list)
     outpaint: Optional[IOutpaint] = None
+    instantID: Optional[IInstantID] = None
 
     def __post_init__(self):
         self.validate_clip_skip()
