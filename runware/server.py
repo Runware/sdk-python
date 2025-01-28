@@ -207,7 +207,7 @@ class RunwareServer(RunwareBase):
         # print(
         #     f"=============================================== End sending message ===============================================================\n\n\n"
         # )
-        if self._ws and self._ws.open:
+        if self._ws and self._ws.state is State.OPEN:
             await self._ws.send(json.dumps(msg))
 
     def _get_task_by_name(self, name):
