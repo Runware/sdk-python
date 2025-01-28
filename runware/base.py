@@ -1117,7 +1117,7 @@ class RunwareBase:
                 # await asyncio.sleep(2)
 
         except Exception as e:
-            raise self._invalidAPIkey or "Could not connect to server. Ensure your API key is correct"
+            raise ConnectionError(self._invalidAPIkey or "Could not connect to server. Ensure your API key is correct")
 
     async def getSimililarImage(
             self,
