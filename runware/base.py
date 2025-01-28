@@ -416,12 +416,8 @@ class RunwareBase:
                 request_object["scheduler"] = requestImage.scheduler
             if requestImage.vae:
                 request_object["vae"] = requestImage.vae
-
-            if requestImage.usePromptWeighting is not None:
-                if requestImage.usePromptWeighting:
-                    request_object["promptWeighting"] = "compel"
-                else:
-                    request_object["promptWeighting"] = "sdEmbeds"
+            if requestImage.promptWeighting:
+                request_object["promptWeighting"] = requestImage.promptWeighting
 
             return await asyncRetry(
                 lambda: self._requestImages(
