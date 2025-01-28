@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import websockets
+from websockets.protocol import State
 import inspect
 import pprint
 from typing import Any, Callable, Dict, List, Union, Optional, TypeVar
