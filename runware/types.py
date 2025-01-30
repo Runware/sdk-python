@@ -11,6 +11,11 @@ class Environment(Enum):
     TEST = "TEST"
 
 
+class EPromptWeighting(Enum):
+    COMPEL = "compel"
+    SDEMBEDS = "sdembeds"
+
+
 class SdkType(Enum):
     CLIENT = "CLIENT"
     SERVER = "SERVER"
@@ -422,7 +427,7 @@ class IImageInference:
     seed: Optional[int] = None
     CFGScale: Optional[float] = None
     clipSkip: Optional[int] = None
-    usePromptWeighting: Optional[bool] = None
+    promptWeighting: Optional[EPromptWeighting] = EPromptWeighting.COMPEL.value
     numberResults: Optional[int] = 1  # default to 1
     controlNet: Optional[List[IControlNet]] = field(default_factory=list)
     lora: Optional[List[ILora]] = field(default_factory=list)

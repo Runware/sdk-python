@@ -416,6 +416,8 @@ class RunwareBase:
                 request_object["scheduler"] = requestImage.scheduler
             if requestImage.vae:
                 request_object["vae"] = requestImage.vae
+            if requestImage.promptWeighting:
+                request_object["promptWeighting"] = requestImage.promptWeighting
 
             return await asyncRetry(
                 lambda: self._requestImages(
