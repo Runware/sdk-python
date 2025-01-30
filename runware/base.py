@@ -349,6 +349,15 @@ class RunwareBase:
                 if "poseImage" in instant_id_data:
                     instant_id_data["poseImage"] = await process_image(instant_id_data["poseImage"])
 
+            ip_adapters_data = []
+            if requestImage.ipAdapters:
+                for ip_adapter in requestImage.ipAdapters:
+                    ip_adapter_data = {k: v for k, v in vars(ip_adapter).items() if v is not None}
+                    if "guideImage" in ip_adapter_data:
+                        ip_adapter_data["guideImage"] = await process_image(ip_adapter_data["guideImage"])
+
+                    ip_adapters_data.append(ip_adapter_data)
+
             request_object = {
                 "offset": 0,
                 "taskUUID": requestImage.taskUUID,
@@ -403,6 +412,7 @@ class RunwareBase:
                     {"outpaint": {k: v for k, v in vars(requestImage.outpaint).items() if v is not None}}
                     if requestImage.outpaint else {}
                 ),
+                **({"ipAdapters": ip_adapters_data} if ip_adapters_data else {}),
             }
 
             # Add optional parameters if they are provided
