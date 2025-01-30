@@ -10,6 +10,7 @@ import uuid
 import inspect
 from typing import List, Union, Optional, Callable, Any, Dict
 from urllib.parse import urlparse
+from websockets.protocol import State
 
 from .utils import (
     BASE_RUNWARE_URLS,
@@ -102,7 +103,7 @@ class RunwareBase:
         self._sdkType: SdkType = SdkType.SERVER
 
     def isWebsocketReadyState(self) -> bool:
-        return self._ws and self._ws.open
+        return self._ws and self._ws.state is State.OPEN
 
     def isAuthenticated(self):
         return self._connectionSessionUUID is not None
@@ -1134,7 +1135,7 @@ class RunwareBase:
 
         :raises: An error message if the connection cannot be established due to an invalid API key or other reasons.
         """
-        isConnected = self.connected() and self._ws.open
+        isConnected = self.connected() and self._ws.state is State.OPEN
         # print(f"Is connected: {isConnected}")
 
         try:

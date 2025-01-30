@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import websockets
+from websockets.protocol import State
 import inspect
 import pprint
 from typing import Any, Callable, Dict, List, Union, Optional, TypeVar
@@ -207,7 +208,7 @@ class RunwareServer(RunwareBase):
         # print(
         #     f"=============================================== End sending message ===============================================================\n\n\n"
         # )
-        if self._ws and self._ws.open:
+        if self._ws and self._ws.state is State.OPEN:
             await self._ws.send(json.dumps(msg))
 
     def _get_task_by_name(self, name):
