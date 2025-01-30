@@ -435,6 +435,8 @@ class IImageInference:
     onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]] = None
     refiner: Optional[IRefiner] = None
     vae: Optional[str] = None
+    maskMargin: Optional[int] = None
+    outputQuality: Optional[int] = None
     embeddings: Optional[List[IEmbedding]] = field(default_factory=list)
 
     def __post_init__(self):

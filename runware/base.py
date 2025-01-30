@@ -418,6 +418,10 @@ class RunwareBase:
                 request_object["vae"] = requestImage.vae
             if requestImage.promptWeighting:
                 request_object["promptWeighting"] = requestImage.promptWeighting
+            if requestImage.maskMargin:
+                request_object["maskMargin"] = requestImage.maskMargin
+            if requestImage.outputQuality:
+                request_object["outputQuality"] = requestImage.outputQuality
 
             return await asyncRetry(
                 lambda: self._requestImages(
