@@ -390,6 +390,10 @@ class RunwareBase:
                         }
                     } if requestImage.refiner else {}
                 ),
+                **(
+                    {"outpaint": {k: v for k, v in vars(requestImage.outpaint).items() if v is not None}}
+                    if requestImage.outpaint else {}
+                ),
             }
 
             # Add optional parameters if they are provided
