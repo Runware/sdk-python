@@ -454,7 +454,7 @@ class IImageInference:
     seed: Optional[int] = None
     CFGScale: Optional[float] = None
     clipSkip: Optional[int] = None
-    promptWeighting: Optional[EPromptWeighting] = EPromptWeighting.COMPEL.value
+    promptWeighting: Optional[EPromptWeighting] = None
     numberResults: Optional[int] = 1  # default to 1
     controlNet: Optional[List[IControlNet]] = field(default_factory=list)
     lora: Optional[List[ILora]] = field(default_factory=list)
