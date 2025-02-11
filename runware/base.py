@@ -444,6 +444,12 @@ class RunwareBase:
                 request_object["promptWeighting"] = requestImage.promptWeighting
             if requestImage.maskMargin:
                 request_object["maskMargin"] = requestImage.maskMargin
+            if hasattr(requestImage, 'extraArgs'):
+                # if extraArgs is present, and a dictionary, we will add its attributes to the request.
+                # these may contain options used for public beta testing.
+                if isinstance(requestImage.extraArgs, dict):
+                    request_object.update(requestImage.extraArgs)
+
             if requestImage.outputQuality:
                 request_object["outputQuality"] = requestImage.outputQuality
 

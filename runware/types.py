@@ -468,6 +468,7 @@ class IImageInference:
     outpaint: Optional[IOutpaint] = None
     instantID: Optional[IInstantID] = None
     ipAdapters: Optional[List[IIpAdapter]] = field(default_factory=list)
+    extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
 
     def __post_init__(self):
         self.validate_clip_skip()
