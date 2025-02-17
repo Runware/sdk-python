@@ -1223,7 +1223,7 @@ class RunwareBase:
             "taskUUID": task_uuid,
             "air": requestModel.air,
             "name": requestModel.name,
-            "downloadUrl": requestModel.downloadUrl,
+            "downloadURL": requestModel.downloadURL,
             "uniqueIdentifier": requestModel.uniqueIdentifier,
             "version": requestModel.version,
             "format": requestModel.format,
@@ -1233,7 +1233,7 @@ class RunwareBase:
         }
 
         optional_fields = [
-            "retry", "heroImageUrl", "tags", "shortDescription", "comment",
+            "retry", "heroImageURL", "tags", "shortDescription", "comment",
             "positiveTriggerWords", "type", "negativeTriggerWords",
             "defaultWeight", "defaultStrength", "defaultGuidanceScale",
             "defaultSteps", "defaultScheduler", "conditioning"
