@@ -227,8 +227,8 @@ async def main() -> None:
     payload = IUploadModelCheckPoint(
         air='qatests:68487@08629',
         name='yWO8IaKwez',
-        heroImageUrl='https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/image.jpg',
-        downloadUrl='https://repo-controlnets-r2.runware.ai/controlnet-zoe-depth-sdxl-1.0.safetensors'
+        heroImageURL='https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/image.jpg',
+        downloadURL='https://repo-controlnets-r2.runware.ai/controlnet-zoe-depth-sdxl-1.0.safetensors'
                     '/controlnet-zoe-depth-sdxl-1.0.safetensors.part-001-1',
         uniqueIdentifier='aq2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1234',
         version='1.0',
@@ -259,8 +259,8 @@ async def main() -> None:
     payload = IUploadModelLora(
         air='qatests:68487@08629',
         name='yWO8IaKwez',
-        heroImageUrl='https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/image.jpg',
-        downloadUrl='https://repo-controlnets-r2.runware.ai/controlnet-zoe-depth-sdxl-1.0.safetensors'
+        heroImageURL='https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/image.jpg',
+        downloadURL='https://repo-controlnets-r2.runware.ai/controlnet-zoe-depth-sdxl-1.0.safetensors'
                     '/controlnet-zoe-depth-sdxl-1.0.safetensors.part-001-1',
         uniqueIdentifier='aq2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1234',
         version='1.0',
@@ -290,8 +290,8 @@ async def main() -> None:
     payload = IUploadModelControlNet(
         air='qatests:68487@08629',
         name='yWO8IaKwez',
-        heroImageUrl='https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/image.jpg',
-        downloadUrl='https://repo-controlnets-r2.runware.ai/controlnet-zoe-depth-sdxl-1.0.safetensors'
+        heroImageURL='https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/image.jpg',
+        downloadURL='https://repo-controlnets-r2.runware.ai/controlnet-zoe-depth-sdxl-1.0.safetensors'
                     '/controlnet-zoe-depth-sdxl-1.0.safetensors.part-001-1',
         uniqueIdentifier='aq2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1q2w3e4r5t6y7u8i9o0p1234',
         version='1.0',
