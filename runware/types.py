@@ -597,13 +597,13 @@ class IUploadModelBaseType:
     air: str
     architecture: str
     name: str
-    downloadUrl: str
+    downloadURL: str
     uniqueIdentifier: str
     version: str
     format: int
     private: bool
     category: str
-    heroImageUrl: Optional[str] = None
+    heroImageURL: Optional[str] = None
     tags: Optional[List[str]] = field(default_factory=list)
     shortDescription: Optional[str] = None
     comment: Optional[str] = None
