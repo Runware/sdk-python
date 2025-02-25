@@ -27,7 +27,7 @@ from .utils import (
     createEnhancedPromptsFromResponse,
     instantiateDataclassList,
     RunwareAPIError,
-    RunwareError, instantiateDataclass,
+    RunwareError, instantiateDataclass, TIMEOUT_DURATION
 )
 from .async_retry import asyncRetry
 from .types import (
@@ -89,12 +89,19 @@ logger = logging.getLogger(__name__)
 
 class RunwareBase:
     def __init__(
-            self, api_key: str, url: str = BASE_RUNWARE_URLS[Environment.PRODUCTION]
+            self, 
+            api_key: str, 
+            url: str = BASE_RUNWARE_URLS[Environment.PRODUCTION],
+            timeout: int = TIMEOUT_DURATION
     ):
+        if timeout <= 0:
+            raise ValueError("Timeout must be greater than 0 milliseconds")
+            
         self._ws: Optional[ReconnectingWebsocketProps] = None
         self._listeners: List[ListenerType] = []
         self._apiKey: str = api_key
         self._url: Optional[str] = url
+        self._timeout: int = timeout
         self._globalMessages: Dict[str, Any] = {}
         self._globalImages: List[IImage] = []
         self._globalError: Optional[IError] = None
@@ -511,6 +518,7 @@ class RunwareBase:
         images = await self.getSimililarImage(
             taskUUID=task_uuids,
             numberOfImages=number_of_images,
+            shouldThrowError=True,
             lis=let_lis,
         )
 
@@ -582,7 +590,7 @@ class RunwareBase:
 
             return False
 
-        response = await getIntervalWithPromise(check, debugKey="image-to-text")
+        response = await getIntervalWithPromise(check, debugKey="image-to-text", timeOutDuration=self._timeout)
 
         lis["destroy"]()
 
@@ -681,7 +689,7 @@ class RunwareBase:
             return False
 
         response = await getIntervalWithPromise(
-            check, debugKey="remove-image-background"
+            check, debugKey="remove-image-background", timeOutDuration=self._timeout
         )
 
         lis["destroy"]()
@@ -754,7 +762,7 @@ class RunwareBase:
 
             return False
 
-        response = await getIntervalWithPromise(check, debugKey="upscale-gan")
+        response = await getIntervalWithPromise(check, debugKey="upscale-gan", timeOutDuration=self._timeout)
 
         lis["destroy"]()
 
@@ -832,7 +840,7 @@ class RunwareBase:
 
             return False
 
-        response = await getIntervalWithPromise(check, debugKey="enhance-prompt")
+        response = await getIntervalWithPromise(check, debugKey="enhance-prompt", timeOutDuration=self._timeout)
 
         lis["destroy"]()
 
@@ -936,7 +944,7 @@ class RunwareBase:
 
             return False
 
-        response = await getIntervalWithPromise(check, debugKey="upload-image")
+        response = await getIntervalWithPromise(check, debugKey="upload-image", timeOutDuration=self._timeout)
 
         lis["destroy"]()
 
@@ -1161,6 +1169,7 @@ class RunwareBase:
             numberOfImages: int,
             shouldThrowError: bool = False,
             lis: Optional[ListenerType] = None,
+            timeout: Optional[int] = None
     ) -> Union[List[IImage], IError]:
         """
         Retrieve similar images based on the provided task UUID(s) and desired number of images.
@@ -1169,9 +1178,13 @@ class RunwareBase:
         :param numberOfImages: The desired number of images to retrieve.
         :param shouldThrowError: A flag indicating whether to throw an error if the desired number of images is not reached.
         :param lis: An optional listener to handle image updates.
+        :param timeout: The timeout duration for the operation.
         :return: A list of retrieved images or an error object if the desired number of images is not reached.
         """
         taskUUIDs = taskUUID if isinstance(taskUUID, list) else [taskUUID]
+
+        if timeout is None:
+            timeout = self._timeout
 
         def check(
                 resolve: Callable[[List[IImage]], None],
@@ -1213,7 +1226,7 @@ class RunwareBase:
             # return False
 
         return await getIntervalWithPromise(
-            check, debugKey="getting images", shouldThrowError=shouldThrowError
+            check, debugKey="getting images", shouldThrowError=shouldThrowError, timeOutDuration=timeout
         )
 
     async def _modelUpload(self, requestModel: IUploadModelBaseType) -> Optional[IUploadModelResponse]:
@@ -1277,7 +1290,7 @@ class RunwareBase:
 
             return False
 
-        response = await getIntervalWithPromise(check, debugKey="upload-model")
+        response = await getIntervalWithPromise(check, debugKey="upload-model", timeOutDuration=self._timeout)
 
         lis["destroy"]()
 
@@ -1342,7 +1355,7 @@ class RunwareBase:
                 return False
 
             response = await getIntervalWithPromise(
-                check, debugKey="model-search"
+                check, debugKey="model-search", timeOutDuration=self._timeout
             )
 
             listener["destroy"]()
