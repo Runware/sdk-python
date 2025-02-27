@@ -16,6 +16,7 @@ from .utils import (
     BASE_RUNWARE_URLS,
     PING_INTERVAL,
     PING_TIMEOUT_DURATION,
+    TIMEOUT_DURATION,
 )
 from .base import RunwareBase
 from .types import (
@@ -37,8 +38,9 @@ class RunwareServer(RunwareBase):
         api_key: str,
         url: str = BASE_RUNWARE_URLS[Environment.PRODUCTION],
         log_level=logging.CRITICAL,
+        timeout: int = TIMEOUT_DURATION
     ):
-        super().__init__(api_key=api_key, url=url)
+        super().__init__(api_key=api_key, url=url, timeout=timeout)
         self._instantiated: bool = False
         self._reconnecting_task: Optional[asyncio.Task] = None
         self._pingTimeout: Optional[asyncio.Task] = None
