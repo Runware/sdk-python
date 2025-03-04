@@ -449,6 +449,12 @@ class IImageInference:
     strength: Optional[float] = None
     height: Optional[int] = None
     width: Optional[int] = None
+    teaCache: Optional[bool] = None
+    deepCache: Optional[bool] = None
+    deepcache_interval: Optional[float] = None
+    deepcache_branch_id: Optional[float] = None
+    deepcache_skip_mode: Optional[str] = None
+    teacache_distance: Optional[float] = None
     steps: Optional[int] = None
     scheduler: Optional[str] = None
     seed: Optional[int] = None
