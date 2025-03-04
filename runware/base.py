@@ -439,14 +439,10 @@ class RunwareBase:
                 request_object["CFGScale"] = requestImage.CFGScale
             if requestImage.seedImage:
                 request_object["seedImage"] = requestImage.seedImage
-            if requestImage.teaCache:
-                request_object["teaCache"] = requestImage.teaCache
-                request_object['teacache_distance'] = requestImage.teacache_distance
-            if requestImage.deepCache:
-                request_object["deepCache"] = requestImage.deepCache
-                request_object['deepcache_interval'] = requestImage.deepcache_interval
-                request_object['deepcache_branch_id'] = requestImage.deepcache_branch_id
-                request_object['deepcache_skip_mode'] = requestImage.deepcache_skip_mode
+            if requestImage.pipelineOptions:
+                pipeline_options_dict = {k: v for k, v in vars(requestImage.pipelineOptions).items() if v is not None}
+                request_object.update(pipeline_options_dict)
+
             if requestImage.maskImage:
                 request_object["maskImage"] = requestImage.maskImage
             if requestImage.strength:
