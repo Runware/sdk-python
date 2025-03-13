@@ -27,7 +27,7 @@ from .utils import (
     createEnhancedPromptsFromResponse,
     instantiateDataclassList,
     RunwareAPIError,
-    RunwareError, instantiateDataclass, TIMEOUT_DURATION
+    RunwareError, instantiateDataclass, TIMEOUT_DURATION, convert_control_net_to_camel_case
 )
 from .async_retry import asyncRetry
 from .types import (
@@ -306,7 +306,7 @@ class RunwareBase:
                     control_mode = control_data.control_mode
 
                     def get_canny_object() -> Dict[str, int]:
-                        if control_data.preprocessor == "canny":
+                        if control_data.preprocessor.name == "canny":  # fixme use isinstance
                             return {
                                 "low_threshold_canny": any_control_data.low_threshold_canny,
                                 "high_threshold_canny": any_control_data.high_threshold_canny,
@@ -337,15 +337,17 @@ class RunwareBase:
                         "guide_image_unprocessed": guide_image_unprocessed,
                         "weight": weight,
                         "control_mode": control_mode or EControlMode.CONTROL_NET,
+                        "model": control_data.model,
                         **get_canny_object(),
                     }
 
                     control_net_instance = self.create_control_net_with_uuid(control_net_common_data)
+
                     control_net_data.append(control_net_instance)
 
             prompt = f"{requestImage.positivePrompt}".strip()
 
-            control_net_data_dicts = [asdict(item) for item in control_net_data]
+            control_net_data_dicts = convert_control_net_to_camel_case(control_net_data)
 
             instant_id_data = {}
             if requestImage.instantID:
@@ -463,6 +465,8 @@ class RunwareBase:
 
             if requestImage.outputQuality:
                 request_object["outputQuality"] = requestImage.outputQuality
+
+            print(f"{request_object=}")
 
             return await asyncRetry(
                 lambda: self._requestImages(
