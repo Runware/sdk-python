@@ -310,4 +310,58 @@ uploaded = await runware.modelUpload(payload)
 print(f"Response : {uploaded}")
 ```
 
+### Using ControlNet with Image Inference
+
+To use ControlNet for image inference in the Runware SDK, you can integrate specific control networks like `IControlNetCannyWithUUID` for edge detection enhancements. Here's an example of how to set up and use this feature:
+
+```python
+from runware import Runware, IImageInference, IControlNetHandsAndFace, IControlNetCanny, EControlMode, IControlNetCannyWithUUID
+import asyncio
+import os
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
+async def main() -> None:
+    runware = Runware(
+        api_key=os.getenv("RUNWARE_API_KEY"),
+        url=os.getenv("RUNWARE_WSS_URL"),
+        log_level="CRITICAL",
+    )
+    await runware.connect()
+
+    my_canny = IControlNetCannyWithUUID(
+        low_threshold_canny=100,
+        high_threshold_canny=300,
+        start_step=1,
+        end_step=20,
+        weight=0.5,
+        control_mode=EControlMode.BALANCED.value,
+        guide_image="https://huggingface.co/datasets/mishig/sample_images/resolve/main/canny-edge.jpg",
+        model='civitai:38784@44716'
+    )
+
+    request_image = IImageInference(
+        positivePrompt="a beautiful sunset over the mountains",
+        negativePrompt="cloudy, rainy",
+        model='civitai:4384@128713',
+        controlNet=[my_canny],
+        numberResults=1,
+        height=512,
+        width=512,
+        outputType="URL",
+        seed=1568
+    )
+
+    print(f"Payload: {request_image}")
+
+    images = await runware.imageInference(requestImage=request_image)
+
+    for image in images:
+        print(f"Image URL: {image}")
+
+asyncio.run(main())
+```
+This example demonstrates how to configure and use a Canny edge detection ControlNet to enhance the image inference process.
+
 For more detailed usage and additional examples, please refer to the examples directory.
