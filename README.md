@@ -312,10 +312,10 @@ print(f"Response : {uploaded}")
 
 ### Using ControlNet with Image Inference
 
-To use ControlNet for image inference in the Runware SDK, you can integrate specific control networks like `IControlNetCannyWithUUID` for edge detection enhancements. Here's an example of how to set up and use this feature:
+To use ControlNet for image inference in the Runware SDK, you can integrate specific control networks like `IControlNetCanny` for edge detection enhancements. Here's an example of how to set up and use this feature:
 
 ```python
-from runware import Runware, IImageInference, IControlNetHandsAndFace, IControlNetCanny, EControlMode, IControlNetCannyWithUUID
+from runware import Runware, IImageInference, IControlNetHandsAndFace, IControlNetCanny, EControlMode, 
 import asyncio
 import os
 from dotenv import load_dotenv
@@ -330,7 +330,7 @@ async def main() -> None:
     )
     await runware.connect()
 
-    my_canny = IControlNetCannyWithUUID(
+    my_canny = IControlNetCanny(
         low_threshold_canny=100,
         high_threshold_canny=300,
         start_step=1,
