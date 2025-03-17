@@ -10,7 +10,7 @@ import inspect
 from functools import reduce
 from typing import Any, Callable, Dict, List, Union, Optional, TypeVar, Type
 from enum import Enum
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, asdict
 from .types import (
     Environment,
     EPreProcessor,
@@ -26,6 +26,7 @@ from .types import (
     IError,
 )
 import logging
+
 
 logger = logging.getLogger(__name__)
 
@@ -767,3 +768,49 @@ def instantiateDataclassList(dataclass_type: Type[Any], data_list: List[dict]) -
     for data in data_list:
         instances.append(instantiateDataclass(dataclass_type, data))
     return instances
+
+
+
+
+def convert_control_net_to_camel_case(control_net_data: List[Any]) -> List[Dict[str, Any]]:
+    """
+    Convert ControlNet dataclass fields from snake_case to camelCase.
+
+    Args:
+        control_net_data: List of ControlNet dataclass objects
+
+    Returns:
+        List of dictionaries with camelCase keys
+    """
+    # Fields that should remain unchanged
+    preserve_fields = {"model", "preprocessor", "weight"}
+
+    # Special mapping for fields needing custom conversion
+    custom_mapping = {}
+
+    result = []
+    for item in control_net_data:
+        item_dict = asdict(item)
+        camel_case_dict = {}
+
+        for key, value in item_dict.items():
+            # Skip None values
+            if value is None:
+                continue
+
+            # Determine the new key name
+            if key in preserve_fields:
+                new_key = key
+            elif key in custom_mapping:
+                new_key = custom_mapping[key]
+            else:
+                # Convert snake_case to camelCase
+                components = key.split('_')
+                new_key = components[0] + ''.join(x.title() for x in components[1:])
+
+            # Add to result dictionary
+            camel_case_dict[new_key] = value
+
+        result.append(camel_case_dict)
+
+    return result
