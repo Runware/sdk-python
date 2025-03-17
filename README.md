@@ -336,6 +336,7 @@ async def main() -> None:
         start_step=1,
         end_step=20,
         weight=0.5,
+         preprocessor='canny',
         control_mode=EControlMode.BALANCED.value,
         guide_image="https://huggingface.co/datasets/mishig/sample_images/resolve/main/canny-edge.jpg",
         model='civitai:38784@44716'

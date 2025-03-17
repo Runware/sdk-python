@@ -174,7 +174,7 @@ class IControlNetA(IControlNetGeneral):
 class IControlNetCanny(IControlNetGeneral):
     low_threshold_canny: Optional[int] = None
     high_threshold_canny: Optional[int] = None
-    preprocessor: EPreProcessor = EPreProcessor.canny
+    preprocessor: EPreProcessor
 
     def __post_init__(self):
         super().__post_init__()
@@ -216,7 +216,7 @@ class IControlNetBaseWithUUID(ABC):
 class IControlNetCannyWithUUID(IControlNetBaseWithUUID):
     low_threshold_canny: Optional[int] = None
     high_threshold_canny: Optional[int] = None
-    preprocessor: EPreProcessor = EPreProcessor.canny
+    preprocessor: EPreProcessor
 
     def __post_init__(self):
         super().__post_init__()

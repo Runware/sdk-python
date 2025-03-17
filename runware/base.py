@@ -305,21 +305,23 @@ class RunwareBase:
                     guide_image_unprocessed = control_data.guide_image_unprocessed
                     control_mode = control_data.control_mode
 
-                    def get_canny_object() -> Dict[str, int]:
-                        if control_data.preprocessor.name == "canny":  # fixme use isinstance
+                    def get_object() -> Dict[str, int]:
+                        if control_data.preprocessor == "canny":  # fixme use isinstance
                             return {
                                 "low_threshold_canny": any_control_data.low_threshold_canny,
                                 "high_threshold_canny": any_control_data.high_threshold_canny,
                             }
+                        elif control_data.preprocessor == "openpose":
+                            return {
+                                "include_hands_and_face_open_pose": any_control_data.include_hands_and_face_open_pose,
+                            }
                         else:
                             return {}
-
                     image_uploaded = await (
                         self.uploadUnprocessedImage(
                             file=guide_image_unprocessed,
                             preProcessorType=getPreprocessorType(preprocessor),
-                            includeHandsAndFaceOpenPose=any_control_data.include_hands_and_face_open_pose,
-                            **get_canny_object(),
+                            **get_object(),
                         )
                         if guide_image_unprocessed
                         else self.uploadImage(guide_image)
@@ -331,14 +333,14 @@ class RunwareBase:
                     control_net_common_data = {
                         "guide_image_uuid": image_uploaded.imageUUID,
                         "end_step": end_step,
-                        "preprocessor": preprocessor.value,
+                        "preprocessor": preprocessor,
                         "start_step": start_step,
                         "guide_image": guide_image,
                         "guide_image_unprocessed": guide_image_unprocessed,
                         "weight": weight,
                         "control_mode": control_mode or EControlMode.CONTROL_NET,
                         "model": control_data.model,
-                        **get_canny_object(),
+                        **get_object(),
                     }
 
                     control_net_instance = self.create_control_net_with_uuid(control_net_common_data)
@@ -974,9 +976,9 @@ class RunwareBase:
             preProcessorType: EPreProcessorGroup,
             width: int = None,
             height: int = None,
-            lowThresholdCanny: int = None,
-            highThresholdCanny: int = None,
-            includeHandsAndFaceOpenPose: bool = True,
+            low_threshold_canny: int = None,
+            high_threshold_canny: int = None,
+            include_hands_and_face_open_pose: bool = True,
     ) -> Optional[UploadImageType]:
         # Create a dummy UploadImageType object
         uploaded_unprocessed_image = UploadImageType(
