@@ -1275,13 +1275,14 @@ class RunwareBase:
             all_models = []
 
             for uploaded_model in uploaded_model_list:
-                if uploaded_model.get("code"):
-                    raise RunwareAPIError(uploaded_model)
-
                 status = uploaded_model.get("status")
+
                 if status not in unique_statuses:
                     all_models.append(uploaded_model)
                     unique_statuses.add(status)
+
+                if "error" in status:
+                    raise RunwareAPIError(uploaded_model)
 
                 if status == "ready":
                     uploaded_model_list.remove(uploaded_model)
