@@ -64,8 +64,13 @@ from .types import (
     RequireOnlyOne,
     ListenerType,
     File,
-    ETaskType, IControlNetBaseWithUUID, IControlNetCannyWithUUID, IControlNetHandsAndFaceWithUUID, IControlNetAWithUUID,
-    IModelSearch, IModelSearchResponse,
+    ETaskType,
+    IControlNetGeneralWithUUID,
+    IControlNetCannyWithUUID,
+    IControlNetHandsAndFaceWithUUID,
+    IControlNetAWithUUID,
+    IModelSearch,
+    IModelSearchResponse,
 )
 
 from typing import List, Optional, Union, Callable, Any, Dict
@@ -263,11 +268,10 @@ class RunwareBase:
             else:
                 raise e
 
-    def create_control_net_with_uuid(self, data: Dict) -> IControlNetBaseWithUUID:
-        # Determine the class based on data keys or attributes
-        if "low_threshold_canny" in data and "high_threshold_canny" in data:
+    def create_control_net_with_uuid(self, data: Dict) -> IControlNetGeneralWithUUID:
+        if "lowThresholdCanny" in data and "highThresholdCanny" in data:
             return IControlNetCannyWithUUID(**data)
-        elif "include_hands_and_face_open_pose" in data:
+        elif "includeHandsAndFaceOpenPose" in data:
             return IControlNetHandsAndFaceWithUUID(**data)
         else:
             return IControlNetAWithUUID(**data)
@@ -294,49 +298,49 @@ class RunwareBase:
 
             if requestImage.controlNet:
                 for control_data in requestImage.controlNet:
-                    any_control_data = (
-                        control_data  # Type cast to access additional attributes
-                    )
+                    any_control_data = control_data
                     preprocessor = control_data.preprocessor
-                    end_step = control_data.end_step
-                    start_step = control_data.start_step
+                    endStep = control_data.endStep
+                    startStep = control_data.startStep
                     weight = control_data.weight
-                    guide_image = control_data.guide_image
-                    guide_image_unprocessed = control_data.guide_image_unprocessed
-                    control_mode = control_data.control_mode
+                    guideImage = control_data.guideImage
+                    guideImageUnprocessed = control_data.guideImageUnprocessed
+                    controlMode = control_data.controlMode
+                    model = control_data.model
 
                     def get_canny_object() -> Dict[str, int]:
-                        if control_data.preprocessor == "canny":
+                        if control_data.preprocessor is EPreProcessor.canny:
                             return {
-                                "low_threshold_canny": any_control_data.low_threshold_canny,
-                                "high_threshold_canny": any_control_data.high_threshold_canny,
+                                "lowThresholdCanny": any_control_data.lowThresholdCanny,
+                                "highThresholdCanny": any_control_data.highThresholdCanny,
                             }
                         else:
                             return {}
 
                     image_uploaded = await (
                         self.uploadUnprocessedImage(
-                            file=guide_image_unprocessed,
+                            file=guideImageUnprocessed,
                             preProcessorType=getPreprocessorType(preprocessor),
-                            includeHandsAndFaceOpenPose=any_control_data.include_hands_and_face_open_pose,
+                            includeHandsAndFaceOpenPose=any_control_data.includeHandsAndFaceOpenPose,
                             **get_canny_object(),
                         )
-                        if guide_image_unprocessed
-                        else self.uploadImage(guide_image)
+                        if guideImageUnprocessed
+                        else self.uploadImage(guideImage)
                     )
 
                     if not image_uploaded:
                         return []
 
                     control_net_common_data = {
-                        "guide_image_uuid": image_uploaded.imageUUID,
-                        "end_step": end_step,
+                        "guideImageUuid": image_uploaded.imageUUID,
+                        "endStep": endStep,
                         "preprocessor": preprocessor.value,
-                        "start_step": start_step,
-                        "guide_image": guide_image,
-                        "guide_image_unprocessed": guide_image_unprocessed,
+                        "startStep": startStep,
+                        "guideImage": guideImage,
+                        "guideImageUnprocessed": guideImageUnprocessed,
                         "weight": weight,
-                        "control_mode": control_mode or EControlMode.CONTROL_NET,
+                        "controlMode": controlMode or EControlMode.CONTROL_NET,
+                        "model": model,
                         **get_canny_object(),
                     }
 
