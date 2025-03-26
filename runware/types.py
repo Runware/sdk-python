@@ -148,6 +148,8 @@ class IControlNetGeneral:
     weight: Optional[float] = None
     startStep: Optional[int] = None
     endStep: Optional[int] = None
+    startStepPercentage: Optional[int] = None
+    endStepPercentage: Optional[int] = None
     controlMode: Optional[EControlMode] = None
     guideImage: Optional[Union[str, File]] = None
     guideImageUnprocessed: Optional[Union[str, File]] = None
@@ -156,6 +158,8 @@ class IControlNetGeneral:
         if (self.guideImage is None and self.guideImageUnprocessed is None) or \
            (self.guideImage is not None and self.guideImageUnprocessed is not None):
             raise ValueError("Exactly one of 'guideImage' or 'guideImageUnprocessed' must be provided.")
+        if (self.startStep and self.startStepPercentage) or (self.endStep and self.endStepPercentage):
+            raise ValueError("Exactly one of 'startStep/endStep' or 'startStepPercentage/endStepPercentage' must be provided.")
 
 
 @dataclass

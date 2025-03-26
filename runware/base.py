@@ -302,6 +302,8 @@ class RunwareBase:
                     preprocessor = control_data.preprocessor
                     endStep = control_data.endStep
                     startStep = control_data.startStep
+                    startStepPercentage = control_data.startStepPercentage
+                    endStepPercentage = control_data.endStepPercentage
                     weight = control_data.weight
                     guideImage = control_data.guideImage
                     guideImageUnprocessed = control_data.guideImageUnprocessed
@@ -333,9 +335,11 @@ class RunwareBase:
 
                     control_net_common_data = {
                         "guideImageUuid": image_uploaded.imageUUID,
-                        "endStep": endStep,
-                        "preprocessor": preprocessor.value,
                         "startStep": startStep,
+                        "endStep": endStep,
+                        "startStepPercentage": startStepPercentage,
+                        "endStepPercentage": endStepPercentage,
+                        "preprocessor": preprocessor.value,
                         "guideImage": guideImage,
                         "guideImageUnprocessed": guideImageUnprocessed,
                         "weight": weight,
