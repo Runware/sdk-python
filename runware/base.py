@@ -627,8 +627,10 @@ class RunwareBase:
 
         if not image_uploaded or not image_uploaded.imageUUID:
             return []
-
-        taskUUID = getUUID()
+        if removeImageBackgroundPayload.taskUUID is not None:
+            taskUUID = removeImageBackgroundPayload.taskUUID
+        else:
+            taskUUID = getUUID()
 
         # Create a dictionary with mandatory parameters
         task_params = {
@@ -654,7 +656,6 @@ class RunwareBase:
             settings_dict = {k: v for k, v in vars(removeImageBackgroundPayload.settings).items() 
                             if v is not None}
             task_params.update(settings_dict)
-
 
         # Send the task with all applicable parameters
         await self.send([task_params])
