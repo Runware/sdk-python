@@ -313,6 +313,8 @@ There are two ways to remove the background from an image.
 
 ### Using the `settings` parameter
 
+> **Note:** When using the `rgba` parameter, the final `a` value is a `float` between `0.0` and `1.0`, but a value of `1-255` will be internally scaled down to the correct float range.
+
 ```python
 from runware import Runware, RunwareAPIError,IImage, IImageBackgroundRemoval, BackgroundRemovalSettings
 import asyncio
