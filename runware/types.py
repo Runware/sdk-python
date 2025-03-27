@@ -611,7 +611,7 @@ class IUploadModelBaseType:
     downloadURL: str
     uniqueIdentifier: str
     version: str
-    format: int
+    format: str
     private: bool
     category: str
     heroImageURL: Optional[str] = None
