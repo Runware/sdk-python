@@ -306,5 +306,110 @@ async def main() -> None:
 uploaded = await runware.modelUpload(payload)
 print(f"Response : {uploaded}")
 ```
+### Image Background Removal
+There are two ways to remove the background from an image.
+1. Using the `settings` parameter of the `IImageBackgroundRemoval` class.
+2. Without using the `settings` parameter and using the `model` parameter to specify the model to use.
+
+### Using the `settings` parameter
+
+> **Note:** When using the `rgba` parameter, the final `a` value is a `float` between `0.0` and `1.0`, but a value of `1-255` will be internally scaled down to the correct float range.
+
+```python
+from runware import Runware, RunwareAPIError,IImage, IImageBackgroundRemoval, BackgroundRemovalSettings
+import asyncio
+import os
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
+
+async def main() -> None:
+    runware = Runware(
+        api_key=os.environ.get("RUNWARE_API_KEY")
+    )
+    await runware.connect()
+    background_removal_settings = BackgroundRemovalSettings(
+        rgba=[255, 255, 255, 0],
+        alphaMatting=True,
+        postProcessMask=True,
+        returnOnlyMask=False,
+        alphaMattingErodeSize=10,
+        alphaMattingForegroundThreshold=240,
+        alphaMattingBackgroundThreshold=10
+        )
+
+    request_image = IImageBackgroundRemoval(
+        taskUUID="abcdbb9c-3bd3-4d75-9234-bffeef994772",
+        inputImage="https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/common/headphones.jpeg",
+        settings=background_removal_settings,
+        outputType="URL",
+        outputFormat="PNG",
+        includeCost=True,
+    )
+
+    print(f"Payload: {request_image}")
+    try:
+        processed_images: List[IImage] = await runware.imageBackgroundRemoval(
+            removeImageBackgroundPayload=request_image
+        )
+    except RunwareAPIError as e:
+        print(f"API Error: {e}")
+        print(f"Error Code: {e.code}")
+    except Exception as e:
+        print(f"Unexpected Error: {e}")
+    else:
+        print("Processed Image with the background removed:")
+        print(processed_images)
+        for image in processed_images:
+            print(image.imageURL)
+
+
+asyncio.run(main())
+```
+
+### Using the `model` parameter
+
+```python
+
+from runware import Runware, RunwareAPIError,IImage, IImageBackgroundRemoval
+import asyncio
+import os
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
+
+async def main() -> None:
+    runware = Runware(
+        api_key=os.environ.get("RUNWARE_API_KEY"),
+    )
+    await runware.connect()
+
+    request_image = IImageBackgroundRemoval(
+        taskUUID="abcdbb9c-3bd3-4d75-9234-bffeef994772",
+        model="runware:110@1",
+        inputImage="https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/common/headphones.jpeg"
+    )
+
+    print(f"Payload: {request_image}")
+    try:
+        processed_images: List[IImage] = await runware.imageBackgroundRemoval(
+            removeImageBackgroundPayload=request_image
+        )
+    except RunwareAPIError as e:
+        print(f"API Error: {e}")
+        print(f"Error Code: {e.code}")
+    except Exception as e:
+        print(f"Unexpected Error: {e}")
+    else:
+        print("Processed Image with the background removed:")
+        print(processed_images)
+        for image in processed_images:
+            print(image.imageURL)
+
+
+asyncio.run(main())
+```
 
 For more detailed usage and additional examples, please refer to the examples directory.
