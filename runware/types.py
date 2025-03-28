@@ -173,13 +173,12 @@ class IControlNetCanny(IControlNetGeneral):
     lowThresholdCanny: Optional[int] = None
     highThresholdCanny: Optional[int] = None
     preprocessor: EPreProcessor = EPreProcessor.canny
-    includeHandsAndFaceOpenPose: bool = True
 
 
 @dataclass
 class IControlNetHandsAndFace(IControlNetGeneral):
-    preprocessor: EOpenPosePreProcessor
-    includeHandsAndFaceOpenPose: bool
+    includeHandsAndFaceOpenPose: bool = True
+    preprocessor: EOpenPosePreProcessor = EOpenPosePreProcessor.openpose
 
 
 @dataclass(kw_only=True)
@@ -188,26 +187,23 @@ class IControlNetGeneralWithUUID(ABC, IControlNetGeneral):
 
 
 @dataclass
-class IControlNetAWithUUID(IControlNetGeneralWithUUID):
-    preprocessor: EPreProcessor
+class IControlNetAWithUUID(IControlNetGeneralWithUUID, IControlNetA):
+    ...
 
 
 @dataclass
-class IControlNetCannyWithUUID(IControlNetGeneralWithUUID):
-    lowThresholdCanny: int
-    highThresholdCanny: int
-    preprocessor: EPreProcessor = EPreProcessor.canny
+class IControlNetCannyWithUUID(IControlNetGeneralWithUUID, IControlNetCanny):
+    ...
 
 
 @dataclass
-class IControlNetHandsAndFaceWithUUID(IControlNetGeneralWithUUID):
-    preprocessor: EOpenPosePreProcessor
-    includeHandsAndFaceOpenPose: bool
+class IControlNetHandsAndFaceWithUUID(IControlNetGeneralWithUUID, IControlNetHandsAndFace):
+    ...
 
 
-IControlNet = Union[IControlNetCanny, IControlNetA, IControlNetHandsAndFace]
+IControlNet = Union[IControlNetGeneral, IControlNetCanny, IControlNetA, IControlNetHandsAndFace]
 IControlNetWithUUID = Union[
-    IControlNetCannyWithUUID, IControlNetAWithUUID, IControlNetHandsAndFaceWithUUID
+    IControlNetGeneralWithUUID, IControlNetCannyWithUUID, IControlNetAWithUUID, IControlNetHandsAndFaceWithUUID
 ]
 
 

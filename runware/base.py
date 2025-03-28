@@ -1,25 +1,14 @@
-import asyncio
 from dataclasses import asdict
-from doctest import debug
-import json
-from os import error
 import os
 import re
-import base64
 import uuid
 import inspect
-from typing import List, Union, Optional, Callable, Any, Dict
 from urllib.parse import urlparse
 from websockets.protocol import State
 
 from .utils import (
     BASE_RUNWARE_URLS,
-    delay,
     getUUID,
-    removeListener,
-    accessDeepObject,
-    getPreprocessorType,
-    getTaskType,
     fileToBase64,
     isValidUUID,
     createImageFromResponse,
@@ -27,23 +16,16 @@ from .utils import (
     createEnhancedPromptsFromResponse,
     instantiateDataclassList,
     RunwareAPIError,
-    RunwareError, instantiateDataclass, TIMEOUT_DURATION
+    RunwareError,
+    instantiateDataclass,
+    TIMEOUT_DURATION,
+    get_cn_params_and_uuid_model
 )
 from .async_retry import asyncRetry
 from .types import (
     Environment,
-    SdkType,
-    RunwareBaseType,
-    IImage,
-    ILora,
     EControlMode,
-    IControlNetGeneral,
-    IControlNetA,
-    IControlNetCanny,
-    IControlNetHandsAndFace,
-    IControlNet,
     IControlNetWithUUID,
-    IError,
     IImageInference,
     IPhotoMaker,
     IImageCaption,
@@ -56,19 +38,9 @@ from .types import (
     IUploadModelResponse,
     ReconnectingWebsocketProps,
     UploadImageType,
-    GetWithPromiseCallBackType,
     EPreProcessorGroup,
-    EPreProcessor,
-    EOpenPosePreProcessor,
-    RequireAtLeastOne,
-    RequireOnlyOne,
-    ListenerType,
     File,
     ETaskType,
-    IControlNetGeneralWithUUID,
-    IControlNetCannyWithUUID,
-    IControlNetHandsAndFaceWithUUID,
-    IControlNetAWithUUID,
     IModelSearch,
     IModelSearchResponse,
 )
@@ -268,14 +240,6 @@ class RunwareBase:
             else:
                 raise e
 
-    def create_control_net_with_uuid(self, data: Dict) -> IControlNetGeneralWithUUID:
-        if "lowThresholdCanny" in data and "highThresholdCanny" in data:
-            return IControlNetCannyWithUUID(**data)
-        elif "includeHandsAndFaceOpenPose" in data:
-            return IControlNetHandsAndFaceWithUUID(**data)
-        else:
-            return IControlNetAWithUUID(**data)
-
     async def imageInference(
             self, requestImage: IImageInference
     ) -> Union[List[IImage], None]:
@@ -298,58 +262,24 @@ class RunwareBase:
 
             if requestImage.controlNet:
                 for control_data in requestImage.controlNet:
-                    any_control_data = control_data
-                    preprocessor = control_data.preprocessor
-                    endStep = control_data.endStep
-                    startStep = control_data.startStep
-                    startStepPercentage = control_data.startStepPercentage
-                    endStepPercentage = control_data.endStepPercentage
-                    weight = control_data.weight
                     guideImage = control_data.guideImage
-                    guideImageUnprocessed = control_data.guideImageUnprocessed
-                    controlMode = control_data.controlMode
-                    model = control_data.model
-
-                    def get_canny_object() -> Dict[str, int]:
-                        if control_data.preprocessor is EPreProcessor.canny:
-                            return {
-                                "lowThresholdCanny": any_control_data.lowThresholdCanny,
-                                "highThresholdCanny": any_control_data.highThresholdCanny,
-                            }
-                        else:
-                            return {}
-
-                    image_uploaded = await (
-                        self.uploadUnprocessedImage(
-                            file=guideImageUnprocessed,
-                            preProcessorType=getPreprocessorType(preprocessor),
-                            includeHandsAndFaceOpenPose=any_control_data.includeHandsAndFaceOpenPose,
-                            **get_canny_object(),
-                        )
-                        if guideImageUnprocessed
-                        else self.uploadImage(guideImage)
-                    )
-
+                    image_uploaded = await self.uploadImage(guideImage)
                     if not image_uploaded:
                         return []
-
+                    preprocess_params, uuid_model = get_cn_params_and_uuid_model(control_data)
                     control_net_common_data = {
                         "guideImageUuid": image_uploaded.imageUUID,
-                        "startStep": startStep,
-                        "endStep": endStep,
-                        "startStepPercentage": startStepPercentage,
-                        "endStepPercentage": endStepPercentage,
-                        "preprocessor": preprocessor.value,
+                        "startStep": control_data.startStep,
+                        "endStep": control_data.endStep,
+                        "startStepPercentage": control_data.startStepPercentage,
+                        "endStepPercentage": control_data.endStepPercentage,
                         "guideImage": guideImage,
-                        "guideImageUnprocessed": guideImageUnprocessed,
-                        "weight": weight,
-                        "controlMode": controlMode or EControlMode.CONTROL_NET,
-                        "model": model,
-                        **get_canny_object(),
+                        "weight": control_data.weight,
+                        "controlMode": control_data.controlMode or EControlMode.CONTROL_NET,
+                        "model": control_data.model,
+                        **preprocess_params,
                     }
-
-                    control_net_instance = self.create_control_net_with_uuid(control_net_common_data)
-                    control_net_data.append(control_net_instance)
+                    control_net_data.append(uuid_model(**control_net_common_data))
 
             prompt = f"{requestImage.positivePrompt}".strip()
 

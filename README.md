@@ -212,6 +212,54 @@ async def main() -> None:
         print(f"Image URL: {image.imageURL}")
 ```
 
+
+### Using ControlNet with Image Inference
+
+To use ControlNet for image inference in the Runware SDK, you can use a class `IControlNetGeneral`. Here's an example of how to set up and use this feature:
+
+```python
+from runware import Runware, IImageInference, IControlNetGeneral,  EControlMode
+import asyncio
+import os
+
+async def main() -> None:
+    runware = Runware(
+        api_key=os.getenv("RUNWARE_API_KEY"),
+        log_level="CRITICAL",
+    )
+    await runware.connect()
+
+    controlNet = IControlNetGeneral(
+        startStep=1,
+        endStep=30,
+        weight=0.5,
+        controlMode=EControlMode.BALANCED.value,
+        guideImage="https://huggingface.co/datasets/mishig/sample_images/resolve/main/canny-edge.jpg",
+        model='civitai:38784@44716'
+    )
+
+    request_image = IImageInference(
+        positivePrompt="a beautiful sunset",
+        model='civitai:4384@128713',
+        controlNet=[controlNet],
+        numberResults=1,
+        height=512,
+        width=512,
+        outputType="URL",
+        seed=1568,
+        steps=40
+    )
+
+    images = await runware.imageInference(requestImage=request_image)
+
+    for image in images:
+        print(f"Image URL: {image.imageURL}")
+
+asyncio.run(main())
+```
+This example demonstrates how to configure and use a ControlNet to enhance the image inference process.
+
+
 ### Model Upload
 
 To upload model using the Runware API, you can use the `uploadModel` method of the `Runware` class. Here are examples:
@@ -309,5 +357,4 @@ async def main() -> None:
 uploaded = await runware.modelUpload(payload)
 print(f"Response : {uploaded}")
 ```
-
 For more detailed usage and additional examples, please refer to the examples directory.

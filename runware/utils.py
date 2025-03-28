@@ -3,14 +3,11 @@ import base64
 import aiofiles
 import datetime
 import uuid
-import re
 import json
 import mimetypes
 import inspect
-from functools import reduce
-from typing import Any, Callable, Dict, List, Union, Optional, TypeVar, Type
-from enum import Enum
-from dataclasses import dataclass, fields
+from typing import Any, Dict, List, Union, Optional, TypeVar, Type, Tuple
+from dataclasses import fields
 from .types import (
     Environment,
     EPreProcessor,
@@ -24,6 +21,13 @@ from .types import (
     IImageToText,
     IEnhancedPrompt,
     IError,
+    IControlNetGeneralWithUUID,
+    IControlNetAWithUUID,
+    IControlNetCanny,
+    IControlNetCannyWithUUID,
+    IControlNetHandsAndFace,
+    IControlNetHandsAndFaceWithUUID,
+    IControlNetWithUUID,
 )
 import logging
 
@@ -767,3 +771,35 @@ def instantiateDataclassList(dataclass_type: Type[Any], data_list: List[dict]) -
     for data in data_list:
         instances.append(instantiateDataclass(dataclass_type, data))
     return instances
+
+
+def get_cn_params_and_uuid_model(control_data) -> Tuple[Dict[str, Any], Type[IControlNetWithUUID]]:
+    """
+
+    Args:
+        control_data: dict: A dictionary with controlnet data
+
+    Returns:
+        A dict with preprocessing params
+        An UUID Model to use ControlNet
+    """
+    uuid_model = IControlNetGeneralWithUUID
+    params = {}
+    if hasattr(control_data, "preprocessor"):
+        uuid_model = IControlNetAWithUUID
+        params.update({
+            "preprocessor": control_data.preprocessor.value,
+            "guideImageUnprocessed": control_data.guideImageUnprocessed
+        })
+        if isinstance(control_data, IControlNetCanny):
+            uuid_model = IControlNetCannyWithUUID
+            params.update({
+                "lowThresholdCanny": control_data.lowThresholdCanny,
+                "highThresholdCanny": control_data.highThresholdCanny,
+            })
+        elif isinstance(control_data, IControlNetHandsAndFace):
+            uuid_model = IControlNetHandsAndFaceWithUUID
+            params.update({
+                "includeHandsAndFaceOpenPose": control_data.includeHandsAndFaceOpenPose
+            })
+    return params, uuid_model
