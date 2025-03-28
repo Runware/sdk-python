@@ -35,7 +35,7 @@ def test_icontrol_net_union():
         weight=0.7,
         startStep=5,
         endStep=15,
-        guideImageUnprocessed="hands_face_image.png",
+        guideImage="hands_face_image.png",
         controlMode=EControlMode.PROMPT,
         includeHandsAndFaceOpenPose=True,
     )
@@ -149,6 +149,7 @@ def test_listener_type():
 
 def test_icontrol_net_canny_creation():
     control_net_canny = IControlNetCanny(
+        model='civitai:38784@44716',
         weight=0.8,
         startStep=2,
         endStep=8,

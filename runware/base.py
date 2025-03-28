@@ -18,7 +18,11 @@ from .utils import (
     RunwareAPIError,
     RunwareError,
     instantiateDataclass,
-    TIMEOUT_DURATION
+    TIMEOUT_DURATION,
+    accessDeepObject,
+    getIntervalWithPromise,
+    removeListener,
+    LISTEN_TO_IMAGES_KEY,
 )
 from .async_retry import asyncRetry
 from .types import (
@@ -40,18 +44,11 @@ from .types import (
     ETaskType,
     IModelSearch,
     IModelSearchResponse,
-    IControlNet,
+    IControlNet
 )
 
 from typing import List, Optional, Union, Callable, Any, Dict
 from .types import IImage, IError, SdkType, ListenerType
-from .utils import (
-    accessDeepObject,
-    getIntervalWithPromise,
-    removeListener,
-    LISTEN_TO_IMAGES_KEY,
-)
-
 import logging
 
 from .logging_config import configure_logging

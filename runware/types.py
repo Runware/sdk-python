@@ -169,6 +169,7 @@ class IControlNetCanny(IControlNetGeneral):
 
 @dataclass
 class IControlNetOpenPose(IControlNetGeneral):
+    model: Optional[str] = None
     includeHandsAndFaceOpenPose: bool = True
     preprocessor: EOpenPosePreProcessor = EOpenPosePreProcessor.openpose
 
