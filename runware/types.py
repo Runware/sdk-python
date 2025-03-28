@@ -144,14 +144,14 @@ class IRefiner:
 
 @dataclass(kw_only=True)
 class IControlNetGeneral:
-    model: Optional[str] = None
+    model: str
+    guideImage: Union[str, File]
     weight: Optional[float] = None
     startStep: Optional[int] = None
     endStep: Optional[int] = None
     startStepPercentage: Optional[int] = None
     endStepPercentage: Optional[int] = None
     controlMode: Optional[EControlMode] = None
-    guideImage: Optional[Union[str, File]] = None
 
     def __post_init__(self):
         if (self.startStep and self.startStepPercentage) or (self.endStep and self.endStepPercentage):
@@ -162,7 +162,6 @@ class IControlNetGeneral:
 
 @dataclass
 class IControlNetCanny(IControlNetGeneral):
-    model: Union[int, str]
     lowThresholdCanny: Optional[int] = None
     highThresholdCanny: Optional[int] = None
     preprocessor: EPreProcessor = EPreProcessor.canny
