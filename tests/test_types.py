@@ -3,9 +3,8 @@ import pytest
 from typing import Any
 from runware.types import (
     IControlNet,
-    IControlNetA,
     IControlNetCanny,
-    IControlNetHandsAndFace,
+    IControlNetOpenPose,
     IImageInference,
     File,
     RequireAtLeastOne,
@@ -31,7 +30,7 @@ def test_icontrol_net_union():
     )
     assert isinstance(canny_control_net, IControlNet)
 
-    hands_face_control_net = IControlNetHandsAndFace(
+    hands_face_control_net = IControlNetOpenPose(
         preprocessor=EOpenPosePreProcessor.openpose_face,
         weight=0.7,
         startStep=5,
@@ -148,24 +147,6 @@ def test_listener_type():
     listener.listener("Hello")  # Prints "Hello"
 
 
-def test_icontrol_net_creation():
-    control_net = IControlNetA(
-        preprocessor=EPreProcessor.canny,
-        weight=0.5,
-        startStep=0,
-        endStep=10,
-        guideImage="guide_image.png",
-        controlMode=EControlMode.BALANCED,
-    )
-    assert isinstance(control_net, IControlNet)
-    assert control_net.preprocessor == EPreProcessor.canny
-    assert control_net.weight == 0.5
-    assert control_net.startStep == 0
-    assert control_net.endStep == 10
-    assert control_net.guideImage == "guide_image.png"
-    assert control_net.controlMode == EControlMode.BALANCED
-
-
 def test_icontrol_net_canny_creation():
     control_net_canny = IControlNetCanny(
         weight=0.8,
@@ -189,16 +170,16 @@ def test_icontrol_net_canny_creation():
 
 
 def test_icontrol_net_hands_and_face_creation():
-    control_net_hands_and_face = IControlNetHandsAndFace(
+    control_net_hands_and_face = IControlNetOpenPose(
         preprocessor=EOpenPosePreProcessor.openpose_face,
         weight=0.6,
         startStep=1,
         endStep=9,
-        guideImageUnprocessed="hands_face_guide_image_unprocessed.png",
+        guideImage="hands_face_guide_image_unprocessed.png",
         controlMode=EControlMode.CONTROL_NET,
         includeHandsAndFaceOpenPose=True,
     )
-    assert isinstance(control_net_hands_and_face, IControlNetHandsAndFace)
+    assert isinstance(control_net_hands_and_face, IControlNetOpenPose)
     assert isinstance(control_net_hands_and_face, IControlNet)
     assert (
         control_net_hands_and_face.preprocessor == EOpenPosePreProcessor.openpose_face
@@ -207,7 +188,7 @@ def test_icontrol_net_hands_and_face_creation():
     assert control_net_hands_and_face.startStep == 1
     assert control_net_hands_and_face.endStep == 9
     assert (
-        control_net_hands_and_face.guideImageUnprocessed
+        control_net_hands_and_face.guideImage
         == "hands_face_guide_image_unprocessed.png"
     )
     assert control_net_hands_and_face.controlMode == EControlMode.CONTROL_NET
@@ -225,12 +206,12 @@ def test_icontrol_net_union():
         lowThresholdCanny=150,
         highThresholdCanny=250,
     )
-    control_net_hands_and_face = IControlNetHandsAndFace(
+    control_net_hands_and_face = IControlNetOpenPose(
         preprocessor=EOpenPosePreProcessor.openpose_full,
         weight=0.9,
         startStep=4,
         endStep=6,
-        guideImageUnprocessed="hands_face_guide_image_unprocessed.png",
+        guideImage="hands_face_guide_image_unprocessed.png",
         controlMode=EControlMode.PROMPT,
         includeHandsAndFaceOpenPose=False,
     )

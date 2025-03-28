@@ -152,19 +152,12 @@ class IControlNetGeneral:
     endStepPercentage: Optional[int] = None
     controlMode: Optional[EControlMode] = None
     guideImage: Optional[Union[str, File]] = None
-    guideImageUnprocessed: Optional[Union[str, File]] = None
 
     def __post_init__(self):
-        if (self.guideImage is None and self.guideImageUnprocessed is None) or \
-           (self.guideImage is not None and self.guideImageUnprocessed is not None):
-            raise ValueError("Exactly one of 'guideImage' or 'guideImageUnprocessed' must be provided.")
         if (self.startStep and self.startStepPercentage) or (self.endStep and self.endStepPercentage):
-            raise ValueError("Exactly one of 'startStep/endStep' or 'startStepPercentage/endStepPercentage' must be provided.")
-
-
-@dataclass
-class IControlNetA(IControlNetGeneral):
-    preprocessor: EPreProcessor
+            raise ValueError(
+                "Exactly one of 'startStep/endStep' or 'startStepPercentage/endStepPercentage' must be provided."
+            )
 
 
 @dataclass
@@ -176,35 +169,12 @@ class IControlNetCanny(IControlNetGeneral):
 
 
 @dataclass
-class IControlNetHandsAndFace(IControlNetGeneral):
+class IControlNetOpenPose(IControlNetGeneral):
     includeHandsAndFaceOpenPose: bool = True
     preprocessor: EOpenPosePreProcessor = EOpenPosePreProcessor.openpose
 
 
-@dataclass(kw_only=True)
-class IControlNetGeneralWithUUID(ABC, IControlNetGeneral):
-    guideImageUuid: str
-
-
-@dataclass
-class IControlNetAWithUUID(IControlNetGeneralWithUUID, IControlNetA):
-    ...
-
-
-@dataclass
-class IControlNetCannyWithUUID(IControlNetGeneralWithUUID, IControlNetCanny):
-    ...
-
-
-@dataclass
-class IControlNetHandsAndFaceWithUUID(IControlNetGeneralWithUUID, IControlNetHandsAndFace):
-    ...
-
-
-IControlNet = Union[IControlNetGeneral, IControlNetCanny, IControlNetA, IControlNetHandsAndFace]
-IControlNetWithUUID = Union[
-    IControlNetGeneralWithUUID, IControlNetCannyWithUUID, IControlNetAWithUUID, IControlNetHandsAndFaceWithUUID
-]
+IControlNet = Union[IControlNetGeneral, IControlNetCanny, IControlNetOpenPose]
 
 
 @dataclass

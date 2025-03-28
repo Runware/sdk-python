@@ -18,14 +18,11 @@ from .utils import (
     RunwareAPIError,
     RunwareError,
     instantiateDataclass,
-    TIMEOUT_DURATION,
-    get_cn_params_and_uuid_model
+    TIMEOUT_DURATION
 )
 from .async_retry import asyncRetry
 from .types import (
     Environment,
-    EControlMode,
-    IControlNetWithUUID,
     IImageInference,
     IPhotoMaker,
     IImageCaption,
@@ -43,6 +40,7 @@ from .types import (
     ETaskType,
     IModelSearch,
     IModelSearchResponse,
+    IControlNet,
 )
 
 from typing import List, Optional, Union, Callable, Any, Dict
@@ -250,7 +248,7 @@ class RunwareBase:
 
         try:
             await self.ensureConnection()
-            control_net_data: List[IControlNetWithUUID] = []
+            control_net_data: List[IControlNet] = []
 
             async def process_image(image: Optional[str]) -> Optional[str]:
                 if image and self._isLocalFile(image) and not image.startswith("http"):
@@ -262,25 +260,13 @@ class RunwareBase:
 
             if requestImage.controlNet:
                 for control_data in requestImage.controlNet:
-                    guideImage = control_data.guideImage
-                    image_uploaded = await self.uploadImage(guideImage)
+                    image_uploaded = await self.uploadImage(control_data.guideImage)
                     if not image_uploaded:
                         return []
-                    preprocess_params, uuid_model = get_cn_params_and_uuid_model(control_data)
-                    control_net_common_data = {
-                        "guideImageUuid": image_uploaded.imageUUID,
-                        "startStep": control_data.startStep,
-                        "endStep": control_data.endStep,
-                        "startStepPercentage": control_data.startStepPercentage,
-                        "endStepPercentage": control_data.endStepPercentage,
-                        "guideImage": guideImage,
-                        "weight": control_data.weight,
-                        "controlMode": control_data.controlMode or EControlMode.CONTROL_NET,
-                        "model": control_data.model,
-                        **preprocess_params,
-                    }
-                    control_net_data.append(uuid_model(**control_net_common_data))
-
+                    if hasattr(control_data, "preprocessor"):
+                        control_data.preprocessor = control_data.preprocessor.value
+                    control_data.guideImage = image_uploaded.imageUUID
+                    control_net_data.append(control_data)
             prompt = f"{requestImage.positivePrompt}".strip()
 
             control_net_data_dicts = [asdict(item) for item in control_net_data]

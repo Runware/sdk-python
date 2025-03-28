@@ -6,7 +6,7 @@ import uuid
 import json
 import mimetypes
 import inspect
-from typing import Any, Dict, List, Union, Optional, TypeVar, Type, Tuple
+from typing import Any, Dict, List, Union, Optional, TypeVar, Type
 from dataclasses import fields
 from .types import (
     Environment,
@@ -20,14 +20,7 @@ from .types import (
     ETaskType,
     IImageToText,
     IEnhancedPrompt,
-    IError,
-    IControlNetGeneralWithUUID,
-    IControlNetAWithUUID,
-    IControlNetCanny,
-    IControlNetCannyWithUUID,
-    IControlNetHandsAndFace,
-    IControlNetHandsAndFaceWithUUID,
-    IControlNetWithUUID,
+    IError
 )
 import logging
 
@@ -771,35 +764,3 @@ def instantiateDataclassList(dataclass_type: Type[Any], data_list: List[dict]) -
     for data in data_list:
         instances.append(instantiateDataclass(dataclass_type, data))
     return instances
-
-
-def get_cn_params_and_uuid_model(control_data) -> Tuple[Dict[str, Any], Type[IControlNetWithUUID]]:
-    """
-
-    Args:
-        control_data: dict: A dictionary with controlnet data
-
-    Returns:
-        A dict with preprocessing params
-        An UUID Model to use ControlNet
-    """
-    uuid_model = IControlNetGeneralWithUUID
-    params = {}
-    if hasattr(control_data, "preprocessor"):
-        uuid_model = IControlNetAWithUUID
-        params.update({
-            "preprocessor": control_data.preprocessor.value,
-            "guideImageUnprocessed": control_data.guideImageUnprocessed
-        })
-        if isinstance(control_data, IControlNetCanny):
-            uuid_model = IControlNetCannyWithUUID
-            params.update({
-                "lowThresholdCanny": control_data.lowThresholdCanny,
-                "highThresholdCanny": control_data.highThresholdCanny,
-            })
-        elif isinstance(control_data, IControlNetHandsAndFace):
-            uuid_model = IControlNetHandsAndFaceWithUUID
-            params.update({
-                "includeHandsAndFaceOpenPose": control_data.includeHandsAndFaceOpenPose
-            })
-    return params, uuid_model
