@@ -218,15 +218,10 @@ async def main() -> None:
 To use ControlNet for image inference in the Runware SDK, you can use a class `IControlNetGeneral`. Here's an example of how to set up and use this feature:
 
 ```python
-from runware import Runware, IImageInference, IControlNetGeneral,  EControlMode
-import asyncio
-import os
+from runware import Runware, IImageInference, IControlNetGeneral, EControlMode
 
 async def main() -> None:
-    runware = Runware(
-        api_key=os.getenv("RUNWARE_API_KEY"),
-        log_level="CRITICAL",
-    )
+    runware = Runware(api_key=RUNWARE_API_KEY)
     await runware.connect()
 
     controlNet = IControlNetGeneral(
@@ -255,7 +250,6 @@ async def main() -> None:
     for image in images:
         print(f"Image URL: {image.imageURL}")
 
-asyncio.run(main())
 ```
 This example demonstrates how to configure and use a ControlNet to enhance the image inference process.
 
