@@ -434,7 +434,7 @@ class IImageToText:
     cost: Optional[float] = None
 
 @dataclass
-class BackgroundRemovalSettings:
+class IBackgroundRemovalSettings:
     returnOnlyMask: bool = False
     alphaMatting: bool = False
     postProcessMask: bool = False
@@ -450,7 +450,7 @@ class IImageBackgroundRemoval(IImageCaption):
     outputQuality: Optional[int] = None
     model: Optional[Union[int, str]] = None
     taskUUID: Optional[str] = None
-    settings: Optional[BackgroundRemovalSettings] = None
+    settings: Optional[IBackgroundRemovalSettings] = None
 
   
 @dataclass
