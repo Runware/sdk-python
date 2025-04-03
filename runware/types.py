@@ -433,21 +433,26 @@ class IImageToText:
     text: str
     cost: Optional[float] = None
 
+@dataclass
+class BackgroundRemovalSettings:
+    returnOnlyMask: bool = False
+    alphaMatting: bool = False
+    postProcessMask: bool = False
+    alphaMattingErodeSize: Optional[int] = None
+    alphaMattingForegroundThreshold: Optional[int] = None
+    alphaMattingBackgroundThreshold: Optional[int] = None
+    rgba: Optional[List[int]] = field(default_factory=lambda: [])
 
 @dataclass
 class IImageBackgroundRemoval(IImageCaption):
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IOutputFormat] = None
-    rgba: Optional[List[int]] = field(default_factory=lambda: [])
-    postProcessMask: bool = False
-    returnOnlyMask: bool = False
-    alphaMatting: bool = False
-    alphaMattingForegroundThreshold: Optional[int] = None
-    alphaMattingBackgroundThreshold: Optional[int] = None
-    alphaMattingErodeSize: Optional[int] = None
-    includeCost: bool = False
+    outputQuality: Optional[int] = None
+    model: Optional[Union[int, str]] = None
+    taskUUID: Optional[str] = None
+    settings: Optional[BackgroundRemovalSettings] = None
 
-
+  
 @dataclass
 class IPromptEnhance:
     promptMaxLength: int
@@ -502,7 +507,7 @@ class IUploadModelBaseType:
     downloadURL: str
     uniqueIdentifier: str
     version: str
-    format: int
+    format: str
     private: bool
     category: str
     heroImageURL: Optional[str] = None

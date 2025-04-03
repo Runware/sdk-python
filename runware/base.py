@@ -548,8 +548,10 @@ class RunwareBase:
 
         if not image_uploaded or not image_uploaded.imageUUID:
             return []
-
-        taskUUID = getUUID()
+        if removeImageBackgroundPayload.taskUUID is not None:
+            taskUUID = removeImageBackgroundPayload.taskUUID
+        else:
+            taskUUID = getUUID()
 
         # Create a dictionary with mandatory parameters
         task_params = {
@@ -563,30 +565,18 @@ class RunwareBase:
             task_params["outputType"] = removeImageBackgroundPayload.outputType
         if removeImageBackgroundPayload.outputFormat is not None:
             task_params["outputFormat"] = removeImageBackgroundPayload.outputFormat
-        if removeImageBackgroundPayload.rgba:
-            task_params["rgba"] = removeImageBackgroundPayload.rgba
-        if removeImageBackgroundPayload.postProcessMask:
-            task_params["postProcessMask"] = (
-                removeImageBackgroundPayload.postProcessMask
-            )
-        if removeImageBackgroundPayload.returnOnlyMask:
-            task_params["returnOnlyMask"] = removeImageBackgroundPayload.returnOnlyMask
-        if removeImageBackgroundPayload.alphaMatting:
-            task_params["alphaMatting"] = removeImageBackgroundPayload.alphaMatting
-        if removeImageBackgroundPayload.alphaMattingForegroundThreshold is not None:
-            task_params["alphaMattingForegroundThreshold"] = (
-                removeImageBackgroundPayload.alphaMattingForegroundThreshold
-            )
-        if removeImageBackgroundPayload.alphaMattingBackgroundThreshold is not None:
-            task_params["alphaMattingBackgroundThreshold"] = (
-                removeImageBackgroundPayload.alphaMattingBackgroundThreshold
-            )
-        if removeImageBackgroundPayload.alphaMattingErodeSize is not None:
-            task_params["alphaMattingErodeSize"] = (
-                removeImageBackgroundPayload.alphaMattingErodeSize
-            )
         if removeImageBackgroundPayload.includeCost:
             task_params["includeCost"] = removeImageBackgroundPayload.includeCost
+        if removeImageBackgroundPayload.model:
+            task_params["model"] = removeImageBackgroundPayload.model
+        if removeImageBackgroundPayload.outputQuality:
+            task_params["outputQuality"] = removeImageBackgroundPayload.outputQuality
+
+        # Handle settings if provided - convert dataclass to dictionary and add non-None values
+        if removeImageBackgroundPayload.settings:
+            settings_dict = {k: v for k, v in vars(removeImageBackgroundPayload.settings).items() 
+                            if v is not None}
+            task_params.update(settings_dict)
 
         # Send the task with all applicable parameters
         await self.send([task_params])
@@ -1200,9 +1190,13 @@ class RunwareBase:
                     raise RunwareAPIError(uploaded_model)
 
                 status = uploaded_model.get("status")
+
                 if status not in unique_statuses:
                     all_models.append(uploaded_model)
                     unique_statuses.add(status)
+
+                if status is not None and "error" in status:
+                    raise RunwareAPIError(uploaded_model)
 
                 if status == "ready":
                     uploaded_model_list.remove(uploaded_model)
