@@ -1,15 +1,15 @@
 name: Bump Version, Tag, and Release
 
-# You can trigger this manually via the Actions tab
 on:
   workflow_dispatch:
-
-permissions:
-  contents: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
