@@ -1,25 +1,14 @@
-import asyncio
 from dataclasses import asdict
-from doctest import debug
-import json
-from os import error
 import os
 import re
-import base64
 import uuid
 import inspect
-from typing import List, Union, Optional, Callable, Any, Dict
 from urllib.parse import urlparse
 from websockets.protocol import State
 
 from .utils import (
     BASE_RUNWARE_URLS,
-    delay,
     getUUID,
-    removeListener,
-    accessDeepObject,
-    getPreprocessorType,
-    getTaskType,
     fileToBase64,
     isValidUUID,
     createImageFromResponse,
@@ -27,23 +16,17 @@ from .utils import (
     createEnhancedPromptsFromResponse,
     instantiateDataclassList,
     RunwareAPIError,
-    RunwareError, instantiateDataclass, TIMEOUT_DURATION
+    RunwareError,
+    instantiateDataclass,
+    TIMEOUT_DURATION,
+    accessDeepObject,
+    getIntervalWithPromise,
+    removeListener,
+    LISTEN_TO_IMAGES_KEY,
 )
 from .async_retry import asyncRetry
 from .types import (
     Environment,
-    SdkType,
-    RunwareBaseType,
-    IImage,
-    ILora,
-    EControlMode,
-    IControlNetGeneral,
-    IControlNetA,
-    IControlNetCanny,
-    IControlNetHandsAndFace,
-    IControlNet,
-    IControlNetWithUUID,
-    IError,
     IImageInference,
     IPhotoMaker,
     IImageCaption,
@@ -56,27 +39,16 @@ from .types import (
     IUploadModelResponse,
     ReconnectingWebsocketProps,
     UploadImageType,
-    GetWithPromiseCallBackType,
     EPreProcessorGroup,
-    EPreProcessor,
-    EOpenPosePreProcessor,
-    RequireAtLeastOne,
-    RequireOnlyOne,
-    ListenerType,
     File,
-    ETaskType, IControlNetBaseWithUUID, IControlNetCannyWithUUID, IControlNetHandsAndFaceWithUUID, IControlNetAWithUUID,
-    IModelSearch, IModelSearchResponse,
+    ETaskType,
+    IModelSearch,
+    IModelSearchResponse,
+    IControlNet
 )
 
 from typing import List, Optional, Union, Callable, Any, Dict
 from .types import IImage, IError, SdkType, ListenerType
-from .utils import (
-    accessDeepObject,
-    getIntervalWithPromise,
-    removeListener,
-    LISTEN_TO_IMAGES_KEY,
-)
-
 import logging
 
 from .logging_config import configure_logging
@@ -263,15 +235,6 @@ class RunwareBase:
             else:
                 raise e
 
-    def create_control_net_with_uuid(self, data: Dict) -> IControlNetBaseWithUUID:
-        # Determine the class based on data keys or attributes
-        if "low_threshold_canny" in data and "high_threshold_canny" in data:
-            return IControlNetCannyWithUUID(**data)
-        elif "include_hands_and_face_open_pose" in data:
-            return IControlNetHandsAndFaceWithUUID(**data)
-        else:
-            return IControlNetAWithUUID(**data)
-
     async def imageInference(
             self, requestImage: IImageInference
     ) -> Union[List[IImage], None]:
@@ -282,7 +245,7 @@ class RunwareBase:
 
         try:
             await self.ensureConnection()
-            control_net_data: List[IControlNetWithUUID] = []
+            control_net_data: List[IControlNet] = []
 
             async def process_image(image: Optional[str]) -> Optional[str]:
                 if image and self._isLocalFile(image) and not image.startswith("http"):
@@ -294,55 +257,13 @@ class RunwareBase:
 
             if requestImage.controlNet:
                 for control_data in requestImage.controlNet:
-                    any_control_data = (
-                        control_data  # Type cast to access additional attributes
-                    )
-                    preprocessor = control_data.preprocessor
-                    end_step = control_data.end_step
-                    start_step = control_data.start_step
-                    weight = control_data.weight
-                    guide_image = control_data.guide_image
-                    guide_image_unprocessed = control_data.guide_image_unprocessed
-                    control_mode = control_data.control_mode
-
-                    def get_canny_object() -> Dict[str, int]:
-                        if control_data.preprocessor == "canny":
-                            return {
-                                "low_threshold_canny": any_control_data.low_threshold_canny,
-                                "high_threshold_canny": any_control_data.high_threshold_canny,
-                            }
-                        else:
-                            return {}
-
-                    image_uploaded = await (
-                        self.uploadUnprocessedImage(
-                            file=guide_image_unprocessed,
-                            preProcessorType=getPreprocessorType(preprocessor),
-                            includeHandsAndFaceOpenPose=any_control_data.include_hands_and_face_open_pose,
-                            **get_canny_object(),
-                        )
-                        if guide_image_unprocessed
-                        else self.uploadImage(guide_image)
-                    )
-
+                    image_uploaded = await self.uploadImage(control_data.guideImage)
                     if not image_uploaded:
                         return []
-
-                    control_net_common_data = {
-                        "guide_image_uuid": image_uploaded.imageUUID,
-                        "end_step": end_step,
-                        "preprocessor": preprocessor.value,
-                        "start_step": start_step,
-                        "guide_image": guide_image,
-                        "guide_image_unprocessed": guide_image_unprocessed,
-                        "weight": weight,
-                        "control_mode": control_mode or EControlMode.CONTROL_NET,
-                        **get_canny_object(),
-                    }
-
-                    control_net_instance = self.create_control_net_with_uuid(control_net_common_data)
-                    control_net_data.append(control_net_instance)
-
+                    if hasattr(control_data, "preprocessor"):
+                        control_data.preprocessor = control_data.preprocessor.value
+                    control_data.guideImage = image_uploaded.imageUUID
+                    control_net_data.append(control_data)
             prompt = f"{requestImage.positivePrompt}".strip()
 
             control_net_data_dicts = [asdict(item) for item in control_net_data]

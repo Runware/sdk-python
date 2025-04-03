@@ -3,14 +3,11 @@ import base64
 import aiofiles
 import datetime
 import uuid
-import re
 import json
 import mimetypes
 import inspect
-from functools import reduce
-from typing import Any, Callable, Dict, List, Union, Optional, TypeVar, Type
-from enum import Enum
-from dataclasses import dataclass, fields
+from typing import Any, Dict, List, Union, Optional, TypeVar, Type
+from dataclasses import fields
 from .types import (
     Environment,
     EPreProcessor,
@@ -23,7 +20,7 @@ from .types import (
     ETaskType,
     IImageToText,
     IEnhancedPrompt,
-    IError,
+    IError
 )
 import logging
 

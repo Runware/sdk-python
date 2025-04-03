@@ -1,13 +1,10 @@
 import pytest
-import sys
-import os
 
-from typing import List, Union, Optional, Callable, Any, Dict
+from typing import Any
 from runware.types import (
     IControlNet,
-    IControlNetA,
     IControlNetCanny,
-    IControlNetHandsAndFace,
+    IControlNetOpenPose,
     IImageInference,
     File,
     RequireAtLeastOne,
@@ -21,41 +18,45 @@ from runware.types import (
 
 def test_icontrol_net_union():
     canny_control_net = IControlNetCanny(
+        model='qatests:68487@08629',
         weight=0.5,
-        start_step=0,
-        end_step=10,
-        guide_image="canny_image.png",
-        control_mode=EControlMode.BALANCED,
-        low_threshold_canny=100,
-        high_threshold_canny=200,
+        startStep=0,
+        endStep=10,
+        guideImage="canny_image.png",
+        controlMode=EControlMode.BALANCED,
+        lowThresholdCanny=100,
+        highThresholdCanny=200,
+
     )
     assert isinstance(canny_control_net, IControlNet)
 
-    hands_face_control_net = IControlNetHandsAndFace(
+    hands_face_control_net = IControlNetOpenPose(
         preprocessor=EOpenPosePreProcessor.openpose_face,
         weight=0.7,
-        start_step=5,
-        end_step=15,
-        guide_image_unprocessed="hands_face_image.png",
-        control_mode=EControlMode.PROMPT,
-        include_hands_and_face_open_pose=True,
+        startStep=5,
+        endStep=15,
+        guideImage="hands_face_image.png",
+        controlMode=EControlMode.PROMPT,
+        includeHandsAndFaceOpenPose=True,
     )
     assert isinstance(hands_face_control_net, IControlNet)
 
 
 def test_irequest_image():
     request_image = IImageInference(
-        positive_prompt="A beautiful landscape",
-        image_size=512,
-        model_id=1,
-        image_initiator=File(b"image_data"),
-        image_mask_initiator="mask.png",
+        positivePrompt="A beautiful landscape",
+        width=512,
+        height=512,
+        model='qatests:68487@08629',
+        seedImage=File(b"image_data"),
+        maskImage="mask.png",
     )
-    assert request_image.positive_prompt == "A beautiful landscape"
-    assert request_image.image_size == 512
-    assert request_image.model_id == 1
-    assert isinstance(request_image.image_initiator, File)
-    assert request_image.image_mask_initiator == "mask.png"
+    assert request_image.positivePrompt == "A beautiful landscape"
+    assert request_image.width == 512
+    assert request_image.height == 512
+    assert request_image.model == 'qatests:68487@08629'
+    assert isinstance(request_image.seedImage, File)
+    assert request_image.maskImage == "mask.png"
 
 
 def test_require_at_least_one():
@@ -146,90 +147,74 @@ def test_listener_type():
     listener.listener("Hello")  # Prints "Hello"
 
 
-def test_icontrol_net_creation():
-    control_net = IControlNetA(
-        preprocessor=EPreProcessor.canny,
-        weight=0.5,
-        start_step=0,
-        end_step=10,
-        guide_image="guide_image.png",
-        control_mode=EControlMode.BALANCED,
-    )
-    assert isinstance(control_net, IControlNet)
-    assert control_net.preprocessor == EPreProcessor.canny
-    assert control_net.weight == 0.5
-    assert control_net.start_step == 0
-    assert control_net.end_step == 10
-    assert control_net.guide_image == "guide_image.png"
-    assert control_net.control_mode == EControlMode.BALANCED
-
-
 def test_icontrol_net_canny_creation():
     control_net_canny = IControlNetCanny(
+        model='civitai:38784@44716',
         weight=0.8,
-        start_step=2,
-        end_step=8,
-        guide_image="canny_guide_image.png",
-        control_mode=EControlMode.PROMPT,
-        low_threshold_canny=100,
-        high_threshold_canny=200,
+        startStep=2,
+        endStep=8,
+        guideImage="canny_guide_image.png",
+        controlMode=EControlMode.PROMPT,
+        lowThresholdCanny=100,
+        highThresholdCanny=200,
     )
     assert isinstance(control_net_canny, IControlNetCanny)
     assert isinstance(control_net_canny, IControlNet)
     assert control_net_canny.preprocessor == EPreProcessor.canny
     assert control_net_canny.weight == 0.8
-    assert control_net_canny.start_step == 2
-    assert control_net_canny.end_step == 8
-    assert control_net_canny.guide_image == "canny_guide_image.png"
-    assert control_net_canny.control_mode == EControlMode.PROMPT
-    assert control_net_canny.low_threshold_canny == 100
-    assert control_net_canny.high_threshold_canny == 200
+    assert control_net_canny.startStep == 2
+    assert control_net_canny.endStep == 8
+    assert control_net_canny.guideImage == "canny_guide_image.png"
+    assert control_net_canny.controlMode == EControlMode.PROMPT
+    assert control_net_canny.lowThresholdCanny == 100
+    assert control_net_canny.highThresholdCanny == 200
 
 
 def test_icontrol_net_hands_and_face_creation():
-    control_net_hands_and_face = IControlNetHandsAndFace(
+    control_net_hands_and_face = IControlNetOpenPose(
         preprocessor=EOpenPosePreProcessor.openpose_face,
         weight=0.6,
-        start_step=1,
-        end_step=9,
-        guide_image_unprocessed="hands_face_guide_image_unprocessed.png",
-        control_mode=EControlMode.CONTROL_NET,
-        include_hands_and_face_open_pose=True,
+        startStep=1,
+        endStep=9,
+        guideImage="hands_face_guide_image_unprocessed.png",
+        controlMode=EControlMode.CONTROL_NET,
+        includeHandsAndFaceOpenPose=True,
     )
-    assert isinstance(control_net_hands_and_face, IControlNetHandsAndFace)
+    assert isinstance(control_net_hands_and_face, IControlNetOpenPose)
     assert isinstance(control_net_hands_and_face, IControlNet)
     assert (
         control_net_hands_and_face.preprocessor == EOpenPosePreProcessor.openpose_face
     )
     assert control_net_hands_and_face.weight == 0.6
-    assert control_net_hands_and_face.start_step == 1
-    assert control_net_hands_and_face.end_step == 9
+    assert control_net_hands_and_face.startStep == 1
+    assert control_net_hands_and_face.endStep == 9
     assert (
-        control_net_hands_and_face.guide_image_unprocessed
+        control_net_hands_and_face.guideImage
         == "hands_face_guide_image_unprocessed.png"
     )
-    assert control_net_hands_and_face.control_mode == EControlMode.CONTROL_NET
-    assert control_net_hands_and_face.include_hands_and_face_open_pose == True
+    assert control_net_hands_and_face.controlMode == EControlMode.CONTROL_NET
+    assert control_net_hands_and_face.includeHandsAndFaceOpenPose == True
 
 
 def test_icontrol_net_union():
     control_net_canny = IControlNetCanny(
+        model='qatests:68487@08629',
         weight=0.7,
-        start_step=3,
-        end_step=7,
-        guide_image="canny_guide_image.png",
-        control_mode=EControlMode.BALANCED,
-        low_threshold_canny=150,
-        high_threshold_canny=250,
+        startStep=3,
+        endStep=7,
+        guideImage="canny_guide_image.png",
+        controlMode=EControlMode.BALANCED,
+        lowThresholdCanny=150,
+        highThresholdCanny=250,
     )
-    control_net_hands_and_face = IControlNetHandsAndFace(
+    control_net_hands_and_face = IControlNetOpenPose(
         preprocessor=EOpenPosePreProcessor.openpose_full,
         weight=0.9,
-        start_step=4,
-        end_step=6,
-        guide_image_unprocessed="hands_face_guide_image_unprocessed.png",
-        control_mode=EControlMode.PROMPT,
-        include_hands_and_face_open_pose=False,
+        startStep=4,
+        endStep=6,
+        guideImage="hands_face_guide_image_unprocessed.png",
+        controlMode=EControlMode.PROMPT,
+        includeHandsAndFaceOpenPose=False,
     )
     control_nets = [control_net_canny, control_net_hands_and_face]
     for control_net in control_nets:
