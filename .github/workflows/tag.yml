@@ -14,14 +14,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # Ensure the workflow can push changes back
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Get current version from __init__.py
         id: get_version
         run: |
-          # Extract the version string from the __init__.py file.
-          # This regex looks for __version__ = "0.4.4" and extracts 0.4.4.
           CURRENT_VERSION=$(grep -oP '__version__\s*=\s*"\K[^"]+' runware/__init__.py)
           echo "Current version: $CURRENT_VERSION"
           echo "CURRENT_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
@@ -29,7 +27,6 @@ jobs:
       - name: Bump patch version
         id: bump_version
         run: |
-          # Split the version number (assumes semantic versioning: MAJOR.MINOR.PATCH)
           IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
           new_patch=$((patch + 1))
           NEW_VERSION="${major}.${minor}.${new_patch}"
@@ -38,15 +35,12 @@ jobs:
 
       - name: Update version in setup.py
         run: |
-          # Replace the version string inside setup.py.
-          # The regex looks for version="..." and replaces the content with the new version.
           sed -i -E "s/(version=)[\"']([^\"']+)[\"']/\1\"$NEW_VERSION\"/" setup.py
           echo "setup.py updated:"
           grep -E "version=" setup.py
 
       - name: Update version in runware/__init__.py
         run: |
-          # Replace the __version__ string in the __init__.py file.
           sed -i -E "s/(__version__\s*=\s*)[\"']([^\"']+)[\"']/\1\"$NEW_VERSION\"/" runware/__init__.py
           echo "runware/__init__.py updated:"
           grep -E "__version__" runware/__init__.py
@@ -56,18 +50,19 @@ jobs:
           git config user.name "GitHub Action"
           git config user.email "action@github.com"
           git add setup.py runware/__init__.py
-          # If nothing changed (for example, if you ran the workflow twice), do not fail.
           git commit -m "chore: bump version to $NEW_VERSION" || echo "No changes to commit"
 
       - name: Create new tag
         run: |
-          # Note: the version string in your files remains plain (e.g. "0.4.4")
-          # but the tag is prefixed with "v", e.g. "v0.4.4".
+          echo "Using NEW_VERSION=$NEW_VERSION from env"
           TAG="v$NEW_VERSION"
           echo "Creating tag: $TAG"
+          # Store TAG in GITHUB_ENV for next step
+          echo "TAG=$TAG" >> $GITHUB_ENV
           git tag "$TAG"
 
       - name: Push commit and tag
         run: |
+          echo "Pushing tag $TAG"
           git push origin HEAD
           git push origin "$TAG"
