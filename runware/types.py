@@ -441,7 +441,7 @@ class IBackgroundRemovalSettings:
     alphaMattingErodeSize: Optional[int] = None
     alphaMattingForegroundThreshold: Optional[int] = None
     alphaMattingBackgroundThreshold: Optional[int] = None
-    rgba: Optional[List[int]] = field(default_factory=lambda: [])
+    rgba: Optional[List[int]] = None
 
 @dataclass
 class IImageBackgroundRemoval(IImageCaption):
