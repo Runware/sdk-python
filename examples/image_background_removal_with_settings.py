@@ -1,4 +1,4 @@
-from runware import Runware, RunwareAPIError,IImage, IImageBackgroundRemoval, BackgroundRemovalSettings
+from runware import Runware, RunwareAPIError,IImage, IImageBackgroundRemoval, IBackgroundRemovalSettings
 import asyncio
 import os
 from dotenv import load_dotenv
@@ -11,7 +11,7 @@ async def main() -> None:
         api_key=os.environ.get("RUNWARE_API_KEY")
     )
     await runware.connect()
-    background_removal_settings = BackgroundRemovalSettings(
+    background_removal_settings = IBackgroundRemovalSettings(
         rgba=[255, 255, 255, 0],
         alphaMatting=True,
         postProcessMask=True,
