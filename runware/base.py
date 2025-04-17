@@ -360,8 +360,8 @@ class RunwareBase:
                 request_object["CFGScale"] = requestImage.CFGScale
             if requestImage.seedImage:
                 request_object["seedImage"] = requestImage.seedImage
-            if requestImage.pipelineOptions:
-                pipeline_options_dict = {k: v for k, v in vars(requestImage.pipelineOptions).items() if v is not None}
+            if requestImage.acceleratorOptions:
+                pipeline_options_dict = {k: v for k, v in vars(requestImage.acceleratorOptions).items() if v is not None}
                 request_object.update(pipeline_options_dict)
 
             if requestImage.maskImage:
