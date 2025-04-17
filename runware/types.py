@@ -326,13 +326,13 @@ class IIpAdapter:
 
 
 @dataclass
-class IPipelineOptions:
-    teacache: Optional[bool] = None
-    teacache_distance: Optional[float] = None
-    deepcache: Optional[bool] = None
-    deepcache_interval: Optional[float] = None
-    deepcache_branch_id: Optional[int] = None
-    deepcache_skip_mode: Optional[str] = None
+class IAcceleratorOptions:
+    teaCache: Optional[bool] = None
+    teaCacheDistance: Optional[float] = None
+    deepCache: Optional[bool] = None
+    deepCacheInterval: Optional[float] = None
+    deepCacheBranch_id: Optional[int] = None
+    deepCacheSkip_mode: Optional[str] = None
 
 
 @dataclass
@@ -350,7 +350,7 @@ class IImageInference:
     strength: Optional[float] = None
     height: Optional[int] = None
     width: Optional[int] = None
-    pipelineOptions: Optional[IPipelineOptions] = None
+    acceleratorOptions: Optional[IAcceleratorOptions] = None
     steps: Optional[int] = None
     scheduler: Optional[str] = None
     seed: Optional[int] = None
