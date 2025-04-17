@@ -434,14 +434,14 @@ class IImageToText:
     cost: Optional[float] = None
 
 @dataclass
-class BackgroundRemovalSettings:
+class IBackgroundRemovalSettings:
     returnOnlyMask: bool = False
     alphaMatting: bool = False
     postProcessMask: bool = False
     alphaMattingErodeSize: Optional[int] = None
     alphaMattingForegroundThreshold: Optional[int] = None
     alphaMattingBackgroundThreshold: Optional[int] = None
-    rgba: Optional[List[int]] = field(default_factory=lambda: [])
+    rgba: Optional[List[int]] = None
 
 @dataclass
 class IImageBackgroundRemoval(IImageCaption):
@@ -450,7 +450,7 @@ class IImageBackgroundRemoval(IImageCaption):
     outputQuality: Optional[int] = None
     model: Optional[Union[int, str]] = None
     taskUUID: Optional[str] = None
-    settings: Optional[BackgroundRemovalSettings] = None
+    settings: Optional[IBackgroundRemovalSettings] = None
 
   
 @dataclass
