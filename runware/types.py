@@ -331,8 +331,8 @@ class IAcceleratorOptions:
     teaCacheDistance: Optional[float] = None
     deepCache: Optional[bool] = None
     deepCacheInterval: Optional[float] = None
-    deepCacheBranch_id: Optional[int] = None
-    deepCacheSkip_mode: Optional[str] = None
+    deepCacheBranchId: Optional[int] = None
+    deepCacheSkipMode: Optional[str] = None
 
 
 @dataclass

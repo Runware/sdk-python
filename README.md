@@ -56,6 +56,51 @@ async def main() -> None:
         print(f"Image URL: {image.imageURL}")
 ```
 
+#### Enabling teaCache/deepCache for faster inference
+
+Flux and SDXL models support teaCache and deepCache for faster inference, with the trade-off of quality loss with more aggressive settings.
+
+```python
+from runware import Runware, IImageInference, IAcceleratorOptions
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    request_image = IImageInference(
+        positivePrompt="a beautiful sunset over the mountains",
+        model="civitai:943001@1055701", # using Shuttle v3 for this test, to showcase the power on 3rd party Flux finetunes.
+        numberResults=1,
+        negativePrompt="cloudy, rainy",
+        height=1024,
+        width=1024,
+        acceleratorOptions=IAcceleratorOptions(
+            teaCache=True,
+            teaCacheDistance=0.6, # 0.6 is at the more moderate-to-extreme end, and 0.1 is at the more conservative end.
+        ),
+    )
+
+    images = await runware.imageInference(requestImage=request_image)
+    for image in images:
+        print(f"Image URL: {image.imageURL}")
+```
+
+##### teaCache
+
+- `teaCache` is a boolean that enables or disables the teaCache feature. If set to `True`, it will use teaCache for faster inference.
+  - It is specific to transformer models, Flux and SD3. `teaCache` does not work for UNet models like SDXL or SD1x.
+- `teaCacheDistance` is a float between 0.0 and 1.0, where 0.0 is the most conservative and 1.0 is the most aggressive.
+
+##### deepCache
+
+- `deepCache` is a boolean that enables or disables the deepCache feature. If set to `True`, it will use deepCache for faster inference.
+- `deepCacheInterval` represents the frequency of feature caching, specified as the number of steps between each cache operation.
+  - A larger cache interval makes inference faster, and costs more quality.
+  - The default value is `3`
+- `deepCacheBranchId` represents which branch of the network (ordered from the shallowest to the deepest layer) is responsible for executing the caching processes.
+  - Opting for a lower branch ID will result in a more aggressive caching process, while a higher branch ID will yield a more conservative approach.
+  - The default value is `0`
+
 ### Enhancing Prompts
 
 To enhance prompts using the Runware API, you can use the `promptEnhance` method of the `Runware` class. Here's an example:
