@@ -403,7 +403,7 @@ There are two ways to remove the background from an image.
 > **Note:** When using the `rgba` parameter, the final `a` value is a `float` between `0.0` and `1.0`, but a value of `1-255` will be internally scaled down to the correct float range.
 
 ```python
-from runware import Runware, RunwareAPIError,IImage, IImageBackgroundRemoval, BackgroundRemovalSettings
+from runware import Runware, RunwareAPIError,IImage, IImageBackgroundRemoval, IBackgroundRemovalSettings
 import asyncio
 import os
 from dotenv import load_dotenv
@@ -416,7 +416,7 @@ async def main() -> None:
         api_key=os.environ.get("RUNWARE_API_KEY")
     )
     await runware.connect()
-    background_removal_settings = BackgroundRemovalSettings(
+    background_removal_settings = IBackgroundRemovalSettings(
         rgba=[255, 255, 255, 0],
         alphaMatting=True,
         postProcessMask=True,
