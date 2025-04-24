@@ -15,7 +15,7 @@ def configure_logging(log_level=logging.DEBUG):
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
-    logger = logging.getLogger()
+    logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
     add_console_handler(logger, formatter)
 
