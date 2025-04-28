@@ -356,7 +356,7 @@ class RunwareBase:
 
             if requestImage.negativePrompt:
                 request_object["negativePrompt"] = requestImage.negativePrompt
-            if requestImage.CFGScale:
+            if requestImage.CFGScale is not None:
                 request_object["CFGScale"] = requestImage.CFGScale
             if requestImage.seedImage:
                 request_object["seedImage"] = requestImage.seedImage
