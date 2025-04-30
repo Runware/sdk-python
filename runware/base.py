@@ -362,7 +362,7 @@ class RunwareBase:
                 request_object["seedImage"] = requestImage.seedImage
             if requestImage.acceleratorOptions:
                 pipeline_options_dict = {k: v for k, v in vars(requestImage.acceleratorOptions).items() if v is not None}
-                request_object.update(pipeline_options_dict)
+                request_object.update({"acceleratorOptions": pipeline_options_dict})
 
             if requestImage.maskImage:
                 request_object["maskImage"] = requestImage.maskImage
