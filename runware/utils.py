@@ -20,14 +20,14 @@ from .types import (
     ETaskType,
     IImageToText,
     IEnhancedPrompt,
-    IError
+    IError,
 )
 import logging
 
 logger = logging.getLogger(__name__)
 
 if not mimetypes.guess_type("test.webp")[0]:
-    mimetypes.add_type('image/webp', '.webp')
+    mimetypes.add_type("image/webp", ".webp")
 
 BASE_RUNWARE_URLS = {
     Environment.PRODUCTION: "wss://ws-api.runware.ai/v1",
@@ -75,7 +75,7 @@ class RunwareError(Exception):
                     "parameter": self.ierror.parameter,
                     "type": self.ierror.error_type,
                     "documentation": self.ierror.documentation,
-                    "taskUUID": self.ierror.task_uuid
+                    "taskUUID": self.ierror.task_uuid,
                 }
             ]
         }
@@ -293,7 +293,9 @@ async def fileToBase64(file_path: str) -> str:
             mime_type, _ = mimetypes.guess_type(file_path)
 
             if mime_type is None:
-                raise ValueError(f"Unable to determine the MIME type for file: {file_path}")
+                raise ValueError(
+                    f"Unable to determine the MIME type for file: {file_path}"
+                )
 
             base64_content = base64.b64encode(file_contents).decode("utf-8")
             return f"data:{mime_type};base64,{base64_content}"
@@ -736,6 +738,7 @@ async def getIntervalWithPromise(
 
     return await future
 
+
 def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
     """
     Instantiates a dataclass object from a dictionary, filtering out any unknown attributes.
@@ -750,7 +753,10 @@ def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
     filtered_data = {k: v for k, v in data.items() if k in valid_fields}
     return dataclass_type(**filtered_data)
 
-def instantiateDataclassList(dataclass_type: Type[Any], data_list: List[dict]) -> List[Any]:
+
+def instantiateDataclassList(
+    dataclass_type: Type[Any], data_list: List[dict]
+) -> List[Any]:
     """
     Instantiates a list of dataclass objects from a list of dictionaries,
     filtering out any unknown attributes.

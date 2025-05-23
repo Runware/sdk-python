@@ -44,7 +44,7 @@ from .types import (
     ETaskType,
     IModelSearch,
     IModelSearchResponse,
-    IControlNet
+    IControlNet,
 )
 
 from typing import List, Optional, Union, Callable, Any, Dict
@@ -61,14 +61,14 @@ logger = logging.getLogger(__name__)
 
 class RunwareBase:
     def __init__(
-            self, 
-            api_key: str, 
-            url: str = BASE_RUNWARE_URLS[Environment.PRODUCTION],
-            timeout: int = TIMEOUT_DURATION
+        self,
+        api_key: str,
+        url: str = BASE_RUNWARE_URLS[Environment.PRODUCTION],
+        timeout: int = TIMEOUT_DURATION,
     ):
         if timeout <= 0:
             raise ValueError("Timeout must be greater than 0 milliseconds")
-            
+
         self._ws: Optional[ReconnectingWebsocketProps] = None
         self._listeners: List[ListenerType] = []
         self._apiKey: str = api_key
@@ -88,10 +88,10 @@ class RunwareBase:
         return self._connectionSessionUUID is not None
 
     def addListener(
-            self,
-            lis: Callable[[Any], Any],
-            check: Callable[[Any], Any],
-            groupKey: Optional[str] = None,
+        self,
+        lis: Callable[[Any], Any],
+        check: Callable[[Any], Any],
+        groupKey: Optional[str] = None,
     ) -> Dict[str, Callable[[], None]]:
         # Get the current frame
         current_frame = inspect.currentframe()
@@ -168,8 +168,16 @@ class RunwareBase:
                 "taskType": ETaskType.PHOTO_MAKER.value,
                 "style": requestPhotoMaker.style,
                 "strength": requestPhotoMaker.strength,
-                **({"inputImages": requestPhotoMaker.inputImages} if requestPhotoMaker.inputImages else {}),
-                **({"steps": requestPhotoMaker.steps} if requestPhotoMaker.steps else {}),
+                **(
+                    {"inputImages": requestPhotoMaker.inputImages}
+                    if requestPhotoMaker.inputImages
+                    else {}
+                ),
+                **(
+                    {"steps": requestPhotoMaker.steps}
+                    if requestPhotoMaker.steps
+                    else {}
+                ),
             }
 
             if requestPhotoMaker.outputFormat is not None:
@@ -179,11 +187,7 @@ class RunwareBase:
             if requestPhotoMaker.outputType:
                 request_object["outputType"] = requestPhotoMaker.outputType
 
-            await self.send(
-                [
-                    request_object
-                ]
-            )
+            await self.send([request_object])
 
             lis = self.globalListener(
                 taskUUID=task_uuid,
@@ -236,7 +240,7 @@ class RunwareBase:
                 raise e
 
     async def imageInference(
-            self, requestImage: IImageInference
+        self, requestImage: IImageInference
     ) -> Union[List[IImage], None]:
         let_lis: Optional[Any] = None
         request_object: Optional[Dict[str, Any]] = None
@@ -270,22 +274,76 @@ class RunwareBase:
 
             instant_id_data = {}
             if requestImage.instantID:
-                instant_id_data = {k: v for k, v in vars(requestImage.instantID).items() if v is not None}
+                instant_id_data = {
+                    k: v
+                    for k, v in vars(requestImage.instantID).items()
+                    if v is not None
+                }
 
                 if "inputImage" in instant_id_data:
-                    instant_id_data["inputImage"] = await process_image(instant_id_data["inputImage"])
+                    instant_id_data["inputImage"] = await process_image(
+                        instant_id_data["inputImage"]
+                    )
 
                 if "poseImage" in instant_id_data:
-                    instant_id_data["poseImage"] = await process_image(instant_id_data["poseImage"])
+                    instant_id_data["poseImage"] = await process_image(
+                        instant_id_data["poseImage"]
+                    )
 
             ip_adapters_data = []
             if requestImage.ipAdapters:
                 for ip_adapter in requestImage.ipAdapters:
-                    ip_adapter_data = {k: v for k, v in vars(ip_adapter).items() if v is not None}
+                    ip_adapter_data = {
+                        k: v for k, v in vars(ip_adapter).items() if v is not None
+                    }
                     if "guideImage" in ip_adapter_data:
-                        ip_adapter_data["guideImage"] = await process_image(ip_adapter_data["guideImage"])
+                        ip_adapter_data["guideImage"] = await process_image(
+                            ip_adapter_data["guideImage"]
+                        )
 
                     ip_adapters_data.append(ip_adapter_data)
+
+            ace_plus_plus_data = {}
+            if requestImage.acePlusPlus:
+                ace_plus_plus_data = {
+                    "inputImages": [],
+                    "repaintingScale": requestImage.acePlusPlus.repaintingScale,
+                }
+
+                # currently, only one input is supported.
+                for input_image in requestImage.acePlusPlus.inputImages:
+                    processed_image = await process_image(input_image)
+                    if (
+                        processed_image
+                        and not isValidUUID(processed_image)
+                        and not processed_image.startswith("http")
+                    ):
+                        uploaded = await self.uploadImage(processed_image)
+                        if uploaded:
+                            ace_plus_plus_data["inputImages"].append(uploaded.imageUUID)
+                        else:
+                            raise ValueError("Failed to upload ACE++ input image")
+                    else:
+                        ace_plus_plus_data["inputImages"].append(processed_image)
+
+                if requestImage.acePlusPlus.inputMasks:
+                    ace_plus_plus_data["inputMasks"] = []
+                    for mask_image in requestImage.acePlusPlus.inputMasks:
+                        processed_mask = await process_image(mask_image)
+                        if (
+                            processed_mask
+                            and not isValidUUID(processed_mask)
+                            and not processed_mask.startswith("http")
+                        ):
+                            uploaded = await self.uploadImage(processed_mask)
+                            if uploaded:
+                                ace_plus_plus_data["inputMasks"].append(
+                                    uploaded.imageUUID
+                                )
+                            else:
+                                raise ValueError("Failed to upload ACE++ mask image")
+                        else:
+                            ace_plus_plus_data["inputMasks"].append(processed_mask)
 
             request_object = {
                 "offset": 0,
@@ -297,7 +355,11 @@ class RunwareBase:
                 "width": requestImage.width,
                 "taskType": ETaskType.IMAGE_INFERENCE.value,
                 **({"steps": requestImage.steps} if requestImage.steps else {}),
-                **({"controlNet": control_net_data_dicts} if control_net_data_dicts else {}),
+                **(
+                    {"controlNet": control_net_data_dicts}
+                    if control_net_data_dicts
+                    else {}
+                ),
                 **(
                     {
                         "lora": [
@@ -329,19 +391,31 @@ class RunwareBase:
                                 else {}
                             ),
                             **(
-                                {"startStepPercentage": requestImage.refiner.startStepPercentage}
+                                {
+                                    "startStepPercentage": requestImage.refiner.startStepPercentage
+                                }
                                 if requestImage.refiner.startStepPercentage is not None
                                 else {}
                             ),
                         }
-                    } if requestImage.refiner else {}
+                    }
+                    if requestImage.refiner
+                    else {}
                 ),
                 **({"instantID": instant_id_data} if instant_id_data else {}),
                 **(
-                    {"outpaint": {k: v for k, v in vars(requestImage.outpaint).items() if v is not None}}
-                    if requestImage.outpaint else {}
+                    {
+                        "outpaint": {
+                            k: v
+                            for k, v in vars(requestImage.outpaint).items()
+                            if v is not None
+                        }
+                    }
+                    if requestImage.outpaint
+                    else {}
                 ),
                 **({"ipAdapters": ip_adapters_data} if ip_adapters_data else {}),
+                **({"acePlusPlus": ace_plus_plus_data} if ace_plus_plus_data else {}),
             }
 
             # Add optional parameters if they are provided
@@ -361,7 +435,11 @@ class RunwareBase:
             if requestImage.seedImage:
                 request_object["seedImage"] = requestImage.seedImage
             if requestImage.acceleratorOptions:
-                pipeline_options_dict = {k: v for k, v in vars(requestImage.acceleratorOptions).items() if v is not None}
+                pipeline_options_dict = {
+                    k: v
+                    for k, v in vars(requestImage.acceleratorOptions).items()
+                    if v is not None
+                }
                 request_object.update({"acceleratorOptions": pipeline_options_dict})
 
             if requestImage.maskImage:
@@ -376,7 +454,7 @@ class RunwareBase:
                 request_object["promptWeighting"] = requestImage.promptWeighting
             if requestImage.maskMargin:
                 request_object["maskMargin"] = requestImage.maskMargin
-            if hasattr(requestImage, 'extraArgs'):
+            if hasattr(requestImage, "extraArgs"):
                 # if extraArgs is present, and a dictionary, we will add its attributes to the request.
                 # these may contain options used for public beta testing.
                 if isinstance(requestImage.extraArgs, dict):
@@ -404,13 +482,13 @@ class RunwareBase:
                 raise e
 
     async def _requestImages(
-            self,
-            request_object: Dict[str, Any],
-            task_uuids: List[str],
-            let_lis: Optional[Any],
-            retry_count: int,
-            number_of_images: int,
-            on_partial_images: Optional[Callable[[List[IImage], Optional[IError]], None]],
+        self,
+        request_object: Dict[str, Any],
+        task_uuids: List[str],
+        let_lis: Optional[Any],
+        retry_count: int,
+        number_of_images: int,
+        on_partial_images: Optional[Callable[[List[IImage], Optional[IError]], None]],
     ) -> List[IImage]:
         retry_count += 1
         if let_lis:
@@ -468,7 +546,7 @@ class RunwareBase:
             raise e
 
     async def _requestImageToText(
-            self, requestImageToText: IImageCaption
+        self, requestImageToText: IImageCaption
     ) -> IImageToText:
         inputImage = requestImageToText.inputImage
 
@@ -515,7 +593,9 @@ class RunwareBase:
 
             return False
 
-        response = await getIntervalWithPromise(check, debugKey="image-to-text", timeOutDuration=self._timeout)
+        response = await getIntervalWithPromise(
+            check, debugKey="image-to-text", timeOutDuration=self._timeout
+        )
 
         lis["destroy"]()
 
@@ -529,7 +609,7 @@ class RunwareBase:
             return None
 
     async def imageBackgroundRemoval(
-            self, removeImageBackgroundPayload: IImageBackgroundRemoval
+        self, removeImageBackgroundPayload: IImageBackgroundRemoval
     ) -> List[IImage]:
         try:
             await self.ensureConnection()
@@ -540,7 +620,7 @@ class RunwareBase:
             raise e
 
     async def _removeImageBackground(
-            self, removeImageBackgroundPayload: IImageBackgroundRemoval
+        self, removeImageBackgroundPayload: IImageBackgroundRemoval
     ) -> List[IImage]:
         inputImage = removeImageBackgroundPayload.inputImage
 
@@ -574,8 +654,11 @@ class RunwareBase:
 
         # Handle settings if provided - convert dataclass to dictionary and add non-None values
         if removeImageBackgroundPayload.settings:
-            settings_dict = {k: v for k, v in vars(removeImageBackgroundPayload.settings).items() 
-                            if v is not None}
+            settings_dict = {
+                k: v
+                for k, v in vars(removeImageBackgroundPayload.settings).items()
+                if v is not None
+            }
             task_params.update(settings_dict)
 
         # Send the task with all applicable parameters
@@ -677,7 +760,9 @@ class RunwareBase:
 
             return False
 
-        response = await getIntervalWithPromise(check, debugKey="upscale-gan", timeOutDuration=self._timeout)
+        response = await getIntervalWithPromise(
+            check, debugKey="upscale-gan", timeOutDuration=self._timeout
+        )
 
         lis["destroy"]()
 
@@ -691,7 +776,7 @@ class RunwareBase:
         return image_list
 
     async def promptEnhance(
-            self, promptEnhancer: IPromptEnhance
+        self, promptEnhancer: IPromptEnhance
     ) -> List[IEnhancedPrompt]:
         """
         Enhance the given prompt by generating multiple versions of it.
@@ -707,7 +792,7 @@ class RunwareBase:
             raise e
 
     async def _enhancePrompt(
-            self, promptEnhancer: IPromptEnhance
+        self, promptEnhancer: IPromptEnhance
     ) -> List[IEnhancedPrompt]:
         """
         Internal method to perform the actual prompt enhancement.
@@ -716,7 +801,7 @@ class RunwareBase:
         :return: A list of IEnhancedPrompt objects representing the enhanced versions of the prompt.
         """
         prompt = promptEnhancer.prompt
-        promptMaxLength = getattr(promptEnhancer, 'promptMaxLength', 380)
+        promptMaxLength = getattr(promptEnhancer, "promptMaxLength", 380)
 
         promptVersions = promptEnhancer.promptVersions or 1
 
@@ -755,7 +840,9 @@ class RunwareBase:
 
             return False
 
-        response = await getIntervalWithPromise(check, debugKey="enhance-prompt", timeOutDuration=self._timeout)
+        response = await getIntervalWithPromise(
+            check, debugKey="enhance-prompt", timeOutDuration=self._timeout
+        )
 
         lis["destroy"]()
 
@@ -789,9 +876,15 @@ class RunwareBase:
             return False  # Use the URL as is
         else:
             # Handle case with no scheme and no netloc
-            if not parsed_url.scheme and not parsed_url.netloc or parsed_url.scheme == 'data':
+            if (
+                not parsed_url.scheme
+                and not parsed_url.netloc
+                or parsed_url.scheme == "data"
+            ):
                 # Check if it's a base64 string (with or without data URI prefix)
-                if file.startswith("data:") or re.match(r"^[A-Za-z0-9+/]+={0,2}$", file):
+                if file.startswith("data:") or re.match(
+                    r"^[A-Za-z0-9+/]+={0,2}$", file
+                ):
                     # Assume it's a base64 string (with or without data URI prefix)
                     return False
 
@@ -816,7 +909,9 @@ class RunwareBase:
                 local_file = self._isLocalFile(file)
 
                 # Check if it's a base64 string (with or without data URI prefix)
-                if file.startswith("data:") or re.match(r"^[A-Za-z0-9+/]+={0,2}$", file):
+                if file.startswith("data:") or re.match(
+                    r"^[A-Za-z0-9+/]+={0,2}$", file
+                ):
                     # Assume it's a base64 string (with or without data URI prefix)
                     local_file = False
 
@@ -859,7 +954,9 @@ class RunwareBase:
 
             return False
 
-        response = await getIntervalWithPromise(check, debugKey="upload-image", timeOutDuration=self._timeout)
+        response = await getIntervalWithPromise(
+            check, debugKey="upload-image", timeOutDuration=self._timeout
+        )
 
         lis["destroy"]()
 
@@ -878,14 +975,14 @@ class RunwareBase:
         return image
 
     async def uploadUnprocessedImage(
-            self,
-            file: Union[File, str],
-            preProcessorType: EPreProcessorGroup,
-            width: int = None,
-            height: int = None,
-            lowThresholdCanny: int = None,
-            highThresholdCanny: int = None,
-            includeHandsAndFaceOpenPose: bool = True,
+        self,
+        file: Union[File, str],
+        preProcessorType: EPreProcessorGroup,
+        width: int = None,
+        height: int = None,
+        lowThresholdCanny: int = None,
+        highThresholdCanny: int = None,
+        includeHandsAndFaceOpenPose: bool = True,
     ) -> Optional[UploadImageType]:
         # Create a dummy UploadImageType object
         uploaded_unprocessed_image = UploadImageType(
@@ -897,10 +994,10 @@ class RunwareBase:
         return uploaded_unprocessed_image
 
     async def listenToImages(
-            self,
-            onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]],
-            taskUUID: str,
-            groupKey: LISTEN_TO_IMAGES_KEY,
+        self,
+        onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]],
+        taskUUID: str,
+        groupKey: LISTEN_TO_IMAGES_KEY,
     ) -> Dict[str, Callable[[], None]]:
         """
         Set up a listener to receive partial image updates for a specific task.
@@ -919,7 +1016,7 @@ class RunwareBase:
                     img
                     for img in m["data"]
                     if img.get("taskType") == "imageInference"
-                       and img.get("taskUUID") == taskUUID
+                    and img.get("taskUUID") == taskUUID
                 ]
 
                 if images:
@@ -968,7 +1065,11 @@ class RunwareBase:
             error_check = isinstance(m.get("errors"), list) and any(
                 error.get("taskUUID") == taskUUID for error in m["errors"]
             )
-            error_code_check = True if any([error.get('code') for error in m.get('errors', [])]) else False
+            error_code_check = (
+                True
+                if any([error.get("code") for error in m.get("errors", [])])
+                else False
+            )
             if error_code_check:
                 self._globalError = IError(
                     error=True,
@@ -1034,7 +1135,7 @@ class RunwareBase:
         return temp_listener
 
     def handleIncompleteImages(
-            self, taskUUIDs: List[str], error: Any
+        self, taskUUIDs: List[str], error: Any
     ) -> Optional[List[IImage]]:
         """
         Handle scenarios where the requested number of images is not fully received.
@@ -1076,15 +1177,18 @@ class RunwareBase:
                 # await asyncio.sleep(2)
 
         except Exception as e:
-            raise ConnectionError(self._invalidAPIkey or "Could not connect to server. Ensure your API key is correct")
+            raise ConnectionError(
+                self._invalidAPIkey
+                or "Could not connect to server. Ensure your API key is correct"
+            )
 
     async def getSimililarImage(
-            self,
-            taskUUID: Union[str, List[str]],
-            numberOfImages: int,
-            shouldThrowError: bool = False,
-            lis: Optional[ListenerType] = None,
-            timeout: Optional[int] = None
+        self,
+        taskUUID: Union[str, List[str]],
+        numberOfImages: int,
+        shouldThrowError: bool = False,
+        lis: Optional[ListenerType] = None,
+        timeout: Optional[int] = None,
     ) -> Union[List[IImage], IError]:
         """
         Retrieve similar images based on the provided task UUID(s) and desired number of images.
@@ -1102,9 +1206,9 @@ class RunwareBase:
             timeout = self._timeout
 
         def check(
-                resolve: Callable[[List[IImage]], None],
-                reject: Callable[[IError], None],
-                intervalId: Any,
+            resolve: Callable[[List[IImage]], None],
+            reject: Callable[[IError], None],
+            intervalId: Any,
         ) -> Optional[bool]:
             # print(f"Check # Task UUIDs: {taskUUIDs}")
             # print(f"Check # Global images: {self._globalImages}")
@@ -1115,7 +1219,7 @@ class RunwareBase:
                 img
                 for img in self._globalImages
                 if img.get("taskType") == "imageInference"
-                   and img.get("taskUUID") in taskUUIDs
+                and img.get("taskUUID") in taskUUIDs
             ]
             # logger.debug(f"Check # imagesWithSimilarTask: {imagesWithSimilarTask}")
 
@@ -1135,16 +1239,21 @@ class RunwareBase:
                     img
                     for img in self._globalImages
                     if img.get("taskType") == "imageInference"
-                       and img.get("taskUUID") not in taskUUIDs
+                    and img.get("taskUUID") not in taskUUIDs
                 ]
                 return True
             # return False
 
         return await getIntervalWithPromise(
-            check, debugKey="getting images", shouldThrowError=shouldThrowError, timeOutDuration=timeout
+            check,
+            debugKey="getting images",
+            shouldThrowError=shouldThrowError,
+            timeOutDuration=timeout,
         )
 
-    async def _modelUpload(self, requestModel: IUploadModelBaseType) -> Optional[IUploadModelResponse]:
+    async def _modelUpload(
+        self, requestModel: IUploadModelBaseType
+    ) -> Optional[IUploadModelResponse]:
         task_uuid = getUUID()
         base_fields = {
             "taskType": ETaskType.MODEL_UPLOAD.value,
@@ -1161,20 +1270,32 @@ class RunwareBase:
         }
 
         optional_fields = [
-            "retry", "heroImageURL", "tags", "shortDescription", "comment",
-            "positiveTriggerWords", "type", "negativeTriggerWords",
-            "defaultWeight", "defaultStrength", "defaultGuidanceScale",
-            "defaultSteps", "defaultScheduler", "conditioning"
+            "retry",
+            "heroImageURL",
+            "tags",
+            "shortDescription",
+            "comment",
+            "positiveTriggerWords",
+            "type",
+            "negativeTriggerWords",
+            "defaultWeight",
+            "defaultStrength",
+            "defaultGuidanceScale",
+            "defaultSteps",
+            "defaultScheduler",
+            "conditioning",
         ]
 
-        request_object = {**base_fields, **{field: getattr(requestModel, field) for field in optional_fields if
-                                            getattr(requestModel, field, None) is not None}}
+        request_object = {
+            **base_fields,
+            **{
+                field: getattr(requestModel, field)
+                for field in optional_fields
+                if getattr(requestModel, field, None) is not None
+            },
+        }
 
-        await self.send(
-            [
-                request_object
-            ]
-        )
+        await self.send([request_object])
 
         lis = self.globalListener(
             taskUUID=task_uuid,
@@ -1209,7 +1330,9 @@ class RunwareBase:
 
             return False
 
-        response = await getIntervalWithPromise(check, debugKey="upload-model", timeOutDuration=self._timeout)
+        response = await getIntervalWithPromise(
+            check, debugKey="upload-model", timeOutDuration=self._timeout
+        )
 
         lis["destroy"]()
 
@@ -1223,18 +1346,22 @@ class RunwareBase:
 
             models = []
             for item in response:
-                models.append({
-                    'taskType': item.get('taskType'),
-                    'taskUUID': item.get('taskUUID'),
-                    'status': item.get('status'),
-                    'message': item.get('message'),
-                    'air': item.get('air')
-                })
+                models.append(
+                    {
+                        "taskType": item.get("taskType"),
+                        "taskUUID": item.get("taskUUID"),
+                        "status": item.get("status"),
+                        "message": item.get("message"),
+                        "air": item.get("air"),
+                    }
+                )
         else:
             models = None
         return models
 
-    async def modelUpload(self, requestModel: IUploadModelBaseType) -> Optional[IUploadModelResponse]:
+    async def modelUpload(
+        self, requestModel: IUploadModelBaseType
+    ) -> Optional[IUploadModelResponse]:
         try:
             await self.ensureConnection()
             return await asyncRetry(lambda: self._modelUpload(requestModel))
@@ -1252,11 +1379,13 @@ class RunwareBase:
                 **({"tags": payload.tags} if payload.tags else {}),
             }
 
-            request_object.update({
-                key: value
-                for key, value in vars(payload).items()
-                if value is not None and key != "additional_params"
-            })
+            request_object.update(
+                {
+                    key: value
+                    for key, value in vars(payload).items()
+                    if value is not None and key != "additional_params"
+                }
+            )
 
             await self.send([request_object])
 

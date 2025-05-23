@@ -38,7 +38,7 @@ class RunwareServer(RunwareBase):
         api_key: str,
         url: str = BASE_RUNWARE_URLS[Environment.PRODUCTION],
         log_level=logging.CRITICAL,
-        timeout: int = TIMEOUT_DURATION
+        timeout: int = TIMEOUT_DURATION,
     ):
         super().__init__(api_key=api_key, url=url, timeout=timeout)
         self._instantiated: bool = False
@@ -67,7 +67,6 @@ class RunwareServer(RunwareBase):
             self.logger.info(f"Connected to WebSocket URL: {self._url}")
 
             async def on_open(ws):
-
                 def login_check(m):
                     return (
                         m.get("data", [])[0].get("connectionSessionUUID")
@@ -113,7 +112,7 @@ class RunwareServer(RunwareBase):
 
                 if self._connectionSessionUUID and self.isWebsocketReadyState():
                     self.logger.info(
-                        "Starting new connection with connectionSessionUUID"
+                        f"Starting new connection with connectionSessionUUID {self._connectionSessionUUID}"
                     )
                     await self.send(
                         [
