@@ -254,7 +254,8 @@ class RunwareBase:
 
             requestImage.maskImage = await process_image(requestImage.maskImage)
             requestImage.seedImage = await process_image(requestImage.seedImage)
-            requestImage.referenceImages = [await process_image(reference) for reference in requestImage.referenceImages]
+            if requestImage.referenceImages:
+                requestImage.referenceImages = [await process_image(reference) for reference in requestImage.referenceImages]
 
             if requestImage.controlNet:
                 for control_data in requestImage.controlNet:
