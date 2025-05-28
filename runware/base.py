@@ -254,6 +254,7 @@ class RunwareBase:
 
             requestImage.maskImage = await process_image(requestImage.maskImage)
             requestImage.seedImage = await process_image(requestImage.seedImage)
+            requestImage.referenceImages = [await process_image(reference) for reference in requestImage.referenceImages]
 
             if requestImage.controlNet:
                 for control_data in requestImage.controlNet:
@@ -366,6 +367,8 @@ class RunwareBase:
 
             if requestImage.maskImage:
                 request_object["maskImage"] = requestImage.maskImage
+            if requestImage.referenceImages:
+                request_object["referenceImages"] = requestImage.referenceImages
             if requestImage.strength:
                 request_object["strength"] = requestImage.strength
             if requestImage.scheduler:
