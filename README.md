@@ -90,6 +90,9 @@ async def main() -> None:
 - `teaCache` is a boolean that enables or disables the teaCache feature. If set to `True`, it will use teaCache for faster inference.
   - It is specific to transformer models, Flux and SD3. `teaCache` does not work for UNet models like SDXL or SD1x.
 - `teaCacheDistance` is a float between 0.0 and 1.0, where 0.0 is the most conservative and 1.0 is the most aggressive.
+- `teaCacheStartStep` and `teaCacheEndStep` are integers that represent the start and end steps of the teaCache process.
+  - `teaCacheStartStep` is the step at which the teaCache process starts, and `teaCacheEndStep` is the step at which the teaCache process ends.
+  - If not specified, teaCache will be enabled throughout the entire image generation process, which may be undesirable for preserving quality.
 
 ##### deepCache
 

@@ -328,6 +328,8 @@ class IIpAdapter:
 @dataclass
 class IAcceleratorOptions:
     teaCache: Optional[bool] = None
+    teaCacheStartStep: Optional[int] = None
+    teaCacheStopStep: Optional[int] = None
     teaCacheDistance: Optional[float] = None
     deepCache: Optional[bool] = None
     deepCacheInterval: Optional[float] = None
