@@ -324,7 +324,6 @@ class IIpAdapter:
     guideImage: Union[File, str]
     weight: Optional[float] = None
 
-
 @dataclass
 class IAcceleratorOptions:
     teaCache: Optional[bool] = None
@@ -346,6 +345,7 @@ class IImageInference:
     checkNsfw: Optional[bool] = None
     negativePrompt: Optional[str] = None
     seedImage: Optional[Union[File, str]] = None
+    referenceImages: Optional[Union[File, str]] = None
     maskImage: Optional[Union[File, str]] = None
     strength: Optional[float] = None
     height: Optional[int] = None
