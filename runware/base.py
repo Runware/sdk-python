@@ -365,7 +365,9 @@ class RunwareBase:
             if requestImage.acceleratorOptions:
                 pipeline_options_dict = {k: v for k, v in vars(requestImage.acceleratorOptions).items() if v is not None}
                 request_object.update({"acceleratorOptions": pipeline_options_dict})
-
+            if requestImage.advancedFeatures:
+                pipeline_options_dict = {k: v.__dict__ for k, v in vars(requestImage.advancedFeatures).items() if v is not None}
+                request_object.update({"advancedFeatures": pipeline_options_dict})
             if requestImage.maskImage:
                 request_object["maskImage"] = requestImage.maskImage
             if requestImage.referenceImages:
