@@ -333,6 +333,13 @@ class IAcceleratorOptions:
     deepCacheBranchId: Optional[int] = None
     deepCacheSkipMode: Optional[str] = None
 
+@dataclass
+class IFluxKontext:
+    guidanceEndStep: Optional[int] = None
+    guidanceEndStepPercentage: Optional[float] = None
+@dataclass
+class IAdvancedFeatures:
+    fluxKontext: Optional[IFluxKontext] = None
 
 @dataclass
 class IImageInference:
@@ -351,6 +358,7 @@ class IImageInference:
     height: Optional[int] = None
     width: Optional[int] = None
     acceleratorOptions: Optional[IAcceleratorOptions] = None
+    advancedFeatures: Optional[IAdvancedFeatures] = None
     steps: Optional[int] = None
     scheduler: Optional[str] = None
     seed: Optional[int] = None
