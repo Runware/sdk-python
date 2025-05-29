@@ -10,6 +10,7 @@ def add_console_handler(logger, formatter):
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
+
 def configure_logging(log_level=logging.DEBUG):
     # Create a formatter
     formatter = logging.Formatter(
