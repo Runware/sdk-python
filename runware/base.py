@@ -1075,7 +1075,7 @@ class RunwareBase:
 
         try:
             if self._invalidAPIkey:
-                raise self._invalidAPIkey
+                raise ConnectionError(self._invalidAPIkey)
 
             if not isConnected:
                 await self.connect()
