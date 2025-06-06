@@ -793,61 +793,49 @@ class RunwareBase:
         parsed_url = urlparse(file)
         if parsed_url.scheme and parsed_url.netloc:
             return False  # Use the URL as is
-        else:
-            # Handle case with no scheme and no netloc
-            if not parsed_url.scheme and not parsed_url.netloc or parsed_url.scheme == 'data':
-                # Check if it's a base64 string (with or without data URI prefix)
-                if file.startswith("data:") or re.match(r"^[A-Za-z0-9+/]+={0,2}$", file):
-                    # Assume it's a base64 string (with or without data URI prefix)
-                    return False
 
-                # Assume it's a URL without scheme (e.g., 'example.com/some/path')
-                # Add 'https://' in front and treat it as a valid URL
-                file = f"https://{file}"
-                parsed_url = urlparse(file)
-                if parsed_url.netloc:  # Now it should have a valid netloc
-                    return False
-                else:
-                    raise FileNotFoundError(f"File or URL '{file}' not found.")
+        # Check if it's a base64 string (with or without data URI prefix)
+        if file.startswith("data:") or re.match(r"^[A-Za-z0-9+/]+={0,2}$", file):
+            return False
+
+        # Assume it's a URL without scheme (e.g., 'example.com/some/path')
+        # Add 'https://' in front and treat it as a valid URL
+        if not parsed_url.scheme and not parsed_url.netloc:
+            image_extensions = ['.jpg', '.jpeg', '.png', '.webp']
+            if any(file.lower().endswith(ext) for ext in image_extensions) and '/' not in file:
+                raise FileNotFoundError(f"File '{file}' not found.")
+
+            file = f"https://{file}"
+            parsed_url = urlparse(file)
+            if parsed_url.netloc:  # Now it should have a valid netloc
+                return False
+            else:
+                raise FileNotFoundError(f"File or URL '{file}' not found.")
 
         raise FileNotFoundError(f"File or URL '{file}' not valid or not found.")
 
     async def _uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
         task_uuid = getUUID()
-        local_file = True
+
         if isinstance(file, str):
-            if os.path.exists(file):
-                local_file = True
-            else:
-                local_file = self._isLocalFile(file)
+            local_file = self._isLocalFile(file)
 
-                # Check if it's a base64 string (with or without data URI prefix)
-                if file.startswith("data:") or re.match(r"^[A-Za-z0-9+/]+={0,2}$", file):
-                    # Assume it's a base64 string (with or without data URI prefix)
-                    local_file = False
+            if not local_file:
+                return UploadImageType(
+                    imageUUID=file,
+                    imageURL=file,
+                    taskUUID=task_uuid,
+                )
 
-        if not local_file:
-            return UploadImageType(
-                imageUUID=file,
-                imageURL=file,
-                taskUUID=task_uuid,
-            )
+            file = await fileToBase64(file)
 
-        image_base64 = await fileToBase64(file) if isinstance(file, str) else file
+        await self.send([{
+            "taskType": ETaskType.IMAGE_UPLOAD.value,
+            "taskUUID": task_uuid,
+            "image": file,
+        }])
 
-        await self.send(
-            [
-                {
-                    "taskType": ETaskType.IMAGE_UPLOAD.value,
-                    "taskUUID": task_uuid,
-                    "image": image_base64,
-                }
-            ]
-        )
-
-        lis = self.globalListener(
-            taskUUID=task_uuid,
-        )
+        lis = self.globalListener(taskUUID=task_uuid)
 
         def check(resolve: callable, reject: callable, *args: Any) -> bool:
             uploaded_image_list = self._globalMessages.get(task_uuid)
