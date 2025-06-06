@@ -349,24 +349,22 @@ class IIpAdapter:
 
 @dataclass
 class IAcePlusPlus:
-    inputImages: List[Union[str, File]]
+    taskType: str
     repaintingScale: float = 0.0
+    inputImages: Optional[List[Union[str, File]]] = field(default_factory=list)
     inputMasks: Optional[List[Union[str, File]]] = field(default_factory=list)
+    _VALID_TASK_TYPES = {"portrait", "subject", "local_editing"}
 
     def __post_init__(self):
-        # Validate inputImages - must contain exactly one element
-        if not self.inputImages or len(self.inputImages) != 1:
-            raise ValueError("inputImages must contain exactly one element for ACE++")
-
-        # Validate inputMasks - if provided, must contain exactly one element
-        if self.inputMasks and len(self.inputMasks) != 1:
-            raise ValueError(
-                "inputMasks must contain exactly one element when provided"
-            )
-
         # Validate repaintingScale
         if not 0.0 <= self.repaintingScale <= 1.0:
             raise ValueError("repaintingScale must be between 0.0 and 1.0")
+
+        # Validate taskType
+        if self.taskType not in self._VALID_TASK_TYPES:
+            raise ValueError(
+                f"taskType must be one of {self._VALID_TASK_TYPES}, got: {self.taskType}"
+            )
 
 
 @dataclass
@@ -414,6 +412,7 @@ class IImageInference:
     outpaint: Optional[IOutpaint] = None
     instantID: Optional[IInstantID] = None
     ipAdapters: Optional[List[IIpAdapter]] = field(default_factory=list)
+    referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
     acePlusPlus: Optional[IAcePlusPlus] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
 

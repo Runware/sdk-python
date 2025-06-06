@@ -23,6 +23,8 @@ from .utils import (
     getIntervalWithPromise,
     removeListener,
     LISTEN_TO_IMAGES_KEY,
+    isLocalFile,
+    process_image
 )
 from .async_retry import asyncRetry
 from .types import (
@@ -154,7 +156,7 @@ class RunwareBase:
             requestPhotoMaker.taskUUID = task_uuid
 
             for i, image in enumerate(requestPhotoMaker.inputImages):
-                if self._isLocalFile(image) and not str(image).startswith("http"):
+                if isLocalFile(image) and not str(image).startswith("http"):
                     requestPhotoMaker.inputImages[i] = await fileToBase64(image)
 
             prompt = f"{requestPhotoMaker.positivePrompt}".strip()
@@ -246,19 +248,12 @@ class RunwareBase:
         request_object: Optional[Dict[str, Any]] = None
         task_uuids: List[str] = []
         retry_count = 0
-
         try:
             await self.ensureConnection()
             control_net_data: List[IControlNet] = []
-
-            async def process_image(image: Optional[str]) -> Optional[str]:
-                if image and self._isLocalFile(image) and not image.startswith("http"):
-                    return await fileToBase64(image)
-                return image
-
             requestImage.maskImage = await process_image(requestImage.maskImage)
             requestImage.seedImage = await process_image(requestImage.seedImage)
-
+            requestImage.referenceImages = await process_image(requestImage.referenceImages)
             if requestImage.controlNet:
                 for control_data in requestImage.controlNet:
                     image_uploaded = await self.uploadImage(control_data.guideImage)
@@ -308,42 +303,12 @@ class RunwareBase:
                 ace_plus_plus_data = {
                     "inputImages": [],
                     "repaintingScale": requestImage.acePlusPlus.repaintingScale,
+                    "type": requestImage.acePlusPlus.taskType,
                 }
-
-                # currently, only one input is supported.
-                for input_image in requestImage.acePlusPlus.inputImages:
-                    processed_image = await process_image(input_image)
-                    if (
-                        processed_image
-                        and not isValidUUID(processed_image)
-                        and not processed_image.startswith("http")
-                    ):
-                        uploaded = await self.uploadImage(processed_image)
-                        if uploaded:
-                            ace_plus_plus_data["inputImages"].append(uploaded.imageUUID)
-                        else:
-                            raise ValueError("Failed to upload ACE++ input image")
-                    else:
-                        ace_plus_plus_data["inputImages"].append(processed_image)
-
+                if requestImage.acePlusPlus.inputImages:
+                    ace_plus_plus_data["inputImages"] = await process_image(requestImage.acePlusPlus.inputImages)
                 if requestImage.acePlusPlus.inputMasks:
-                    ace_plus_plus_data["inputMasks"] = []
-                    for mask_image in requestImage.acePlusPlus.inputMasks:
-                        processed_mask = await process_image(mask_image)
-                        if (
-                            processed_mask
-                            and not isValidUUID(processed_mask)
-                            and not processed_mask.startswith("http")
-                        ):
-                            uploaded = await self.uploadImage(processed_mask)
-                            if uploaded:
-                                ace_plus_plus_data["inputMasks"].append(
-                                    uploaded.imageUUID
-                                )
-                            else:
-                                raise ValueError("Failed to upload ACE++ mask image")
-                        else:
-                            ace_plus_plus_data["inputMasks"].append(processed_mask)
+                    ace_plus_plus_data["inputMasks"] = await process_image(requestImage.acePlusPlus.inputMasks)
 
             request_object = {
                 "offset": 0,
@@ -444,6 +409,8 @@ class RunwareBase:
 
             if requestImage.maskImage:
                 request_object["maskImage"] = requestImage.maskImage
+            if requestImage.referenceImages:
+                request_object["referenceImages"] = requestImage.referenceImages
             if requestImage.strength:
                 request_object["strength"] = requestImage.strength
             if requestImage.scheduler:
@@ -462,7 +429,6 @@ class RunwareBase:
 
             if requestImage.outputQuality:
                 request_object["outputQuality"] = requestImage.outputQuality
-
             return await asyncRetry(
                 lambda: self._requestImages(
                     request_object=request_object,
@@ -862,43 +828,6 @@ class RunwareBase:
         except Exception as e:
             raise e
 
-    def _isLocalFile(self, file):
-        if os.path.isfile(file):
-            return True
-
-        # Check if the string is a valid UUID
-        if isValidUUID(file):
-            return False
-
-        # Check if the string is a valid URL
-        parsed_url = urlparse(file)
-        if parsed_url.scheme and parsed_url.netloc:
-            return False  # Use the URL as is
-        else:
-            # Handle case with no scheme and no netloc
-            if (
-                not parsed_url.scheme
-                and not parsed_url.netloc
-                or parsed_url.scheme == "data"
-            ):
-                # Check if it's a base64 string (with or without data URI prefix)
-                if file.startswith("data:") or re.match(
-                    r"^[A-Za-z0-9+/]+={0,2}$", file
-                ):
-                    # Assume it's a base64 string (with or without data URI prefix)
-                    return False
-
-                # Assume it's a URL without scheme (e.g., 'example.com/some/path')
-                # Add 'https://' in front and treat it as a valid URL
-                file = f"https://{file}"
-                parsed_url = urlparse(file)
-                if parsed_url.netloc:  # Now it should have a valid netloc
-                    return False
-                else:
-                    raise FileNotFoundError(f"File or URL '{file}' not found.")
-
-        raise FileNotFoundError(f"File or URL '{file}' not valid or not found.")
-
     async def _uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
         task_uuid = getUUID()
         local_file = True
@@ -906,7 +835,7 @@ class RunwareBase:
             if os.path.exists(file):
                 local_file = True
             else:
-                local_file = self._isLocalFile(file)
+                local_file = isLocalFile(file)
 
                 # Check if it's a base64 string (with or without data URI prefix)
                 if file.startswith("data:") or re.match(
