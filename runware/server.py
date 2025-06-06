@@ -69,25 +69,27 @@ class RunwareServer(RunwareBase):
             async def on_open(ws):
 
                 def login_check(m):
-                    return (
-                        m.get("data", [])[0].get("connectionSessionUUID")
-                        if m.get("data")
-                        else None
-                    )
+                    if (m.get("data") and len(m["data"]) > 0 and
+                            m["data"][0].get("connectionSessionUUID")):
+                        return True
+                    if m.get("errors"):
+                        for error in m["errors"]:
+                            if error.get("taskType") == "authentication":
+                                return True
+                    return False
 
                 def login_lis(m):
-                    if m.get("error"):
-                        if m["errorId"] == 19:
-                            self._invalidAPIkey = "Invalid API key"
-                        else:
-                            self._invalidAPIkey = "Error connection"
-                        return
-
-                    self._connectionSessionUUID = m.get("data", [])[0].get(
-                        "connectionSessionUUID"
-                    )
-                    self._invalidAPIkey = None
-                    self._connection_session_uuid_event.set()  # Set the event when _connectionSessionUUID is received
+                    if m.get("errors"):
+                        for error in m["errors"]:
+                            if error.get("taskType") == "authentication":
+                                err_msg = "Authentication error"
+                                self._invalidAPIkey = error.get("message") or err_msg
+                                self._connection_session_uuid_event.set()
+                                return
+                    if m.get("data") and len(m["data"]) > 0:
+                        self._connectionSessionUUID = m["data"][0].get("connectionSessionUUID")
+                        self._invalidAPIkey = None
+                        self._connection_session_uuid_event.set()
 
                 if not self._loginListener:
                     self._loginListener = self.addListener(
