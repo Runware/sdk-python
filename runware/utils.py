@@ -1,12 +1,16 @@
 import asyncio
 import base64
+import os
+import re
+from urllib.parse import urlparse
+
 import aiofiles
 import datetime
 import uuid
 import json
 import mimetypes
 import inspect
-from typing import Any, Dict, List, Union, Optional, TypeVar, Type
+from typing import Any, Dict, List, Union, Optional, TypeVar, Type, Coroutine
 from dataclasses import fields
 from .types import (
     Environment,
@@ -20,14 +24,15 @@ from .types import (
     ETaskType,
     IImageToText,
     IEnhancedPrompt,
-    IError
+    IError,
+    UploadImageType,
 )
 import logging
 
 logger = logging.getLogger(__name__)
 
 if not mimetypes.guess_type("test.webp")[0]:
-    mimetypes.add_type('image/webp', '.webp')
+    mimetypes.add_type("image/webp", ".webp")
 
 BASE_RUNWARE_URLS = {
     Environment.PRODUCTION: "wss://ws-api.runware.ai/v1",
@@ -75,7 +80,7 @@ class RunwareError(Exception):
                     "parameter": self.ierror.parameter,
                     "type": self.ierror.error_type,
                     "documentation": self.ierror.documentation,
-                    "taskUUID": self.ierror.task_uuid
+                    "taskUUID": self.ierror.task_uuid,
                 }
             ]
         }
@@ -293,7 +298,9 @@ async def fileToBase64(file_path: str) -> str:
             mime_type, _ = mimetypes.guess_type(file_path)
 
             if mime_type is None:
-                raise ValueError(f"Unable to determine the MIME type for file: {file_path}")
+                raise ValueError(
+                    f"Unable to determine the MIME type for file: {file_path}"
+                )
 
             base64_content = base64.b64encode(file_contents).decode("utf-8")
             return f"data:{mime_type};base64,{base64_content}"
@@ -736,6 +743,7 @@ async def getIntervalWithPromise(
 
     return await future
 
+
 def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
     """
     Instantiates a dataclass object from a dictionary, filtering out any unknown attributes.
@@ -750,7 +758,10 @@ def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
     filtered_data = {k: v for k, v in data.items() if k in valid_fields}
     return dataclass_type(**filtered_data)
 
-def instantiateDataclassList(dataclass_type: Type[Any], data_list: List[dict]) -> List[Any]:
+
+def instantiateDataclassList(
+    dataclass_type: Type[Any], data_list: List[dict]
+) -> List[Any]:
     """
     Instantiates a list of dataclass objects from a list of dictionaries,
     filtering out any unknown attributes.
@@ -764,3 +775,54 @@ def instantiateDataclassList(dataclass_type: Type[Any], data_list: List[dict]) -
     for data in data_list:
         instances.append(instantiateDataclass(dataclass_type, data))
     return instances
+
+def isLocalFile(file):
+    if os.path.isfile(file):
+        return True
+
+    # Check if the string is a valid UUID
+    if isValidUUID(file):
+        return False
+
+    # Check if the string is a valid URL
+    parsed_url = urlparse(file)
+    if parsed_url.scheme and parsed_url.netloc:
+        return False  # Use the URL as is
+    else:
+        # Handle case with no scheme and no netloc
+        if (
+            not parsed_url.scheme
+            and not parsed_url.netloc
+            or parsed_url.scheme == "data"
+        ):
+            # Check if it's a base64 string (with or without data URI prefix)
+            if file.startswith("data:") or re.match(
+                r"^[A-Za-z0-9+/]+={0,2}$", file
+            ):
+                # Assume it's a base64 string (with or without data URI prefix)
+                return False
+
+            # Assume it's a URL without scheme (e.g., 'example.com/some/path')
+            # Add 'https://' in front and treat it as a valid URL
+            file = f"https://{file}"
+            parsed_url = urlparse(file)
+            if parsed_url.netloc:  # Now it should have a valid netloc
+                return False
+            else:
+                raise FileNotFoundError(f"File or URL '{file}' not found.")
+
+    raise FileNotFoundError(f"File or URL '{file}' not valid or not found.")
+
+async def process_image(image: Optional[Union[str, list, UploadImageType | None | File]]) -> None | list[Any] | str:
+    if image is None:
+        return None
+    elif isinstance(image, list):
+        images = []
+        for image in image:
+            images.append(await process_image(image))
+        return images
+    elif isinstance(image, UploadImageType):
+        return image.imageUUID
+    if isLocalFile(image) and not image.startswith("http"):
+        return await fileToBase64(image)
+    return image
