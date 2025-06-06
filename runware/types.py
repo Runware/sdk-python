@@ -346,7 +346,6 @@ class IIpAdapter:
     guideImage: Union[File, str]
     weight: Optional[float] = None
 
-
 @dataclass
 class IAcePlusPlus:
     taskType: str
@@ -376,6 +375,13 @@ class IAcceleratorOptions:
     deepCacheBranchId: Optional[int] = None
     deepCacheSkipMode: Optional[str] = None
 
+@dataclass
+class IFluxKontext:
+    guidanceEndStep: Optional[int] = None
+    guidanceEndStepPercentage: Optional[float] = None
+@dataclass
+class IAdvancedFeatures:
+    fluxKontext: Optional[IFluxKontext] = None
 
 @dataclass
 class IImageInference:
@@ -388,11 +394,13 @@ class IImageInference:
     checkNsfw: Optional[bool] = None
     negativePrompt: Optional[str] = None
     seedImage: Optional[Union[File, str]] = None
+    referenceImages: Optional[Union[File, str]] = None
     maskImage: Optional[Union[File, str]] = None
     strength: Optional[float] = None
     height: Optional[int] = None
     width: Optional[int] = None
     acceleratorOptions: Optional[IAcceleratorOptions] = None
+    advancedFeatures: Optional[IAdvancedFeatures] = None
     steps: Optional[int] = None
     scheduler: Optional[str] = None
     seed: Optional[int] = None

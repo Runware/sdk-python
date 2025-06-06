@@ -253,7 +253,8 @@ class RunwareBase:
             control_net_data: List[IControlNet] = []
             requestImage.maskImage = await process_image(requestImage.maskImage)
             requestImage.seedImage = await process_image(requestImage.seedImage)
-            requestImage.referenceImages = await process_image(requestImage.referenceImages)
+            if requestImage.referenceImages:
+                requestImage.referenceImages = await process_image(requestImage.referenceImages)
             if requestImage.controlNet:
                 for control_data in requestImage.controlNet:
                     image_uploaded = await self.uploadImage(control_data.guideImage)
@@ -406,7 +407,9 @@ class RunwareBase:
                     if v is not None
                 }
                 request_object.update({"acceleratorOptions": pipeline_options_dict})
-
+            if requestImage.advancedFeatures:
+                pipeline_options_dict = {k: v.__dict__ for k, v in vars(requestImage.advancedFeatures).items() if v is not None}
+                request_object.update({"advancedFeatures": pipeline_options_dict})
             if requestImage.maskImage:
                 request_object["maskImage"] = requestImage.maskImage
             if requestImage.referenceImages:
@@ -843,29 +846,22 @@ class RunwareBase:
                 ):
                     # Assume it's a base64 string (with or without data URI prefix)
                     local_file = False
+            if not local_file:
+                return UploadImageType(
+                    imageUUID=file,
+                    imageURL=file,
+                    taskUUID=task_uuid,
+                )
 
-        if not local_file:
-            return UploadImageType(
-                imageUUID=file,
-                imageURL=file,
-                taskUUID=task_uuid,
-            )
+            file = await fileToBase64(file)
 
-        image_base64 = await fileToBase64(file) if isinstance(file, str) else file
+        await self.send([{
+            "taskType": ETaskType.IMAGE_UPLOAD.value,
+            "taskUUID": task_uuid,
+            "image": file,
+        }])
 
-        await self.send(
-            [
-                {
-                    "taskType": ETaskType.IMAGE_UPLOAD.value,
-                    "taskUUID": task_uuid,
-                    "image": image_base64,
-                }
-            ]
-        )
-
-        lis = self.globalListener(
-            taskUUID=task_uuid,
-        )
+        lis = self.globalListener(taskUUID=task_uuid)
 
         def check(resolve: callable, reject: callable, *args: Any) -> bool:
             uploaded_image_list = self._globalMessages.get(task_uuid)
@@ -1099,7 +1095,7 @@ class RunwareBase:
 
         try:
             if self._invalidAPIkey:
-                raise self._invalidAPIkey
+                raise ConnectionError(self._invalidAPIkey)
 
             if not isConnected:
                 await self.connect()
