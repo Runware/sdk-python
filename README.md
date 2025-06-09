@@ -384,6 +384,49 @@ async def main() -> None:
 This example demonstrates how to configure and use a ControlNet to enhance the image inference process.
 
 
+### Inferencing Ace++ Pipeline
+
+To use Ace++ in the Runware SDK, you can use a class `IAcePlusPlus`. Here's an example of how to set up and use this feature:
+Much more examples are in examples/ace++
+
+```python
+from runware import Runware, IImageInference, IAcePlusPlus
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    # Upload your reference image and mask
+    reference_image = "https://raw.githubusercontent.com/ali-vilab/ACE_plus/refs/heads/main/assets/samples/application/logo_paste/1_ref.png"
+    mask_image = "https://raw.githubusercontent.com/ali-vilab/ACE_plus/refs/heads/main/assets/samples/application/logo_paste/1_1_m.png"
+    init_image = "https://raw.githubusercontent.com/ali-vilab/ACE_plus/refs/heads/main/assets/samples/application/logo_paste/1_1_edit.png"
+    request_image = IImageInference(
+        positivePrompt="The logo is printed on the headphones.",
+        model="runware:102@1",  # Required model for ACE++
+        taskUUID="68020b8f-bbcf-4779-ba51-4f3bb00aef6a",
+        height=1024,
+        width=1024,
+        numberResults=1,
+        steps=28,
+        CFGScale=50.0,
+        referenceImages=[reference_image],  # Reference image
+        acePlusPlus=IAcePlusPlus(
+            inputImages=[init_image],  # Input image
+            inputMasks=[mask_image],  # Mask for selective editing
+            repaintingScale=1.0,
+            taskType="subject"  # Can be one of "portrait", "subject", "local_editing"
+        ),
+    )
+    print(f"Sending request: {request_image}")
+    images = await runware.imageInference(requestImage=request_image)
+    
+    for image in images:
+        print(f"Image URL: {image.imageURL}")
+
+```
+This example demonstrates how to configure and use a ControlNet to enhance the image inference process.
+
+
 ### Model Upload
 
 To upload model using the Runware API, you can use the `uploadModel` method of the `Runware` class. Here are examples:
