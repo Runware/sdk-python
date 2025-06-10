@@ -352,7 +352,7 @@ class IAcePlusPlus:
     repaintingScale: float = 0.0
     inputImages: Optional[List[Union[str, File]]] = field(default_factory=list)
     inputMasks: Optional[List[Union[str, File]]] = field(default_factory=list)
-    _VALID_TASK_TYPES = {"portrait", "subject", "local_editing"}
+    _VALID_TASK_TYPES = ("portrait", "subject", "local_editing")
 
     def __post_init__(self):
         # Validate repaintingScale
