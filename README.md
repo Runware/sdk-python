@@ -225,6 +225,91 @@ async def main() -> None:
          print(f"Image URL: {photo.imageURL}")
 ```
 
+### ACE++
+
+ACE++ (**A**dvanced **C**haracter **E**dit) is an advanced framework for character-consistent image generation and editing. It allows you to create new images from a single reference image while preserving identity, and edit existing images without retraining the model.
+
+**Note:** When using ACE++, you must set the model parameter to `runware:102@1`.
+
+#### Character-Consistent Generation
+
+To generate new images while preserving character identity from a reference image:
+
+```python
+from runware import Runware, IImageInference, IAcePlusPlus
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    # Upload your reference image first
+    reference_image = await runware.uploadImage("path/to/reference_image.jpg")
+
+    request_image = IImageInference(
+        positivePrompt="photo of man wearing a business suit in a modern office",
+        model="runware:102@1",                        # Required model for ACE++
+        height=1024,
+        width=1024,
+        numberResults=1,
+        acePlusPlus=IAcePlusPlus(
+            inputImages=[reference_image.imageUUID],  # Reference image for character identity
+            repaintingScale=0.3                       # Lower values (0.0-0.5) preserve more identity
+        )
+    )
+
+    images = await runware.imageInference(requestImage=request_image)
+    for image in images:
+        print(f"Image URL: {image.imageURL}")
+```
+
+#### Character-Consistent Editing
+
+To edit existing images while preserving character identity using masks:
+
+```python
+from runware import Runware, IImageInference, IAcePlusPlus
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    # Upload your reference image and mask
+    reference_image = await runware.uploadImage("path/to/reference_image.jpg")
+    mask_image = await runware.uploadImage("path/to/mask_image.png")
+
+    request_image = IImageInference(
+        positivePrompt="photo of woman wearing a red dress",
+        model="runware:102@1",  # Required model for ACE++
+        height=1024,
+        width=1024,
+        numberResults=1,
+        acePlusPlus=IAcePlusPlus(
+            inputImages=[reference_image.imageUUID],  # Reference image
+            inputMasks=[mask_image.imageUUID],  # Mask for selective editing
+            repaintingScale=0.7  # Higher values (0.5-1.0) follow prompt more in edited areas
+        )
+    )
+
+    images = await runware.imageInference(requestImage=request_image)
+    for image in images:
+        print(f"Image URL: {image.imageURL}")
+```
+
+**ACE++ Parameters:**
+- `inputImages`: Array containing exactly one reference image (required)
+- `inputMasks`: Array containing at most one mask image (optional, for editing)
+- `repaintingScale`: Float between 0.0 and 1.0
+  - 0.0: Maximum character identity preservation
+  - 1.0: Maximum adherence to prompt instructions
+  - For generation: Use 0.0-0.5 for strong resemblance
+  - For editing: Use 0.5-1.0 for more creative freedom in edited areas
+
+**Mask Requirements:**
+- The mask should be a black and white image
+- White (255) represents areas to be edited
+- Black (0) represents areas to be preserved
+- Supported formats: PNG, JPG, WEBP
+
 ### Generating Images with refiner
 
 To generate images using the Runware API with refiner support, you can use the `imageInference` method of the `Runware` class. Here's an example:
@@ -292,6 +377,49 @@ async def main() -> None:
 
     images = await runware.imageInference(requestImage=request_image)
 
+    for image in images:
+        print(f"Image URL: {image.imageURL}")
+
+```
+This example demonstrates how to configure and use a ControlNet to enhance the image inference process.
+
+
+### Inferencing Ace++ Pipeline
+
+To use Ace++ in the Runware SDK, you can use a class `IAcePlusPlus`. Here's an example of how to set up and use this feature:
+Much more examples are in examples/ace++
+
+```python
+from runware import Runware, IImageInference, IAcePlusPlus
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    # Upload your reference image and mask
+    reference_image = "https://raw.githubusercontent.com/ali-vilab/ACE_plus/refs/heads/main/assets/samples/application/logo_paste/1_ref.png"
+    mask_image = "https://raw.githubusercontent.com/ali-vilab/ACE_plus/refs/heads/main/assets/samples/application/logo_paste/1_1_m.png"
+    init_image = "https://raw.githubusercontent.com/ali-vilab/ACE_plus/refs/heads/main/assets/samples/application/logo_paste/1_1_edit.png"
+    request_image = IImageInference(
+        positivePrompt="The logo is printed on the headphones.",
+        model="runware:102@1",  # Required model for ACE++
+        taskUUID="68020b8f-bbcf-4779-ba51-4f3bb00aef6a",
+        height=1024,
+        width=1024,
+        numberResults=1,
+        steps=28,
+        CFGScale=50.0,
+        referenceImages=[reference_image],  # Reference image
+        acePlusPlus=IAcePlusPlus(
+            inputImages=[init_image],  # Input image
+            inputMasks=[mask_image],  # Mask for selective editing
+            repaintingScale=1.0,
+            taskType="subject"  # Can be one of "portrait", "subject", "local_editing"
+        ),
+    )
+    print(f"Sending request: {request_image}")
+    images = await runware.imageInference(requestImage=request_image)
+    
     for image in images:
         print(f"Image URL: {image.imageURL}")
 

@@ -154,7 +154,9 @@ class IControlNetGeneral:
     controlMode: Optional[EControlMode] = None
 
     def __post_init__(self):
-        if (self.startStep and self.startStepPercentage) or (self.endStep and self.endStepPercentage):
+        if (self.startStep and self.startStepPercentage) or (
+            self.endStep and self.endStepPercentage
+        ):
             raise ValueError(
                 "Exactly one of 'startStep/endStep' or 'startStepPercentage/endStepPercentage' must be provided."
             )
@@ -254,13 +256,23 @@ class IModelSearch:
     offset: int = 0
     customTaskUUID: Optional[str] = None
     retry: Optional[int] = None
-    additional_params: Dict[str, Union[str, int, float, bool, None]] = field(default_factory=dict)
+    additional_params: Dict[str, Union[str, int, float, bool, None]] = field(
+        default_factory=dict
+    )
 
     def __post_init__(self):
         standard_fields = {
-            "search", "tags", "category", "type", "architecture",
-            "conditioning", "visibility", "limit", "offset",
-            "customTaskUUID", "retry"
+            "search",
+            "tags",
+            "category",
+            "type",
+            "architecture",
+            "conditioning",
+            "visibility",
+            "limit",
+            "offset",
+            "customTaskUUID",
+            "retry",
         }
         for key in list(self.additional_params.keys()):
             if key in standard_fields:
@@ -290,12 +302,22 @@ class IPhotoMaker:
 
         # Validate `style` to ensure it matches one of the allowed case-sensitive options
         valid_styles = {
-            "No style", "Cinematic", "Disney Character", "Digital Art",
-            "Photographic", "Fantasy art", "Neonpunk", "Enhance",
-            "Comic book", "Lowpoly", "Line art"
+            "No style",
+            "Cinematic",
+            "Disney Character",
+            "Digital Art",
+            "Photographic",
+            "Fantasy art",
+            "Neonpunk",
+            "Enhance",
+            "Comic book",
+            "Lowpoly",
+            "Line art",
         }
         if self.style and self.style not in valid_styles:
-            raise ValueError(f"style must be one of the following: {', '.join(valid_styles)}.")
+            raise ValueError(
+                f"style must be one of the following: {', '.join(valid_styles)}."
+            )
 
 
 @dataclass
@@ -323,6 +345,26 @@ class IIpAdapter:
     model: Union[int, str]
     guideImage: Union[File, str]
     weight: Optional[float] = None
+
+@dataclass
+class IAcePlusPlus:
+    taskType: str
+    repaintingScale: float = 0.0
+    inputImages: Optional[List[Union[str, File]]] = field(default_factory=list)
+    inputMasks: Optional[List[Union[str, File]]] = field(default_factory=list)
+    _VALID_TASK_TYPES = ("portrait", "subject", "local_editing")
+
+    def __post_init__(self):
+        # Validate repaintingScale
+        if not 0.0 <= self.repaintingScale <= 1.0:
+            raise ValueError("repaintingScale must be between 0.0 and 1.0")
+
+        # Validate taskType
+        if self.taskType not in self._VALID_TASK_TYPES:
+            raise ValueError(
+                f"taskType must be one of {self._VALID_TASK_TYPES}, got: {self.taskType}"
+            )
+
 
 @dataclass
 class IAcceleratorOptions:
@@ -378,54 +420,9 @@ class IImageInference:
     outpaint: Optional[IOutpaint] = None
     instantID: Optional[IInstantID] = None
     ipAdapters: Optional[List[IIpAdapter]] = field(default_factory=list)
+    referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
+    acePlusPlus: Optional[IAcePlusPlus] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
-
-    def __post_init__(self):
-        self.validate_clip_skip()
-        self.validate_number_results()
-
-    def validate_clip_skip(self):
-        if self.clipSkip is not None and (self.clipSkip < 0 or self.clipSkip > 2):
-            raise ValueError(
-                {
-                    "errors": [
-                        {
-                            "code": "invalidClipSkip",
-                            "message": "Invalid value for clipSkip parameter. Layers to skip must be an integer value "
-                                       "between 0 and 2 (Default: 0).",
-                            "parameter": "clipSkip",
-                            "type": "integer",
-                            "min": 0,
-                            "max": 2,
-                            "default": 0,
-                            "documentation": "https://docs.runware.ai/en/image-inference#clipskip",
-                            "taskUUID": self.taskUUID
-                        }
-                    ]
-                }
-            )
-
-    def validate_number_results(self):
-        if self.numberResults is None or not isinstance(self.numberResults,
-                                                        int) or self.numberResults < 1 or self.numberResults > 20:
-            raise ValueError(
-                {
-                    "errors": [
-                        {
-                            "code": "invalidNumberResults",
-                            "message": "Invalid value for numberResults parameter. The number of images requested "
-                                       "must be an integer value between 1 and 20 (Default: 1).",
-                            "parameter": "numberResults",
-                            "type": "integer",
-                            "min": 1,
-                            "max": 20,
-                            "default": 1,
-                            "documentation": "https://docs.runware.ai/en/image-inference#request-numberresults",
-                            "taskUUID": self.taskUUID
-                        }
-                    ]
-                }
-            )
 
 
 @dataclass
@@ -441,6 +438,7 @@ class IImageToText:
     text: str
     cost: Optional[float] = None
 
+
 @dataclass
 class IBackgroundRemovalSettings:
     returnOnlyMask: bool = False
@@ -451,6 +449,7 @@ class IBackgroundRemovalSettings:
     alphaMattingBackgroundThreshold: Optional[int] = None
     rgba: Optional[List[int]] = None
 
+
 @dataclass
 class IImageBackgroundRemoval(IImageCaption):
     outputType: Optional[IOutputType] = None
@@ -460,7 +459,7 @@ class IImageBackgroundRemoval(IImageCaption):
     taskUUID: Optional[str] = None
     settings: Optional[IBackgroundRemovalSettings] = None
 
-  
+
 @dataclass
 class IPromptEnhance:
     promptMaxLength: int
@@ -623,11 +622,11 @@ GetWithPromiseCallBackType = Callable[
 
 class ListenerType:
     def __init__(
-            self,
-            key: str,
-            listener: Callable[[Any], None],
-            group_key: Optional[str] = None,
-            debug_message: Optional[str] = None,
+        self,
+        key: str,
+        listener: Callable[[Any], None],
+        group_key: Optional[str] = None,
+        debug_message: Optional[str] = None,
     ):
         """
         Initialize a new ListenerType instance.
