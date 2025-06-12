@@ -369,6 +369,8 @@ class IAcePlusPlus:
 @dataclass
 class IAcceleratorOptions:
     teaCache: Optional[bool] = None
+    cacheStartStep: Optional[int] = None
+    cacheStopStep: Optional[int] = None
     teaCacheDistance: Optional[float] = None
     deepCache: Optional[bool] = None
     deepCacheInterval: Optional[float] = None
