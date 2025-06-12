@@ -131,6 +131,12 @@ class ILora:
 
 
 @dataclass
+class ILycoris:
+    model: str
+    weight: float
+
+
+@dataclass
 class IEmbedding:
     model: str
 
@@ -346,6 +352,7 @@ class IIpAdapter:
     guideImage: Union[File, str]
     weight: Optional[float] = None
 
+
 @dataclass
 class IAcePlusPlus:
     taskType: str
@@ -375,13 +382,17 @@ class IAcceleratorOptions:
     deepCacheBranchId: Optional[int] = None
     deepCacheSkipMode: Optional[str] = None
 
+
 @dataclass
 class IFluxKontext:
     guidanceEndStep: Optional[int] = None
     guidanceEndStepPercentage: Optional[float] = None
+
+
 @dataclass
 class IAdvancedFeatures:
     fluxKontext: Optional[IFluxKontext] = None
+
 
 @dataclass
 class IImageInference:
@@ -410,6 +421,7 @@ class IImageInference:
     numberResults: Optional[int] = 1  # default to 1
     controlNet: Optional[List[IControlNet]] = field(default_factory=list)
     lora: Optional[List[ILora]] = field(default_factory=list)
+    lycoris: Optional[List[ILycoris]] = field(default_factory=list)
     includeCost: Optional[bool] = None
     onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]] = None
     refiner: Optional[IRefiner] = None

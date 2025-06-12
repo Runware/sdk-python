@@ -68,8 +68,11 @@ class RunwareServer(RunwareBase):
 
             async def on_open(ws):
                 def login_check(m):
-                    if (m.get("data") and len(m["data"]) > 0 and
-                            m["data"][0].get("connectionSessionUUID")):
+                    if (
+                        m.get("data")
+                        and len(m["data"]) > 0
+                        and m["data"][0].get("connectionSessionUUID")
+                    ):
                         return True
                     if m.get("errors"):
                         for error in m["errors"]:
@@ -86,7 +89,9 @@ class RunwareServer(RunwareBase):
                                 self._connection_session_uuid_event.set()
                                 return
                     if m.get("data") and len(m["data"]) > 0:
-                        self._connectionSessionUUID = m["data"][0].get("connectionSessionUUID")
+                        self._connectionSessionUUID = m["data"][0].get(
+                            "connectionSessionUUID"
+                        )
                         self._invalidAPIkey = None
                         self._connection_session_uuid_event.set()
 
