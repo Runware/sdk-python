@@ -776,6 +776,7 @@ def instantiateDataclassList(
         instances.append(instantiateDataclass(dataclass_type, data))
     return instances
 
+
 def isLocalFile(file):
     if os.path.isfile(file):
         return True
@@ -796,9 +797,7 @@ def isLocalFile(file):
             or parsed_url.scheme == "data"
         ):
             # Check if it's a base64 string (with or without data URI prefix)
-            if file.startswith("data:") or re.match(
-                r"^[A-Za-z0-9+/]+={0,2}$", file
-            ):
+            if file.startswith("data:") or re.match(r"^[A-Za-z0-9+/]+={0,2}$", file):
                 # Assume it's a base64 string (with or without data URI prefix)
                 return False
 
@@ -813,7 +812,10 @@ def isLocalFile(file):
 
     raise FileNotFoundError(f"File or URL '{file}' not valid or not found.")
 
-async def process_image(image: Optional[Union[str, list, UploadImageType | None | File]]) -> None | list[Any] | str:
+
+async def process_image(
+    image: Optional[Union[str, list, UploadImageType | None | File]],
+) -> None | list[Any] | str:
     if image is None:
         return None
     elif isinstance(image, list):

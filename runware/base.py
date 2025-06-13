@@ -24,7 +24,7 @@ from .utils import (
     removeListener,
     LISTEN_TO_IMAGES_KEY,
     isLocalFile,
-    process_image
+    process_image,
 )
 from .async_retry import asyncRetry
 from .types import (
@@ -254,7 +254,9 @@ class RunwareBase:
             requestImage.maskImage = await process_image(requestImage.maskImage)
             requestImage.seedImage = await process_image(requestImage.seedImage)
             if requestImage.referenceImages:
-                requestImage.referenceImages = await process_image(requestImage.referenceImages)
+                requestImage.referenceImages = await process_image(
+                    requestImage.referenceImages
+                )
             if requestImage.controlNet:
                 for control_data in requestImage.controlNet:
                     image_uploaded = await self.uploadImage(control_data.guideImage)
@@ -307,9 +309,13 @@ class RunwareBase:
                     "type": requestImage.acePlusPlus.taskType,
                 }
                 if requestImage.acePlusPlus.inputImages:
-                    ace_plus_plus_data["inputImages"] = await process_image(requestImage.acePlusPlus.inputImages)
+                    ace_plus_plus_data["inputImages"] = await process_image(
+                        requestImage.acePlusPlus.inputImages
+                    )
                 if requestImage.acePlusPlus.inputMasks:
-                    ace_plus_plus_data["inputMasks"] = await process_image(requestImage.acePlusPlus.inputMasks)
+                    ace_plus_plus_data["inputMasks"] = await process_image(
+                        requestImage.acePlusPlus.inputMasks
+                    )
 
             request_object = {
                 "offset": 0,
@@ -334,6 +340,16 @@ class RunwareBase:
                         ]
                     }
                     if requestImage.lora
+                    else {}
+                ),
+                **(
+                    {
+                        "lycoris": [
+                            {"model": lycoris.model, "weight": lycoris.weight}
+                            for lycoris in requestImage.lycoris
+                        ]
+                    }
+                    if requestImage.lycoris
                     else {}
                 ),
                 **(
@@ -408,7 +424,11 @@ class RunwareBase:
                 }
                 request_object.update({"acceleratorOptions": pipeline_options_dict})
             if requestImage.advancedFeatures:
-                pipeline_options_dict = {k: v.__dict__ for k, v in vars(requestImage.advancedFeatures).items() if v is not None}
+                pipeline_options_dict = {
+                    k: v.__dict__
+                    for k, v in vars(requestImage.advancedFeatures).items()
+                    if v is not None
+                }
                 request_object.update({"advancedFeatures": pipeline_options_dict})
             if requestImage.maskImage:
                 request_object["maskImage"] = requestImage.maskImage
@@ -855,11 +875,15 @@ class RunwareBase:
 
             file = await fileToBase64(file)
 
-        await self.send([{
-            "taskType": ETaskType.IMAGE_UPLOAD.value,
-            "taskUUID": task_uuid,
-            "image": file,
-        }])
+        await self.send(
+            [
+                {
+                    "taskType": ETaskType.IMAGE_UPLOAD.value,
+                    "taskUUID": task_uuid,
+                    "image": file,
+                }
+            ]
+        )
 
         lis = self.globalListener(taskUUID=task_uuid)
 
