@@ -235,9 +235,8 @@ class RunwareBase:
 
         except Exception as e:
             if retry_count >= 2:
-                self.logger.error(f"Error in photoMaker request: {e}")
-                exit()
-                return self.handle_incomplete_images(task_uuids=task_uuids, error=e)
+                self.logger.error(f"Error in photoMaker request:", exc_info=e)
+                raise RunwareAPIError({"message": f"PhotoMaker failed after retries: {str(e)}"})
             else:
                 raise e
 
@@ -464,9 +463,8 @@ class RunwareBase:
             )
         except Exception as e:
             if retry_count >= 2:
-                self.logger.error(f"Error in requestImages: {e}")
-                exit()
-                return self.handle_incomplete_images(task_uuids=task_uuids, error=e)
+                self.logger.error(f"Error in requestImages:", exc_info=e)
+                raise RunwareAPIError({"message": f"Image inference failed after retries: {str(e)}"})
             else:
                 raise e
 
