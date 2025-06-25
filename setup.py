@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 setup(
     name="runware",
     license="MIT",
-    version="0.4.13",
+    version="0.4.14",
     author="Runware Inc.",
     author_email="python.sdk@runware.ai",
     description="The Python Runware SDK is used to run image inference with the Runware API, powered by the Runware inference platform. It can be used to generate images with text-to-image and image-to-image. It also allows the use of an existing gallery of models or selecting any model or LoRA from the CivitAI gallery. The API also supports upscaling, background removal, inpainting and outpainting, and a series of other ControlNet models.",
@@ -30,11 +30,12 @@ setup(
         "Programming Language :: Python :: 3 :: Only",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
     ],
     python_requires=">=3.10",
     install_requires=[
         "aiofiles==23.2.1",
         "python-dotenv==1.0.1",
-        "websockets",
+        "websockets==12.0",
     ],
 )
