@@ -39,6 +39,8 @@ class ETaskType(Enum):
     AUTHENTICATION = "authentication"
     MODEL_UPLOAD = "modelUpload"
     MODEL_SEARCH = "modelSearch"
+    VIDEO_INFERENCE = "videoInference"
+    GET_RESPONSE = "getResponse"
 
 
 class EPreProcessorGroup(Enum):
@@ -580,6 +582,74 @@ class IUploadModelResponse:
     air: str
     taskUUID: str
     taskType: str
+
+
+@dataclass
+class IFrameImage:
+    inputImage: Union[str, File]
+    frame: Optional[Union[Literal["first", "last"], int]] = None
+
+
+@dataclass
+class IGoogleProviderSettings:
+    generateAudio: Optional[bool] = None
+    enhancePrompt: Optional[bool] = None
+
+
+@dataclass
+class ICameraConfig:
+    horizontal: Optional[int] = None
+    vertical: Optional[int] = None
+    zoom: Optional[int] = None
+    roll: Optional[int] = None
+    tilt: Optional[int] = None
+    pan: Optional[int] = None
+
+
+@dataclass
+class ICameraControl:
+    camera_type: Optional[str] = None
+    config: Optional[ICameraConfig] = None
+
+
+@dataclass
+class IKlingAIProviderSettings:
+    cameraControl: Optional[ICameraControl] = None
+
+
+@dataclass
+class IVideoInference:
+    model: str
+    positivePrompt: str
+    duration: float | None = None
+    width: int | None = None
+    height: int | None = None
+    deliveryMethod: str = "async"
+    taskUUID: Optional[str] = None
+    outputType: Optional[IOutputType] = None
+    outputFormat: Optional[Literal["MP4", "WEBM"]] = None
+    outputQuality: Optional[int] = None
+    uploadEndpoint: Optional[str] = None
+    includeCost: Optional[bool] = None
+    negativePrompt: Optional[str] = None
+    frameImages: Optional[List[Union[IFrameImage, str]]] = field(default_factory=list)
+    referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
+    fps: Optional[int] = None
+    steps: Optional[int] = None
+    seed: Optional[int] = None
+    CFGScale: Optional[float] = None
+    numberResults: Optional[int] = 1
+    providerSettings: Optional[Union[IGoogleProviderSettings, IKlingAIProviderSettings]] = None
+
+@dataclass
+class IVideo:
+    taskType: str
+    taskUUID: str
+    status: Optional[str] = None
+    videoUUID: Optional[str] = None
+    videoURL: Optional[str] = None
+    cost: Optional[float] = None
+    seed: Optional[int] = None
 
 
 # The GetWithPromiseCallBackType is defined using the Callable type from the typing module. It represents a function that takes a dictionary

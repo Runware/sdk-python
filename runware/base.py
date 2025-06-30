@@ -1,31 +1,13 @@
-from dataclasses import asdict
+import inspect
+import logging
 import os
 import re
 import uuid
-import inspect
-from urllib.parse import urlparse
+from dataclasses import asdict
+from typing import List, Optional, Union, Callable, Any, Dict
+
 from websockets.protocol import State
 
-from .utils import (
-    BASE_RUNWARE_URLS,
-    getUUID,
-    fileToBase64,
-    isValidUUID,
-    createImageFromResponse,
-    createImageToTextFromResponse,
-    createEnhancedPromptsFromResponse,
-    instantiateDataclassList,
-    RunwareAPIError,
-    RunwareError,
-    instantiateDataclass,
-    TIMEOUT_DURATION,
-    accessDeepObject,
-    getIntervalWithPromise,
-    removeListener,
-    LISTEN_TO_IMAGES_KEY,
-    isLocalFile,
-    process_image,
-)
 from .async_retry import asyncRetry
 from .types import (
     Environment,
@@ -47,13 +29,32 @@ from .types import (
     IModelSearch,
     IModelSearchResponse,
     IControlNet,
+    IVideo,
+    IVideoInference,
+    IGoogleProviderSettings,
+    IKlingAIProviderSettings,
+    IFrameImage,
 )
-
-from typing import List, Optional, Union, Callable, Any, Dict
 from .types import IImage, IError, SdkType, ListenerType
-import logging
-
-from .logging_config import configure_logging
+from .utils import (
+    BASE_RUNWARE_URLS,
+    getUUID,
+    fileToBase64,
+    createImageFromResponse,
+    createImageToTextFromResponse,
+    createEnhancedPromptsFromResponse,
+    instantiateDataclassList,
+    RunwareAPIError,
+    RunwareError,
+    instantiateDataclass,
+    TIMEOUT_DURATION,
+    accessDeepObject,
+    getIntervalWithPromise,
+    removeListener,
+    LISTEN_TO_IMAGES_KEY,
+    isLocalFile,
+    process_image, delay,
+)
 
 # Configure logging
 # configure_logging(log_level=logging.CRITICAL)
@@ -63,10 +64,10 @@ logger = logging.getLogger(__name__)
 
 class RunwareBase:
     def __init__(
-        self,
-        api_key: str,
-        url: str = BASE_RUNWARE_URLS[Environment.PRODUCTION],
-        timeout: int = TIMEOUT_DURATION,
+            self,
+            api_key: str,
+            url: str = BASE_RUNWARE_URLS[Environment.PRODUCTION],
+            timeout: int = TIMEOUT_DURATION,
     ):
         if timeout <= 0:
             raise ValueError("Timeout must be greater than 0 milliseconds")
@@ -1366,6 +1367,196 @@ class RunwareBase:
                 raise
 
             raise RunwareAPIError({"message": str(e)})
+
+    async def videoInference(self, requestVideo: IVideoInference) -> List[IVideo]:
+        try:
+            await self.ensureConnection()
+            return await asyncRetry(lambda: self._requestVideo(requestVideo))
+        except Exception as e:
+            raise e
+
+    async def _requestVideo(self, requestVideo: IVideoInference) -> List[IVideo]:
+        await self._processVideoImages(requestVideo)
+        requestVideo.taskUUID = requestVideo.taskUUID or getUUID()
+        request_object = self._buildVideoRequest(requestVideo)
+        await self.send([request_object])
+        return await self._handleInitialVideoResponse(requestVideo.taskUUID, requestVideo.numberResults)
+
+    async def _processVideoImages(self, requestVideo: IVideoInference) -> None:
+        if requestVideo.frameImages:
+            processed_frame_images = []
+            for frame_item in requestVideo.frameImages:
+                if isinstance(frame_item, IFrameImage):
+                    frame_item.inputImages = await process_image(frame_item.inputImage)
+                    processed_frame_images.append(frame_item)
+            requestVideo.frameImages = processed_frame_images
+        if requestVideo.referenceImages:
+            requestVideo.referenceImages = await process_image(requestVideo.referenceImages)
+
+    def _buildVideoRequest(self, requestVideo: IVideoInference) -> Dict[str, Any]:
+        request_object = {
+            "deliveryMethod": "async",
+            "taskType": ETaskType.VIDEO_INFERENCE.value,
+            "taskUUID": requestVideo.taskUUID,
+            "model": requestVideo.model,
+            "positivePrompt": requestVideo.positivePrompt.strip(),
+            "numberResults": requestVideo.numberResults,
+        }
+
+        self._addOptionalVideoFields(request_object, requestVideo)
+        self._addVideoImages(request_object, requestVideo)
+        self._addProviderSettings(request_object, requestVideo)
+        return request_object
+
+    def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
+        optional_fields = [
+            "outputType", "outputFormat", "outputQuality", "uploadEndpoint",
+            "includeCost", "negativePrompt", "fps", "steps", "seed",
+            "CFGScale", "seedImage", "duration", "width", "height",
+        ]
+
+        for field in optional_fields:
+            value = getattr(requestVideo, field, None)
+            if value is not None:
+                request_object[field] = value
+
+    def _addVideoImages(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
+        if requestVideo.frameImages:
+            frame_images_data = []
+            for frame_item in requestVideo.frameImages:
+                frame_images_data.append({k: v for k, v in asdict(frame_item).items() if v is not None})
+            request_object["frameImages"] = frame_images_data
+
+        if requestVideo.referenceImages:
+            request_object["referenceImages"] = requestVideo.referenceImages
+
+    def _addProviderSettings(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
+        if not requestVideo.providerSettings:
+            return
+        provider_settings = {}
+        if isinstance(requestVideo.providerSettings, IGoogleProviderSettings):
+            provider_settings["google"] = {k: v for k, v in asdict(requestVideo.providerSettings).items() if v is not None}
+        elif isinstance(requestVideo.providerSettings, IKlingAIProviderSettings):
+            s = requestVideo.providerSettings
+            klingai_settings = {}
+            if s.cameraControl:
+                camera_control = {}
+                if s.cameraControl.camera_type:
+                    camera_control["type"] = s.cameraControl.camera_type
+                if s.cameraControl.config:
+                    config = {
+                        f: getattr(s.cameraControl.config, f)
+                        for f in ["horizontal", "vertical", "zoom", "roll", "tilt", "pan"]
+                        if getattr(s.cameraControl.config, f) is not None
+                    }
+                    if config:
+                        camera_control["config"] = config
+                if camera_control:
+                    klingai_settings["cameraControl"] = camera_control
+            if klingai_settings:
+                provider_settings["klingai"] = klingai_settings
+
+        if provider_settings:
+            request_object["providerSettings"] = provider_settings
+
+    async def _handleInitialVideoResponse(self, task_uuid: str, number_results: int) -> List[IVideo]:
+        lis = self.globalListener(taskUUID=task_uuid)
+
+        def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
+            response_list = self._globalMessages.get(task_uuid, [])
+
+            if not response_list:
+                return False
+
+            response = response_list[0]
+
+            if response.get("code"):
+                raise RunwareAPIError(response)
+
+            if response.get("status") == "success":
+                del self._globalMessages[task_uuid]
+                resolve([response])
+                return True
+
+            del self._globalMessages[task_uuid]
+            resolve("POLL_NEEDED")
+            return True
+
+        try:
+            initial_response = await getIntervalWithPromise(
+                check_initial_response,
+                debugKey="video-inference-initial",
+                timeOutDuration=30000
+            )
+        finally:
+            lis["destroy"]()
+
+        if initial_response == "POLL_NEEDED":
+            return await self._pollVideoResults(task_uuid, number_results)
+        else:
+            return instantiateDataclassList(IVideo, initial_response)
+
+    async def _pollVideoResults(self, task_uuid: str, number_results: int) -> List[IVideo]:
+        max_polls = 120
+
+        for poll_count in range(max_polls):
+            try:
+                responses = await self._sendPollRequest(task_uuid, poll_count)
+                completed_results = self._processVideoPollingResponse(responses)
+
+                if len(completed_results) >= number_results:
+                    return instantiateDataclassList(IVideo, completed_results[:number_results])
+
+                if not self._hasPendingVideos(responses) and not completed_results:
+                    raise RunwareAPIError({"message": f"Unexpected polling response at poll {poll_count}"})
+
+            except Exception as e:
+                if poll_count >= max_polls - 1:
+                    raise e
+
+            await delay(5)
+
+        raise RunwareAPIError({"message": "Video generation timed out"})
+
+    async def _sendPollRequest(self, task_uuid: str, poll_count: int) -> List[Dict[str, Any]]:
+        await self.send([{
+            "taskType": ETaskType.GET_RESPONSE.value,
+            "taskUUID": task_uuid
+        }])
+
+        lis = self.globalListener(taskUUID=task_uuid)
+
+        def check_poll_response(resolve: callable, reject: callable, *args: Any) -> bool:
+            response_list = self._globalMessages.get(task_uuid, [])
+            if response_list:
+                del self._globalMessages[task_uuid]
+                resolve(response_list)
+                return True
+            return False
+
+        try:
+            return await getIntervalWithPromise(
+                check_poll_response,
+                debugKey=f"video-poll-{poll_count}",
+                timeOutDuration=10000
+            )
+        finally:
+            lis["destroy"]()
+
+    def _processVideoPollingResponse(self, responses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        completed_results = []
+
+        for response in responses:
+            if response.get("code"):
+                raise RunwareAPIError(response)
+            status = response.get("status")
+            if status == "success":
+                completed_results.append(response)
+
+        return completed_results
+
+    def _hasPendingVideos(self, responses: List[Dict[str, Any]]) -> bool:
+        return any(response.get("status") == "pending" for response in responses)
 
     def connected(self) -> bool:
         """
