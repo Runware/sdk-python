@@ -61,6 +61,7 @@ from .utils import (
 # configure_logging(log_level=logging.CRITICAL)
 
 logger = logging.getLogger(__name__)
+MAX_POLLS_VIDEO_GENERATION = int(os.environ.get("RUNWARE_MAX_POLLS_VIDEO_GENERATION", 480))
 
 
 class RunwareBase:
@@ -1495,9 +1496,7 @@ class RunwareBase:
             return instantiateDataclassList(IVideo, initial_response)
 
     async def _pollVideoResults(self, task_uuid: str, number_results: int) -> List[IVideo]:
-        max_polls = 240
-
-        for poll_count in range(max_polls):
+        for poll_count in range(MAX_POLLS_VIDEO_GENERATION):
             try:
                 responses = await self._sendPollRequest(task_uuid, poll_count)
                 completed_results = self._processVideoPollingResponse(responses)
@@ -1509,7 +1508,7 @@ class RunwareBase:
                     raise RunwareAPIError({"message": f"Unexpected polling response at poll {poll_count}"})
 
             except Exception as e:
-                if poll_count >= max_polls - 1:
+                if poll_count >= MAX_POLLS_VIDEO_GENERATION - 1:
                     raise e
 
             await delay(3)
