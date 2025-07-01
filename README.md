@@ -476,7 +476,6 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
-This example demonstrates how to configure and use a ControlNet to enhance the image inference process.
 
 
 ### Model Upload
