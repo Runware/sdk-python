@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import uuid
+from asyncio import gather
 from dataclasses import asdict
 from typing import List, Optional, Union, Callable, Any, Dict
 
@@ -1369,11 +1370,8 @@ class RunwareBase:
             raise RunwareAPIError({"message": str(e)})
 
     async def videoInference(self, requestVideo: IVideoInference) -> List[IVideo]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(lambda: self._requestVideo(requestVideo))
-        except Exception as e:
-            raise e
+        await self.ensureConnection()
+        return await asyncRetry(lambda: self._requestVideo(requestVideo))
 
     async def _requestVideo(self, requestVideo: IVideoInference) -> List[IVideo]:
         await self._processVideoImages(requestVideo)
@@ -1383,15 +1381,37 @@ class RunwareBase:
         return await self._handleInitialVideoResponse(requestVideo.taskUUID, requestVideo.numberResults)
 
     async def _processVideoImages(self, requestVideo: IVideoInference) -> None:
+        frame_tasks = []
+        reference_tasks = []
+
         if requestVideo.frameImages:
+            frame_tasks = [
+                process_image(frame_item.inputImage)
+                for frame_item in requestVideo.frameImages
+                if isinstance(frame_item, IFrameImage)
+            ]
+
+        if requestVideo.referenceImages:
+            reference_tasks = [
+                process_image(reference_item)
+                for reference_item in requestVideo.referenceImages
+            ]
+
+        frame_results = await gather(*frame_tasks) if frame_tasks else []
+        reference_results = await gather(*reference_tasks) if reference_tasks else []
+
+        if requestVideo.frameImages and frame_results:
             processed_frame_images = []
+            result_index = 0
             for frame_item in requestVideo.frameImages:
                 if isinstance(frame_item, IFrameImage):
-                    frame_item.inputImages = await process_image(frame_item.inputImage)
-                    processed_frame_images.append(frame_item)
+                    frame_item.inputImages = frame_results[result_index]
+                    result_index += 1
+                processed_frame_images.append(frame_item)
             requestVideo.frameImages = processed_frame_images
-        if requestVideo.referenceImages:
-            requestVideo.referenceImages = await process_image(requestVideo.referenceImages)
+
+        if requestVideo.referenceImages and reference_results:
+            requestVideo.referenceImages = reference_results
 
     def _buildVideoRequest(self, requestVideo: IVideoInference) -> Dict[str, Any]:
         request_object = {
