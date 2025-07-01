@@ -1495,7 +1495,7 @@ class RunwareBase:
             return instantiateDataclassList(IVideo, initial_response)
 
     async def _pollVideoResults(self, task_uuid: str, number_results: int) -> List[IVideo]:
-        max_polls = 120
+        max_polls = 240
 
         for poll_count in range(max_polls):
             try:
@@ -1512,7 +1512,7 @@ class RunwareBase:
                 if poll_count >= max_polls - 1:
                     raise e
 
-            await delay(5)
+            await delay(3)
 
         raise RunwareAPIError({"message": "Video generation timed out"})
 
