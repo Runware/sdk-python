@@ -11,7 +11,7 @@ async def main():
     await runware.connect()
 
     request = IVideoInference(
-        positivePrompt="[Push in, Follow]A stylish woman walks down a Tokyo street filled with warm glowing neon and animated city signage. She wears a black leather jacket, a long red dress, and black boots, and carries a black purse.[Pan left] The street opens into a small plaza where street vendors sell steaming food under colorful awnings.",
+        positivePrompt="[Push in, Follow] A stylish woman walks down a Tokyo street filled with warm glowing neon and animated city signage. She wears a black leather jacket, a long red dress, and black boots, and carries a black purse. [Pan left] The street opens into a small plaza where street vendors sell steaming food under colorful awnings.",
         model="minimax:1@1",
         width=1366,  # Comment this to use i2v
         height=768,  # Comment this to use i2v
