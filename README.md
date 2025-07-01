@@ -432,8 +432,7 @@ This example demonstrates how to configure and use a ControlNet to enhance the i
 
 ### Inferencing Video Models
 
-To inference Video Generation Models in the Runware SDK, you can use a class `IVideoInference`. Almost every video model support its own providerSettings: `IMinimaxProviderSettings`, `IBytedanceProviderSettings`, `IGoogleProviderSettings`, `IKlingAIProviderSettings`.
-More examples are in examples/video
+To inference Video Generation Models in the Runware SDK, you can use a class `IVideoInference`. Almost every video model support its own providerSettings: `IMinimaxProviderSettings`, `IBytedanceProviderSettings`, `IGoogleProviderSettings`, `IKlingAIProviderSettings`. More examples can be found in examples/video.
 
 Here's the example of i2v Veo3:  
 
