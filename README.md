@@ -430,6 +430,56 @@ async def main() -> None:
 This example demonstrates how to configure and use a ControlNet to enhance the image inference process.
 
 
+### Inferencing Video Models
+
+To inference Video Generation Models in the Runware SDK, you can use a class `IVideoInference`. Almost every video model support its own providerSettings: `IMinimaxProviderSettings`, `IBytedanceProviderSettings`, `IGoogleProviderSettings`, `IKlingAIProviderSettings`.
+More examples are in examples/video
+
+Here's the example of i2v Veo3:  
+
+```python
+import asyncio
+from runware import Runware, IVideoInference, IGoogleProviderSettings, IFrameImage
+
+
+async def main():
+    runware = Runware(
+        api_key=RUNWARE_API_KEY,
+    )
+    await runware.connect()
+
+    request = IVideoInference(
+        positivePrompt="spinning galaxy",
+        model="google:3@0",
+        width=1280,
+        height=720,
+        numberResults=1,
+        seed=10,
+        includeCost=True,
+        frameImages=[ # Comment this to use t2v
+            IFrameImage(
+                inputImage="https://github.com/adilentiq/test-images/blob/main/common/image_15_mb.jpg?raw=true",
+            ),
+        ],
+        providerSettings=IGoogleProviderSettings(  # Needs only for veo3
+            generateAudio=True,
+            enhancePrompt=True
+        )
+    )
+    videos = await runware.videoInference(requestVideo=request)
+    for video in videos:
+        print(f"Video URL: {video.videoURL}")
+        print(f"Cost: {video.cost}")
+        print(f"Seed: {video.seed}")
+        print(f"Status: {video.status}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+This example demonstrates how to configure and use a ControlNet to enhance the image inference process.
+
+
 ### Model Upload
 
 To upload model using the Runware API, you can use the `uploadModel` method of the `Runware` class. Here are examples:
@@ -534,7 +584,7 @@ There are two ways to remove the background from an image.
 > **Note:** When using the `rgba` parameter, the final `a` value is a `float` between `0.0` and `1.0`, but a value of `1-255` will be internally scaled down to the correct float range.
 
 ```python
-from runware import Runware, RunwareAPIError,IImage, IImageBackgroundRemoval, IBackgroundRemovalSettings
+from runware import Runware, RunwareAPIError, IImage, IImageBackgroundRemoval, IBackgroundRemovalSettings
 import asyncio
 import os
 from dotenv import load_dotenv
@@ -590,7 +640,7 @@ asyncio.run(main())
 
 ```python
 
-from runware import Runware, RunwareAPIError,IImage, IImageBackgroundRemoval
+from runware import Runware, RunwareAPIError, IImage, IImageBackgroundRemoval
 import asyncio
 import os
 from dotenv import load_dotenv
