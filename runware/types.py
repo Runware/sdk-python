@@ -1,7 +1,6 @@
-from abc import ABC
+from abc import abstractmethod, ABC
 from enum import Enum
-from dataclasses import dataclass, field
-from math import cos
+from dataclasses import dataclass, field, asdict
 from typing import List, Union, Optional, Callable, Any, Dict, TypeVar, Literal
 
 
@@ -39,6 +38,8 @@ class ETaskType(Enum):
     AUTHENTICATION = "authentication"
     MODEL_UPLOAD = "modelUpload"
     MODEL_SEARCH = "modelSearch"
+    VIDEO_INFERENCE = "videoInference"
+    GET_RESPONSE = "getResponse"
 
 
 class EPreProcessorGroup(Enum):
@@ -580,6 +581,140 @@ class IUploadModelResponse:
     air: str
     taskUUID: str
     taskType: str
+
+
+@dataclass
+class IFrameImage:
+    inputImage: Union[str, File]
+    frame: Optional[Union[Literal["first", "last"], int]] = None
+
+
+class SerializableMixin:
+    def serialize(self) -> Dict[str, Any]:
+        return {k: v for k, v in asdict(self).items()
+                if v is not None and not k.startswith('_')}
+
+
+@dataclass
+class BaseProviderSettings(SerializableMixin, ABC):
+    @property
+    @abstractmethod
+    def provider_key(self) -> str:
+        pass
+
+    def to_request_dict(self) -> Dict[str, Any]:
+        data = self.serialize()
+        if data:
+            return {self.provider_key: data}
+        return {}
+
+
+@dataclass
+class IKlingCameraConfig(SerializableMixin):
+    horizontal: Optional[int] = None
+    vertical: Optional[int] = None
+    zoom: Optional[int] = None
+    roll: Optional[int] = None
+    tilt: Optional[int] = None
+    pan: Optional[int] = None
+
+
+@dataclass
+class IKlingCameraControl(SerializableMixin):
+    camera_type: Optional[str] = None
+    config: Optional[IKlingCameraConfig] = None
+
+    def serialize(self) -> Dict[str, Any]:
+        result = {}
+        if self.camera_type:
+            result["type"] = self.camera_type
+        if self.config:
+            config_data = self.config.serialize()
+            if config_data:
+                result["config"] = config_data
+        return result
+
+
+@dataclass
+class IGoogleProviderSettings(BaseProviderSettings):
+    generateAudio: Optional[bool] = None
+    enhancePrompt: Optional[bool] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "google"
+
+
+@dataclass
+class IMinimaxProviderSettings(BaseProviderSettings):
+    promptOptimizer: Optional[bool] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "minimax"
+
+
+@dataclass
+class IBytedanceProviderSettings(BaseProviderSettings):
+    cameraFixed: Optional[bool] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "bytedance"
+
+
+@dataclass
+class IKlingAIProviderSettings(BaseProviderSettings):
+    cameraControl: Optional[IKlingCameraControl] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "klingai"
+
+    def serialize(self) -> Dict[str, Any]:
+        result = {}
+        if self.cameraControl:
+            camera_control_data = self.cameraControl.serialize()
+            if camera_control_data:
+                result["cameraControl"] = camera_control_data
+        return result
+
+
+VideoProviderSettings = IKlingAIProviderSettings | IGoogleProviderSettings | IMinimaxProviderSettings | IBytedanceProviderSettings
+
+@dataclass
+class IVideoInference:
+    model: str
+    positivePrompt: str
+    duration: float | None = None
+    width: int | None = None
+    height: int | None = None
+    deliveryMethod: str = "async"
+    taskUUID: Optional[str] = None
+    outputType: Optional[IOutputType] = None
+    outputFormat: Optional[Literal["MP4", "WEBM"]] = None
+    outputQuality: Optional[int] = None
+    uploadEndpoint: Optional[str] = None
+    includeCost: Optional[bool] = None
+    negativePrompt: Optional[str] = None
+    frameImages: Optional[List[Union[IFrameImage, str]]] = field(default_factory=list)
+    referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
+    fps: Optional[int] = None
+    steps: Optional[int] = None
+    seed: Optional[int] = None
+    CFGScale: Optional[float] = None
+    numberResults: Optional[int] = 1
+    providerSettings: Optional[VideoProviderSettings] = None
+
+@dataclass
+class IVideo:
+    taskType: str
+    taskUUID: str
+    status: Optional[str] = None
+    videoUUID: Optional[str] = None
+    videoURL: Optional[str] = None
+    cost: Optional[float] = None
+    seed: Optional[int] = None
 
 
 # The GetWithPromiseCallBackType is defined using the Callable type from the typing module. It represents a function that takes a dictionary
