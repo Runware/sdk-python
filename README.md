@@ -460,7 +460,7 @@ async def main():
                 inputImage="https://github.com/adilentiq/test-images/blob/main/common/image_15_mb.jpg?raw=true",
             ),
         ],
-        providerSettings=IGoogleProviderSettings(  # Needs only for veo3
+        providerSettings=IGoogleProviderSettings(
             generateAudio=True,
             enhancePrompt=True
         )
