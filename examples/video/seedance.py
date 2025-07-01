@@ -1,7 +1,7 @@
 import asyncio
 import os
 
-from runware import Runware, IVideoInference, IFrameImage
+from runware import Runware, IVideoInference, IFrameImage, IBytedanceProviderSettings
 
 
 async def main():
@@ -24,6 +24,9 @@ async def main():
         #         inputImage="https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/common/background.jpg",
         #     ),
         # ],
+        providerSettings=IBytedanceProviderSettings(
+            cameraFixed=False
+        )
     )
 
     videos = await runware.videoInference(requestVideo=request)

@@ -1433,31 +1433,9 @@ class RunwareBase:
     def _addProviderSettings(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
         if not requestVideo.providerSettings:
             return
-        provider_settings = {}
-        if isinstance(requestVideo.providerSettings, IGoogleProviderSettings):
-            provider_settings["google"] = {k: v for k, v in asdict(requestVideo.providerSettings).items() if v is not None}
-        elif isinstance(requestVideo.providerSettings, IKlingAIProviderSettings):
-            s = requestVideo.providerSettings
-            klingai_settings = {}
-            if s.cameraControl:
-                camera_control = {}
-                if s.cameraControl.camera_type:
-                    camera_control["type"] = s.cameraControl.camera_type
-                if s.cameraControl.config:
-                    config = {
-                        f: getattr(s.cameraControl.config, f)
-                        for f in ["horizontal", "vertical", "zoom", "roll", "tilt", "pan"]
-                        if getattr(s.cameraControl.config, f) is not None
-                    }
-                    if config:
-                        camera_control["config"] = config
-                if camera_control:
-                    klingai_settings["cameraControl"] = camera_control
-            if klingai_settings:
-                provider_settings["klingai"] = klingai_settings
-
-        if provider_settings:
-            request_object["providerSettings"] = provider_settings
+        provider_dict = requestVideo.providerSettings.to_request_dict()
+        if provider_dict:
+            request_object["providerSettings"] = provider_dict
 
     async def _handleInitialVideoResponse(self, task_uuid: str, number_results: int) -> List[IVideo]:
         lis = self.globalListener(taskUUID=task_uuid)

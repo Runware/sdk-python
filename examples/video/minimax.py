@@ -1,7 +1,7 @@
 import asyncio
 import os
 
-from runware import Runware, IVideoInference, IGoogleProviderSettings, IFrameImage
+from runware import Runware, IVideoInference, IFrameImage, IMinimaxProviderSettings
 
 
 async def main():
@@ -24,6 +24,9 @@ async def main():
         #         inputImage= "https://raw.githubusercontent.com/adilentiq/test-images/refs/heads/main/video_inference/woman_city.png",
         #     ),
         # ]
+        providerSettings=IMinimaxProviderSettings(
+            promptOptimizer=True
+        )
     )
 
     videos = await runware.videoInference(requestVideo=request)
