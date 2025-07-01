@@ -1395,7 +1395,7 @@ class RunwareBase:
 
     def _buildVideoRequest(self, requestVideo: IVideoInference) -> Dict[str, Any]:
         request_object = {
-            "deliveryMethod": "async",
+            "deliveryMethod": requestVideo.deliveryMethod,
             "taskType": ETaskType.VIDEO_INFERENCE.value,
             "taskUUID": requestVideo.taskUUID,
             "model": requestVideo.model,
