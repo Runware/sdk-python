@@ -680,7 +680,31 @@ class IKlingAIProviderSettings(BaseProviderSettings):
         return result
 
 
-VideoProviderSettings = IKlingAIProviderSettings | IGoogleProviderSettings | IMinimaxProviderSettings | IBytedanceProviderSettings
+@dataclass
+class IPixverseProviderSettings(BaseProviderSettings):
+    effect: Optional[str] = None
+    cameraMovement: Optional[str] = None
+    style: Optional[str] = None
+    motionMode: Optional[str] = None
+    watermark: Optional[bool] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "pixverse"
+
+
+@dataclass
+class IViduProviderSettings(BaseProviderSettings):
+    bgm: Optional[bool] = None
+    style: Optional[str] = None
+    movementAmplitude: Optional[str] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "vidu"
+
+
+VideoProviderSettings = IKlingAIProviderSettings | IGoogleProviderSettings | IMinimaxProviderSettings | IBytedanceProviderSettings | IPixverseProviderSettings | IViduProviderSettings
 
 @dataclass
 class IVideoInference:
