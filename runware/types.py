@@ -687,6 +687,8 @@ class IPixverseProviderSettings(BaseProviderSettings):
     style: Optional[str] = None
     motionMode: Optional[str] = None
     watermark: Optional[bool] = None
+    soundEffectSwitch: Optional[bool] = None
+    soundEffectContent: Optional[str] = None
 
     @property
     def provider_key(self) -> str:
