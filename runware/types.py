@@ -1,7 +1,7 @@
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
+from dataclasses import asdict, dataclass, field
 from enum import Enum
-from dataclasses import dataclass, field, asdict
-from typing import List, Union, Optional, Callable, Any, Dict, TypeVar, Literal
+from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
 
 class Environment(Enum):
@@ -408,7 +408,7 @@ class IImageInference:
     checkNsfw: Optional[bool] = None
     negativePrompt: Optional[str] = None
     seedImage: Optional[Union[File, str]] = None
-    referenceImages: Optional[Union[File, str]] = None
+    referenceImages: Optional[Union[File, str, list]] = None
     maskImage: Optional[Union[File, str]] = None
     strength: Optional[float] = None
     height: Optional[int] = None
@@ -435,7 +435,6 @@ class IImageInference:
     outpaint: Optional[IOutpaint] = None
     instantID: Optional[IInstantID] = None
     ipAdapters: Optional[List[IIpAdapter]] = field(default_factory=list)
-    referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
     acePlusPlus: Optional[IAcePlusPlus] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
 
@@ -591,8 +590,11 @@ class IFrameImage:
 
 class SerializableMixin:
     def serialize(self) -> Dict[str, Any]:
-        return {k: v for k, v in asdict(self).items()
-                if v is not None and not k.startswith('_')}
+        return {
+            k: v
+            for k, v in asdict(self).items()
+            if v is not None and not k.startswith("_")
+        }
 
 
 @dataclass
@@ -686,7 +688,6 @@ class IPixverseProviderSettings(BaseProviderSettings):
     cameraMovement: Optional[str] = None
     style: Optional[str] = None
     motionMode: Optional[str] = None
-    watermark: Optional[bool] = None
     soundEffectSwitch: Optional[bool] = None
     soundEffectContent: Optional[str] = None
 
@@ -706,7 +707,15 @@ class IViduProviderSettings(BaseProviderSettings):
         return "vidu"
 
 
-VideoProviderSettings = IKlingAIProviderSettings | IGoogleProviderSettings | IMinimaxProviderSettings | IBytedanceProviderSettings | IPixverseProviderSettings | IViduProviderSettings
+VideoProviderSettings = (
+    IKlingAIProviderSettings
+    | IGoogleProviderSettings
+    | IMinimaxProviderSettings
+    | IBytedanceProviderSettings
+    | IPixverseProviderSettings
+    | IViduProviderSettings
+)
+
 
 @dataclass
 class IVideoInference:
@@ -732,6 +741,7 @@ class IVideoInference:
     numberResults: Optional[int] = 1
     providerSettings: Optional[VideoProviderSettings] = None
 
+
 @dataclass
 class IVideo:
     taskType: str
@@ -741,136 +751,3 @@ class IVideo:
     videoURL: Optional[str] = None
     cost: Optional[float] = None
     seed: Optional[int] = None
-
-
-# The GetWithPromiseCallBackType is defined using the Callable type from the typing module. It represents a function that takes a dictionary
-# with specific keys and returns either a boolean or None.
-# The dictionary should have the following keys:
-# resolve: A function that takes a value of any type and returns None.
-# reject: A function that takes a value of any type and returns None.
-# intervalId: A value of any type representing the interval ID.
-# You can use these types in your Python code to define variables, parameters, or return types that match the corresponding TypeScript types.
-#
-# def on_message(event: Any):
-#     # Handle WebSocket message event
-#     pass
-#
-# websocket = ReconnectingWebsocketProps(websocket_object)
-# websocket.add_event_listener("message", on_message, {})
-#
-# uploaded_image = UploadImageType("abc123", "image.png", "task123")
-#
-# def get_with_promise(callback_data: Dict[str, Union[Callable[[Any], None], Any]]) -> Union[bool, None]:
-#     # Implement the callback function logic here
-#     pass
-
-
-GetWithPromiseCallBackType = Callable[
-    [Dict[str, Union[Callable[[Any], None], Any]]], Union[bool, None]
-]
-
-
-# The ListenerType class is defined to represent the structure of a listener.
-# The key parameter is a string that represents a unique identifier for the listener.
-# The listener parameter is a callable function that takes a single argument msg of type Any and returns None.
-# It represents the function to be called when the corresponding event occurs.
-# The group_key parameter is an optional string that represents a group identifier for the listener. It allows grouping listeners together based on a common key.
-# You can create instances of ListenerType by providing the required parameters:
-#
-# def on_message(msg: Any):
-#     # Handle the message
-#     print(msg)
-#
-# listener = ListenerType("message_listener", on_message, group_key="message_group")
-
-# In this example, we define a function on_message that takes a single argument msg and handles the received message.
-# We then create an instance of ListenerType called listener by providing the key "message_listener",
-# the on_message function as the listener, and an optional group key "message_group".
-# You can store instances of ListenerType in a list or dictionary to manage multiple listeners in your application.
-
-# listeners = [
-#     ListenerType("listener1", on_message1),
-#     ListenerType("listener2", on_message2, group_key="group1"),
-#     ListenerType("listener3", on_message3, group_key="group1"),
-# ]
-
-
-class ListenerType:
-    def __init__(
-        self,
-        key: str,
-        listener: Callable[[Any], None],
-        group_key: Optional[str] = None,
-        debug_message: Optional[str] = None,
-    ):
-        """
-        Initialize a new ListenerType instance.
-
-        :param key: str, a unique identifier for the listener.
-        :param listener: Callable[[Any], None], the function to be called when the listener is triggered.
-        :param group_key: Optional[str], an optional grouping key that can be used to categorize listeners.
-        """
-        self.key = key
-        self.listener = listener
-        self.group_key = group_key
-        self.debug_message = debug_message
-
-    def __str__(self):
-        return f"ListenerType(key={self.key}, listener={self.listener}, group_key={self.group_key}, debug_message={self.debug_message})"
-
-    def __repr__(self):
-        return self.__str__()
-
-
-T = TypeVar("T")
-Keys = TypeVar("Keys")
-
-
-class RequireAtLeastOne:
-    def __init__(self, data: Dict[str, Any], required_keys: Union[str, Keys]):
-        if not isinstance(data, dict):
-            raise TypeError("data must be a dictionary")
-
-        self.data = data
-        self.required_keys = required_keys
-
-        if not isinstance(required_keys, (list, tuple)):
-            required_keys = [required_keys]
-
-        missing_keys = [key for key in required_keys if key not in data]
-        if len(missing_keys) == len(required_keys):
-            raise ValueError(
-                f"At least one of the required keys must be present: {', '.join(required_keys)}"
-            )
-
-    def __getitem__(self, key: str):
-        return self.data[key]
-
-    def __setitem__(self, key: str, value: Any):
-        self.data[key] = value
-
-    def __delitem__(self, key: str):
-        del self.data[key]
-
-    def __contains__(self, key: str):
-        return key in self.data
-
-    def __len__(self):
-        return len(self.data)
-
-    def __iter__(self):
-        return iter(self.data)
-
-
-class RequireOnlyOne(RequireAtLeastOne):
-    def __init__(self, data: Dict[str, Any], required_keys: Union[str, Keys]):
-        super().__init__(data, required_keys)
-
-        if not isinstance(required_keys, (list, tuple)):
-            required_keys = [required_keys]
-
-        provided_keys = [key for key in required_keys if key in data]
-        if len(provided_keys) > 1:
-            raise ValueError(
-                f"Only one key can be provided: {', '.join(provided_keys)}"
-            )
