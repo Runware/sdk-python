@@ -697,3 +697,4 @@ class RunwareClient:
 
 # Backward compatibility alias
 Runware = RunwareClient
+RunwareServer = RunwareClient  # lol
