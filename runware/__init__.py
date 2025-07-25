@@ -16,6 +16,7 @@ from .exceptions import (
     RunwareServerError,
     RunwareTimeoutError,
     RunwareValidationError,
+    RunwareAPIError,
 )
 from .logging_config import (
     configure_component_logging,
@@ -108,6 +109,7 @@ __all__ = [
     "RunwareServerError",
     "RunwareResourceError",
     "RunwareParseError",
+    "RunwareAPIError",
     # Operation system
     "BaseOperation",
     "OperationManager",
