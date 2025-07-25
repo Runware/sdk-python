@@ -1,4 +1,4 @@
-from .client import Runware, RunwareClient
+from .client import Runware, RunwareClient, RunwareServer
 from .core import (
     Message,
     MessageType,
@@ -88,6 +88,7 @@ __all__ = [
     # Core client classes
     "Runware",
     "RunwareClient",
+    "RunwareServer",
     # Core types and enums
     "OperationStatus",
     "OperationContext",
