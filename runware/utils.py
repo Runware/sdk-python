@@ -2,6 +2,7 @@ import asyncio
 import base64
 import os
 import re
+import time
 from urllib.parse import urlparse
 
 import aiofiles
@@ -623,28 +624,24 @@ async def getIntervalWithPromise(
 ) -> Any:
     logger = logging.getLogger(__name__)
 
-    start_time = asyncio.get_event_loop().time()
+    start_time = time.perf_counter()
 
     while True:
         # Check timeout
-        if (asyncio.get_event_loop().time() - start_time) * 1000 > timeOutDuration:
+        if (time.perf_counter() - start_time) * 1000 > timeOutDuration:
             if shouldThrowError:
                 raise Exception(f"Message could not be received for {debugKey}")
             return None
 
         # Create a future for this iteration
-        future = asyncio.get_event_loop().create_future()
+        future = asyncio.ensure_future(asyncio.get_event_loop().create_future())
 
         # Call the callback
         try:
             result = callback(future.set_result, future.set_exception, None)
             if result:
                 # If callback returned True, wait for the future
-                try:
-                    return await future
-                except Exception:
-                    # If future was set with exception, re-raise it
-                    raise
+                return await future
         except Exception as e:
             logger.exception(f"Error in callback for {debugKey}: {str(e)}")
             raise

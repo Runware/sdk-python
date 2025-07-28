@@ -33,7 +33,6 @@ async def main():
             effect="boom drop",
             style="anime",
             motionMode="normal",
-            watermark=False,
         )
     )
 
