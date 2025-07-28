@@ -24,11 +24,13 @@ from .logging_config import configure_logging
 
 class RunwareServer(RunwareBase):
     def __init__(
-        self,
-        api_key: str,
-        url: str = BASE_RUNWARE_URLS[Environment.PRODUCTION],
-        log_level=logging.CRITICAL,
-        timeout: int = TIMEOUT_DURATION,
+            self,
+            api_key: str,
+            url: str = BASE_RUNWARE_URLS[Environment.PRODUCTION],
+            log_level=logging.CRITICAL,
+            timeout: int = TIMEOUT_DURATION,
+            max_retries: int = 2,
+            retry_delay: int = 1,
     ):
         super().__init__(api_key=api_key, url=url, timeout=timeout)
         self._instantiated: bool = False
@@ -41,6 +43,9 @@ class RunwareServer(RunwareBase):
         self._message_handler_task: Optional[asyncio.Task] = None
         self._last_pong_time: float = 0.0
         self._is_shutting_down: bool = False
+        self._max_retries: int = max_retries
+        self._retry_delay: int = retry_delay
+        self._send_lock = asyncio.Lock()
 
         # Configure logging
         configure_logging(log_level)
@@ -49,7 +54,7 @@ class RunwareServer(RunwareBase):
 
     async def connect(self):
         self.logger.info("Connecting to Runware server from server")
-
+        self._last_pong_time = asyncio.get_event_loop().time()
         try:
             self._ws = await websockets.connect(self._url)
             # update close_timeout so that we end the script sooner for inference examples
@@ -148,6 +153,37 @@ class RunwareServer(RunwareBase):
         except websockets.exceptions.ConnectionClosedError:
             await self.handleClose()
 
+    def connected(self) -> bool:
+        return self._ws is not None and self._ws.state is State.OPEN
+
+    async def disconnect(self):
+        self.logger.info("Disconnecting from Runware server")
+        self._is_shutting_down = True
+
+        # Cancel all tasks
+        tasks = [
+            self._reconnecting_task,
+            self._message_handler_task,
+            getattr(self, '_heartbeat_task', None),
+            self._pingTimeout
+        ]
+
+        for task in tasks:
+            if task and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+        # Close websocket
+        if self._ws and self._ws.state is State.OPEN:
+            await self._ws.close()
+
+        self._ws = None
+        self._connectionSessionUUID = None
+        self._invalidAPIkey = None
+
     async def on_message(self, ws, message):
         if not message:
             return
@@ -158,14 +194,14 @@ class RunwareServer(RunwareBase):
             self.logger.error(f"Failed to parse JSON message:", exc_info=e)
             return
 
-        for lis in self._listeners:
+        for lis in self._listeners[:]:
             try:
                 result = lis.listener(m)
+                if result:
+                    return
             except Exception as e:
                 self.logger.error(f"Error in listener {lis.key}:", exc_info=e)
                 continue
-            if result:
-                return
 
     async def _handle_messages(self):
         try:
@@ -191,11 +227,25 @@ class RunwareServer(RunwareBase):
 
     async def send(self, msg: Dict[str, Any]):
         self.logger.debug(f"Sending message: {msg}")
-        if self._ws and self._ws.state is State.OPEN and not self._is_shutting_down:
-            await self._ws.send(json.dumps(msg))
+
+        async with self._send_lock:
+            if self._ws and self._ws.state is State.OPEN and not self._is_shutting_down:
+                try:
+                    await self._ws.send(json.dumps(msg))
+                except websockets.exceptions.ConnectionClosed:
+                    self.logger.error("WebSocket connection closed while sending")
+                    await self.handleClose()
+                except Exception as e:
+                    self.logger.error(f"Error sending message: {e}")
+                    raise
 
     def _get_task_by_name(self, name):
-        tasks = asyncio.all_tasks()
+        try:
+            loop = asyncio.get_running_loop()
+            tasks = asyncio.all_tasks(loop)
+        except RuntimeError:
+            tasks = asyncio.all_tasks()
+
         for task in tasks:
             if task.get_name() == name:
                 return task
@@ -271,8 +321,11 @@ class RunwareServer(RunwareBase):
             )
 
     async def heartBeat(self):
+        if self._last_pong_time == 0.0:
+            self._last_pong_time = asyncio.get_event_loop().time()
+
         while not self._is_shutting_down:
-            if self.isWebsocketReadyState():
+            if self._ws and self._ws.state is State.OPEN:
                 self.logger.debug("Sending ping")
                 try:
                     await self.send([{"taskType": "ping", "ping": True}])

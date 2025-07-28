@@ -615,133 +615,42 @@ def createImageToTextFromResponse(response: dict) -> IImageToText:
 
 
 async def getIntervalWithPromise(
-    callback: GetWithPromiseCallBackType,
-    debugKey: str = "debugKey",
-    timeOutDuration: int = TIMEOUT_DURATION,  # in milliseconds
-    shouldThrowError: bool = True,
-    pollingInterval: int = 100,  # in milliseconds
+        callback: GetWithPromiseCallBackType,
+        debugKey: str = "debugKey",
+        timeOutDuration: int = TIMEOUT_DURATION,
+        shouldThrowError: bool = True,
+        pollingInterval: int = 350,
 ) -> Any:
-    """
-    Set up an interval to repeatedly call a callback function until a condition is met or a timeout occurs.
-
-    :param callback: A function that is called repeatedly within the interval. It receives an object with
-                     `resolve`, `reject`, and `intervalId` properties, allowing the callback to control
-                     the promise's resolution or rejection and clear the interval if needed.
-                     The callback should return a boolean value indicating whether to clear the interval.
-    :param debugKey: A string used for debugging purposes. Default is "debugKey".
-    :param timeOutDuration: The duration in milliseconds after which the promise will be rejected if the
-                            callback hasn't resolved or rejected it. Default is TIMEOUT_DURATION.
-    :param shouldThrowError: A boolean indicating whether to reject the promise with an error message if
-                             the timeout is reached. Default is True.
-    :param pollingInterval: The interval in milliseconds at which the callback is invoked. Default is 100.
-    :return: The result of the callback function or the rejection reason if the timeout is reached.
-
-    Example:
-        async def upload_image(task_uuid):
-            image = await getIntervalWithPromise(
-                lambda params: params["resolve"]("uploadedImage") if "uploadedImage" in globals() else None,
-                debugKey="upload-image",
-                pollingInterval=200,
-            )
-            return image
-
-        uploaded_image = await upload_image("task123")
-        print(uploaded_image)  # Output: "uploadedImage"
-    """
     logger = logging.getLogger(__name__)
 
-    loop = asyncio.get_running_loop()
-    future = loop.create_future()
-    intervalHandle = None
+    start_time = asyncio.get_event_loop().time()
 
-    async def check_callback():
-        nonlocal intervalHandle, future
+    while True:
+        # Check timeout
+        if (asyncio.get_event_loop().time() - start_time) * 1000 > timeOutDuration:
+            if shouldThrowError:
+                raise Exception(f"Message could not be received for {debugKey}")
+            return None
+
+        # Create a future for this iteration
+        future = asyncio.get_event_loop().create_future()
+
+        # Call the callback
         try:
-            if not future.done():
-                # logger.debug(f"Checking callback for {debugKey}")
-                # logger.debug(f"Future done: {future.done()}")
-                # logger.debug(f"Future callback: {callback}")
-                # logger.debug(f"Future result: {future.result}")
-
-                # logger.debug(f"Future exception: {future.exception}")
-                # logger.debug(f"callback: {callback}")
-
-                result = callback(
-                    future.set_result, future.set_exception, intervalHandle
-                )
-
-                if result:
-                    if intervalHandle:
-                        intervalHandle.cancel()
-                        logger.debug(f"Interval cleared for {debugKey}")
-                else:
-                    # TODO: Find a better way than polling, as it's not very efficient.
-                    # Consider using asyncio.Event or asyncio.Condition triggered by an incoming message
-                    # as the state won't change unless I have a new message from the service
-                    intervalHandle = loop.call_later(
-                        pollingInterval / 1000,
-                        lambda: (
-                            # logger.debug("Creating task for check_callback"),
-                            asyncio.create_task(check_callback()),
-                        )[-1],
-                    )
-            else:
-                logger.debug(
-                    f"Future already done for {debugKey}, interval not rescheduled"
-                )
+            result = callback(future.set_result, future.set_exception, None)
+            if result:
+                # If callback returned True, wait for the future
+                try:
+                    return await future
+                except Exception:
+                    # If future was set with exception, re-raise it
+                    raise
         except Exception as e:
-            future.set_exception(e)
-            logger.exception(f"Error in check_callback 2 for {debugKey}: {str(e)}")
+            logger.exception(f"Error in callback for {debugKey}: {str(e)}")
+            raise
 
-    await check_callback()
-    # intervalHandle = loop.call_later(
-    #    pollingInterval / 1000,
-    #    lambda: (
-    #        logger.debug("Creating task for check_callback"),
-    #        asyncio.create_task(check_callback()),
-    #    )[
-    #        -1
-    #    ],  # Return the task itself)
-    # )
-
-    async def timeout_handler():
-        nonlocal future, intervalHandle
-        try:
-            if not future.done():
-                if shouldThrowError:
-                    future.set_exception(
-                        Exception(f"Message could not be received for {debugKey}")
-                    )
-                    logger.error(f"Error: Message could not be received for {debugKey}")
-                else:
-                    future.set_result(None)
-                if intervalHandle:
-                    intervalHandle.cancel()
-                    logger.debug(f"Interval cleared due to timeout for {debugKey}")
-        except Exception as e:
-            future.set_exception(e)
-            logger.exception(f"Error in timeout_handler for {debugKey}: {str(e)}")
-
-    # Schedule the timeout handler
-    timeoutHandle = loop.call_later(
-        timeOutDuration / 1000,
-        lambda: (
-            logger.debug("Creating task for timeout_handler"),
-            asyncio.create_task(timeout_handler()),
-        )[-1],
-    )
-
-    try:
-        await future
-    finally:
-        if intervalHandle and not intervalHandle.cancelled():
-            intervalHandle.cancel()
-            logger.debug(f"Interval canceled for {debugKey}")
-        if timeoutHandle and not timeoutHandle.cancelled():
-            timeoutHandle.cancel()
-            logger.debug(f"Timeout canceled for {debugKey}")
-
-    return await future
+        # If callback didn't resolve, wait before next iteration
+        await asyncio.sleep(pollingInterval / 1000)
 
 
 def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
