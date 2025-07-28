@@ -625,29 +625,73 @@ async def getIntervalWithPromise(
     logger = logging.getLogger(__name__)
 
     start_time = time.perf_counter()
+    loop = asyncio.get_event_loop()
+    result_future = loop.create_future()
+    interval_handle = None
 
-    while True:
-        # Check timeout
-        if (time.perf_counter() - start_time) * 1000 > timeOutDuration:
-            if shouldThrowError:
-                raise Exception(f"Message could not be received for {debugKey}")
-            return None
+    async def polling_coroutine():
+        while not result_future.done():
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            if elapsed_ms > timeOutDuration:
+                if interval_handle:
+                    logger.debug(f"Interval cleared due to timeout for {debugKey}")
+                if shouldThrowError:
+                    raise Exception(f"Message could not be received for {debugKey}")
+                return None
 
-        # Create a future for this iteration
-        future = asyncio.ensure_future(asyncio.get_event_loop().create_future())
+            iteration_resolved = False
+            iteration_result = None
+            iteration_error = None
 
-        # Call the callback
-        try:
-            result = callback(future.set_result, future.set_exception, None)
-            if result:
-                # If callback returned True, wait for the future
-                return await future
-        except Exception as e:
-            logger.exception(f"Error in callback for {debugKey}: {str(e)}")
-            raise
+            def safe_resolve(value):
+                nonlocal iteration_resolved, iteration_result
+                if not iteration_resolved:
+                    iteration_resolved = True
+                    iteration_result = value
 
-        # If callback didn't resolve, wait before next iteration
-        await asyncio.sleep(pollingInterval / 1000)
+            def safe_reject(error):
+                nonlocal iteration_resolved, iteration_error
+                if not iteration_resolved:
+                    iteration_resolved = True
+                    iteration_error = error
+
+            try:
+                callback_returned = callback(safe_resolve, safe_reject, interval_handle)
+                if callback_returned and iteration_resolved:
+                    if iteration_error is not None:
+                        raise iteration_error
+                    return iteration_result
+
+            except Exception as e:
+                logger.exception(f"Error in callback for {debugKey}: {str(e)}")
+                raise
+
+            await asyncio.sleep(pollingInterval / 1000)
+
+    interval_handle = asyncio.ensure_future(polling_coroutine())
+
+    def handle_polling_done(task):
+        if not result_future.done():
+            if task.cancelled():
+                result_future.cancel()
+            else:
+                try:
+                    result = task.result()
+                    result_future.set_result(result)
+                except Exception as e:
+                    result_future.set_exception(e)
+
+    interval_handle.add_done_callback(handle_polling_done)
+
+    try:
+        return await result_future
+    finally:
+        if interval_handle and not interval_handle.done():
+            interval_handle.cancel()
+            try:
+                await interval_handle
+            except asyncio.CancelledError:
+                pass
 
 
 def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
