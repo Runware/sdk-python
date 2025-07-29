@@ -48,7 +48,6 @@ class RunwareServer(RunwareBase):
         self._is_shutting_down: bool = False
         self._max_retries: int = max_retries
         self._retry_delay: int = retry_delay
-        self._send_lock = asyncio.Lock()
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._tasks: Dict[str, asyncio.Task] = {}
 
@@ -246,16 +245,15 @@ class RunwareServer(RunwareBase):
 
         async def _send():
             try:
-                async with self._send_lock:
-                    if self._ws and self._ws.state is State.OPEN and not self._is_shutting_down:
-                        try:
-                            await self._ws.send(json.dumps(msg))
-                        except websockets.exceptions.ConnectionClosed:
-                            self.logger.error("WebSocket connection closed while sending")
-                            await self.handleClose()
-                        except Exception as e:
-                            self.logger.error(f"Error sending message: {e}")
-                            raise
+                if self._ws and self._ws.state is State.OPEN and not self._is_shutting_down:
+                    try:
+                        await self._ws.send(json.dumps(msg))
+                    except websockets.exceptions.ConnectionClosed:
+                        self.logger.error("WebSocket connection closed while sending")
+                        await self.handleClose()
+                    except Exception as e:
+                        self.logger.error(f"Error sending message: {e}")
+                        raise
             finally:
                 self._tasks.pop(task_key, None)
 
