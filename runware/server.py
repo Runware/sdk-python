@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 
 import websockets
 from websockets.protocol import State
@@ -238,16 +239,34 @@ class RunwareServer(RunwareBase):
     async def send(self, msg: Dict[str, Any]):
         self.logger.debug(f"Sending message: {msg}")
 
-        async with self._send_lock:
-            if self._ws and self._ws.state is State.OPEN and not self._is_shutting_down:
-                try:
-                    await self._ws.send(json.dumps(msg))
-                except websockets.exceptions.ConnectionClosed:
-                    self.logger.error("WebSocket connection closed while sending")
-                    await self.handleClose()
-                except Exception as e:
-                    self.logger.error(f"Error sending message: {e}")
-                    raise
+        if self._is_shutting_down:
+            raise RuntimeError("Cannot send message: connection is shutting down")
+
+        task_key = f"Task_Send_{uuid.uuid4()}"
+
+        async def _send():
+            try:
+                async with self._send_lock:
+                    if self._ws and self._ws.state is State.OPEN and not self._is_shutting_down:
+                        try:
+                            await self._ws.send(json.dumps(msg))
+                        except websockets.exceptions.ConnectionClosed:
+                            self.logger.error("WebSocket connection closed while sending")
+                            await self.handleClose()
+                        except Exception as e:
+                            self.logger.error(f"Error sending message: {e}")
+                            raise
+            finally:
+                self._tasks.pop(task_key, None)
+
+        send_task = asyncio.create_task(_send(), name=task_key)
+        self._tasks[task_key] = send_task
+
+        try:
+            await send_task
+        except asyncio.CancelledError:
+            self.logger.debug(f"Send operation {task_key} was cancelled")
+            raise
 
     def _get_task_by_name(self, name):
         return self._tasks.get(name)
