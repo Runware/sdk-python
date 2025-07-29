@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import logging
 import os
@@ -85,9 +86,13 @@ class RunwareBase:
         self._connectionSessionUUID: Optional[str] = None
         self._invalidAPIkey: Optional[str] = None
         self._sdkType: SdkType = SdkType.SERVER
+        self._messages_lock = asyncio.Lock()
+        self._images_lock = asyncio.Lock()
 
     def isWebsocketReadyState(self) -> bool:
-        return self._ws and self._ws.state is State.OPEN
+        if self._ws is None:
+            return False
+        return self._ws.state is State.OPEN
 
     def isAuthenticated(self):
         return self._connectionSessionUUID is not None
@@ -238,7 +243,7 @@ class RunwareBase:
 
         except Exception as e:
             if retry_count >= 2:
-                self.logger.error(f"Error in photoMaker request:", exc_info=e)
+                logger.error(f"Error in photoMaker request:", exc_info=e)
                 raise RunwareAPIError({"message": f"PhotoMaker failed after retries: {str(e)}"})
             else:
                 raise e
@@ -466,7 +471,7 @@ class RunwareBase:
             )
         except Exception as e:
             if retry_count >= 2:
-                self.logger.error(f"Error in requestImages:", exc_info=e)
+                logger.error(f"Error in requestImages:", exc_info=e)
                 raise RunwareAPIError({"message": f"Image inference failed after retries: {str(e)}"})
             else:
                 raise e
@@ -978,10 +983,9 @@ class RunwareBase:
                                 partial_images, None
                             )  # No error in this case
                     except Exception as e:
-                        print(
+                        logger.error(
                             f"Error occurred in user on_partial_images callback function: {e}"
                         )
-
             # Handle error messages
             elif isinstance(m.get("errors"), list):
                 errors = [
@@ -1047,31 +1051,31 @@ class RunwareBase:
         """
         logger.debug("Setting up global listener for taskUUID: %s", taskUUID)
 
-        def global_lis(m: Dict[str, Any]) -> None:
+        async def global_lis(m: Dict[str, Any]) -> None:
             logger.debug("Global listener message: %s", m)
             logger.debug("Global listener taskUUID: %s", taskUUID)
-            # logger.debug("Global listener taskKey: %s", taskKey)
 
-            if m.get("error"):
-                self._globalMessages[taskUUID] = m
-                return
+            async with self._messages_lock:
+                if m.get("error"):
+                    self._globalMessages[taskUUID] = m
+                    return
 
-            value = accessDeepObject(
-                taskUUID, m
-            )  # I think this is the taskType now, and it returns the content of 'data'
+                value = accessDeepObject(
+                    taskUUID, m
+                )
 
-            if isinstance(value, list):
-                for v in value:
-                    self._globalMessages[v["taskUUID"]] = self._globalMessages.get(
-                        v["taskUUID"], []
-                    ) + [v]
-                    logger.debug("Global messages v: %s", v)
-                    logger.debug(
-                        "self._globalMessages[v[taskUUID]]: %s",
-                        self._globalMessages[v["taskUUID"]],
-                    )
-            else:
-                self._globalMessages[value["taskUUID"]] = value
+                if isinstance(value, list):
+                    for v in value:
+                        self._globalMessages[v["taskUUID"]] = self._globalMessages.get(
+                            v["taskUUID"], []
+                        ) + [v]
+                        logger.debug("Global messages v: %s", v)
+                        logger.debug(
+                            "self._globalMessages[v[taskUUID]]: %s",
+                            self._globalMessages[v["taskUUID"]],
+                        )
+                else:
+                    self._globalMessages[value["taskUUID"]] = value
 
         def global_check(m):
             logger.debug("Global check message: %s", m)
@@ -1079,7 +1083,7 @@ class RunwareBase:
 
         logger.debug("Global Listener taskUUID: %s", taskUUID)
 
-        temp_listener = self.addListener(check=global_check, lis=global_lis)
+        temp_listener = self.addListener(check=global_check, lis=lambda m: asyncio.create_task(global_lis(m)))
         logger.debug("globalListener :: Temp listener: %s", temp_listener)
 
         return temp_listener

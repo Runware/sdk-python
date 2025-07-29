@@ -686,7 +686,6 @@ class IPixverseProviderSettings(BaseProviderSettings):
     cameraMovement: Optional[str] = None
     style: Optional[str] = None
     motionMode: Optional[str] = None
-    watermark: Optional[bool] = None
     soundEffectSwitch: Optional[bool] = None
     soundEffectContent: Optional[str] = None
 
