@@ -1,7 +1,6 @@
 import asyncio
 import os
 
-from click import style
 from dotenv import load_dotenv
 from runware import Runware, IImageInference, IOpenAIProviderSettings, RunwareAPIError
 
