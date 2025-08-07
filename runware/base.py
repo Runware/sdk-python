@@ -459,6 +459,11 @@ class RunwareBase:
 
             if requestImage.outputQuality:
                 request_object["outputQuality"] = requestImage.outputQuality
+
+            if requestImage.providerSettings:
+                provider_data = requestImage.providerSettings.to_request_dict()
+                request_object.update(provider_data)
+
             return await asyncRetry(
                 lambda: self._requestImages(
                     request_object=request_object,

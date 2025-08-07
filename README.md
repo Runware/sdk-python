@@ -429,6 +429,82 @@ async def main() -> None:
 ```
 This example demonstrates how to configure and use a ControlNet to enhance the image inference process.
 
+### Generating Images with OpenAI Models (DALL-E 2 & DALL-E 3)
+
+The Runware SDK supports OpenAI's DALL-E 2 and DALL-E 3 models for image generation. These models offer high-quality image generation with various configuration options.
+
+#### DALL-E 2
+
+```python
+from runware import Runware, IImageInference, IOpenAIProviderSettings
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    # DALL-E 2 configuration
+    provider_settings = IOpenAIProviderSettings(
+        quality="high",
+        background="transparent"  # Optional: for transparent backgrounds
+    )
+
+    request_image = IImageInference(
+        positivePrompt="A cute cartoon robot character",
+        model="openai:1@1",  # DALL-E 2 model identifier
+        width=1024,
+        height=1024,
+        numberResults=1,
+        outputFormat="PNG",
+        includeCost=True,
+        providerSettings=provider_settings
+    )
+
+    images = await runware.imageInference(requestImage=request_image)
+    for image in images:
+        print(f"Image URL: {image.imageURL}")
+```
+
+#### DALL-E 3
+
+```python
+from runware import Runware, IImageInference, IOpenAIProviderSettings
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    # DALL-E 3 with HD quality
+    provider_settings = IOpenAIProviderSettings(
+        quality="hd"  # Options: "hd" or "standard"
+    )
+
+    request_image = IImageInference(
+        positivePrompt="A futuristic city with flying cars, highly detailed",
+        model="openai:2@3",  # DALL-E 3 model identifier
+        width=1024,
+        height=1024,
+        numberResults=1,
+        outputFormat="PNG",
+        includeCost=True,
+        providerSettings=provider_settings
+    )
+
+    images = await runware.imageInference(requestImage=request_image)
+    for image in images:
+        print(f"Image URL: {image.imageURL}")
+```
+
+**OpenAI Provider Settings:**
+- `quality`: Image quality setting
+  - DALL-E 2: `"high"` (recommended)
+  - DALL-E 3: `"hd"` or `"standard"`
+- `background`: (DALL-E 2 only) Set to `"transparent"` for transparent backgrounds
+- `style`: (Optional) Additional style parameters
+
+**Model Identifiers:**
+- DALL-E 2: `"openai:1@1"`
+- DALL-E 3: `"openai:2@3"`
+
 
 ### Inferencing Video Models
 
