@@ -33,7 +33,7 @@ async def main() -> None:
     try:
         images = await runware.imageInference(requestImage=request_image_hd)
         for image in images:
-            print(f"Image URL (HD): {image.imageURL}")
+            print(f"Image URL (high): {image.imageURL}")
             if image.cost:
                 print(f"Cost: ${image.cost}")
     except RunwareAPIError as e:
