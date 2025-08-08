@@ -397,6 +397,37 @@ class IAdvancedFeatures:
     fluxKontext: Optional[IFluxKontext] = None
 
 
+class SerializableMixin:
+    def serialize(self) -> Dict[str, Any]:
+        return {k: v for k, v in asdict(self).items()
+                if v is not None and not k.startswith('_')}
+
+@dataclass
+class BaseProviderSettings(SerializableMixin, ABC):
+    @property
+    @abstractmethod
+    def provider_key(self) -> str:
+        pass
+
+    def to_request_dict(self) -> Dict[str, Any]:
+        data = self.serialize()
+        if data:
+            return {self.provider_key: data}
+        return {}
+
+@dataclass
+class IOpenAIProviderSettings(BaseProviderSettings):
+    quality: Optional[str] = None
+    background: Optional[str] = None
+    style: Optional[str] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "openai"
+
+ImageProviderSettings = IOpenAIProviderSettings
+
+
 @dataclass
 class IImageInference:
     positivePrompt: str
@@ -437,6 +468,7 @@ class IImageInference:
     ipAdapters: Optional[List[IIpAdapter]] = field(default_factory=list)
     referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
     acePlusPlus: Optional[IAcePlusPlus] = None
+    providerSettings: Optional[ImageProviderSettings] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
 
 
@@ -589,24 +621,8 @@ class IFrameImage:
     frame: Optional[Union[Literal["first", "last"], int]] = None
 
 
-class SerializableMixin:
-    def serialize(self) -> Dict[str, Any]:
-        return {k: v for k, v in asdict(self).items()
-                if v is not None and not k.startswith('_')}
 
 
-@dataclass
-class BaseProviderSettings(SerializableMixin, ABC):
-    @property
-    @abstractmethod
-    def provider_key(self) -> str:
-        pass
-
-    def to_request_dict(self) -> Dict[str, Any]:
-        data = self.serialize()
-        if data:
-            return {self.provider_key: data}
-        return {}
 
 
 @dataclass
