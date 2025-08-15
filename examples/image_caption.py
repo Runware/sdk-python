@@ -20,12 +20,21 @@ async def main() -> None:
     # The image requires for the seed image. It can be the UUID of previously generated image or an a file image.
     image_path = "retriever.jpg"
 
-    # With only mandatory parameters
+    # With only mandatory parameters (uses default model)
     request_image_to_text_payload = IImageCaption(inputImage=image_path)
-    # With all parameters
+    
+    # With specific model using AIR ID - option 1
+    # request_image_to_text_payload = IImageCaption(
+    #     inputImage=image_path,
+    #     includeCost=True,
+    #     model="runware:150@1",  # AIR ID for image captioning model version 1
+    # )
+    
+    #Alternative: With specific model using AIR ID - option 2
     request_image_to_text_payload = IImageCaption(
         inputImage=image_path,
         includeCost=True,
+        model="runware:150@2",  # AIR ID for image captioning model version 2
     )
 
     try:

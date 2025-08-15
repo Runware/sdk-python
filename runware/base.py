@@ -562,11 +562,14 @@ class RunwareBase:
             "taskType": ETaskType.IMAGE_CAPTION.value,
             "taskUUID": taskUUID,
             "inputImage": image_uploaded.imageUUID,
+            
         }
 
         # Add optional parameters if they are provided
         if requestImageToText.includeCost:
             task_params["includeCost"] = requestImageToText.includeCost
+        if requestImageToText.model:
+            task_params["model"] = requestImageToText.model
 
         # Send the task with all applicable parameters
         await self.send([task_params])

@@ -475,6 +475,7 @@ class IImageInference:
 class IImageCaption:
     inputImage: Optional[Union[File, str]] = None
     includeCost: bool = False
+    model: Optional[Union[int, str]] = None
 
 
 @dataclass
