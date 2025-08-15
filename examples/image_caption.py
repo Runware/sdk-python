@@ -2,7 +2,8 @@ import asyncio
 import os
 import logging
 from dotenv import load_dotenv
-from runware import Runware, IImageToText, IImageCaption, RunwareAPIError
+from runware import Runware, IImageToText, RunwareAPIError
+from runware.types import IImageCaption
 
 # Load environment variables from .env file
 load_dotenv()
@@ -17,24 +18,29 @@ async def main() -> None:
     # Connect to the Runware service
     await runware.connect()
 
-    # The image requires for the seed image. It can be the UUID of previously generated image or an a file image.
+    # The images for captioning. Can be UUIDs, URLs, base64, or file paths
     image_path = "retriever.jpg"
 
-    # With only mandatory parameters (uses default model)
-    request_image_to_text_payload = IImageCaption(inputImage=image_path)
-    
-    # With specific model using AIR ID - option 1
+    # Example 1: Using new inputImages parameter with multiple images and custom prompts
     # request_image_to_text_payload = IImageCaption(
-    #     inputImage=image_path,
+    #     inputImages=[image_path, "dalmatian.jpg"],  # Multiple images
+    #     prompts=["Describe this image in detail", "What breed is this dog?"],  # Custom prompts
     #     includeCost=True,
     #     model="runware:150@1",  # AIR ID for image captioning model version 1
     # )
     
-    #Alternative: With specific model using AIR ID - option 2
+    # Example 2: Using new inputImages parameter with single image and default prompt
+    # request_image_to_text_payload = IImageCaption(
+    #     inputImages=[image_path],  # Single image in array
+    #     includeCost=True,
+    #     model="runware:150@2",  # AIR ID for image captioning model version 2
+    # )
+    
+    # Example 3: Backward compatibility - using old inputImage parameter (mapped to inputImages[0])
     request_image_to_text_payload = IImageCaption(
-        inputImage=image_path,
+        inputImage=image_path,  # Old parameter for backward compatibility
         includeCost=True,
-        model="runware:150@2",  # AIR ID for image captioning model version 2
+        model="runware:150@1",
     )
 
     try:

@@ -473,7 +473,9 @@ class IImageInference:
 
 @dataclass
 class IImageCaption:
-    inputImage: Optional[Union[File, str]] = None
+    inputImages: List[Union[File, str]] = field(default_factory=list)
+    prompts: List[str] = field(default_factory=lambda: ["Describe this image in detail"])
+    inputImage: Optional[Union[File, str]] = None  # For backward compatibility
     includeCost: bool = False
     model: Optional[Union[int, str]] = None
 
