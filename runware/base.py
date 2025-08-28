@@ -550,12 +550,25 @@ class RunwareBase:
     async def _requestImageToText(
         self, requestImageToText: IImageCaption
     ) -> IImageToText:
-        inputImage = requestImageToText.inputImage
-
-        image_uploaded = await self.uploadImage(inputImage)
-
-        if not image_uploaded or not image_uploaded.imageUUID:
-            return None
+        # Handle backward compatibility: map inputImage to inputImages[0]
+        images_to_process = requestImageToText.inputImages.copy() if requestImageToText.inputImages else []
+        if requestImageToText.inputImage is not None:
+            if not images_to_process:
+                images_to_process = [requestImageToText.inputImage]
+            else:
+                images_to_process[0] = requestImageToText.inputImage  # inputImage takes precedence
+        
+        # Ensure we have at least one image
+        if not images_to_process:
+            raise ValueError("Either inputImage or inputImages must be provided")
+        
+        # Handle multiple images upload
+        uploaded_images = []
+        for image in images_to_process:
+            image_uploaded = await self.uploadImage(image)
+            if not image_uploaded or not image_uploaded.imageUUID:
+                return None
+            uploaded_images.append(image_uploaded.imageUUID)
 
         taskUUID = getUUID()
 
@@ -563,12 +576,16 @@ class RunwareBase:
         task_params = {
             "taskType": ETaskType.IMAGE_CAPTION.value,
             "taskUUID": taskUUID,
-            "inputImage": image_uploaded.imageUUID,
+            "inputImage": uploaded_images[0],
+            "inputImages": uploaded_images,
+            "prompts": requestImageToText.prompts,
         }
 
         # Add optional parameters if they are provided
         if requestImageToText.includeCost:
             task_params["includeCost"] = requestImageToText.includeCost
+        if requestImageToText.model:
+            task_params["model"] = requestImageToText.model
 
         # Send the task with all applicable parameters
         await self.send([task_params])
