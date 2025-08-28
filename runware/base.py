@@ -330,8 +330,6 @@ class RunwareBase:
                 "modelId": requestImage.model,
                 "positivePrompt": prompt,
                 "numberResults": requestImage.numberResults,
-                "height": requestImage.height,
-                "width": requestImage.width,
                 "taskType": ETaskType.IMAGE_INFERENCE.value,
                 **({"steps": requestImage.steps} if requestImage.steps else {}),
                 **(
@@ -443,6 +441,10 @@ class RunwareBase:
                 request_object["referenceImages"] = requestImage.referenceImages
             if requestImage.strength:
                 request_object["strength"] = requestImage.strength
+            if requestImage.height:
+                request_object["height"] = requestImage.height
+            if requestImage.width:
+                request_object["width"] = requestImage.width
             if requestImage.scheduler:
                 request_object["scheduler"] = requestImage.scheduler
             if requestImage.vae:
