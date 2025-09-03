@@ -17,7 +17,6 @@ async def main():
         width=1280,
         height=720,
         duration=5,
-        fps=24,
         numberResults=1,
         seed=10,
         includeCost=True,
@@ -33,6 +32,8 @@ async def main():
             effect="boom drop",
             style="anime",
             motionMode="normal",
+            soundEffectContent="anime closing!",
+            soundEffectSwitch=True,
         )
     )
 
