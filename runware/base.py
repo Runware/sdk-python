@@ -495,10 +495,14 @@ class RunwareBase:
         retry_count += 1
         if let_lis:
             let_lis["destroy"]()
+
+        
+        # Original logic for non-webhook requests
         images_with_similar_task = [
             img for img in self._globalImages if img.get("taskUUID") in task_uuids
         ]
 
+        #print(f"DEBUG: About to get similar images from: {images_with_similar_task}")
         task_uuid = request_object.get("taskUUID")
         if task_uuid is None:
             task_uuid = getUUID()
@@ -515,11 +519,16 @@ class RunwareBase:
         }
         await self.send(new_request_object)
 
+        if "webhookURL" in request_object:
+            # Not listening to images for webhook requests
+            return []
+
         let_lis = await self.listenToImages(
             onPartialImages=on_partial_images,
             taskUUID=task_uuid,
             groupKey=LISTEN_TO_IMAGES_KEY.REQUEST_IMAGES,
         )
+
         images = await self.getSimililarImage(
             taskUUID=task_uuids,
             numberOfImages=number_of_images,
@@ -533,8 +542,10 @@ class RunwareBase:
             if "code" in images:
                 # This indicates an error response
                 raise RunwareAPIError(images)
-
+            
             return instantiateDataclassList(IImage, images)
+
+        
 
         # return images
 
@@ -980,6 +991,7 @@ class RunwareBase:
                     if img.get("taskType") == "imageInference"
                     and img.get("taskUUID") == taskUUID
                 ]
+                
 
                 if images:
                     self._globalImages.extend(images)
