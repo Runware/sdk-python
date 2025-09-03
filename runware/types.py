@@ -112,6 +112,12 @@ class RunwareBaseType:
 
 
 @dataclass
+class IAsyncTaskResponse:
+    taskType: str
+    taskUUID: str
+
+
+@dataclass
 class IImage:
     taskType: str
     imageUUID: str
@@ -301,6 +307,7 @@ class IPhotoMaker:
     outputFormat: Optional[IOutputFormat] = None
     includeCost: Optional[bool] = None
     taskUUID: Optional[str] = None
+    webhookURL: Optional[str] = None
 
     def __post_init__(self):
         # Validate `inputImages` to ensure it has a maximum of 4 elements
@@ -468,6 +475,7 @@ class IImageInference:
     referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
     acePlusPlus: Optional[IAcePlusPlus] = None
     providerSettings: Optional[ImageProviderSettings] = None
+    webhookURL: Optional[str] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
 
 
@@ -475,6 +483,7 @@ class IImageInference:
 class IImageCaption:
     inputImage: Optional[Union[File, str]] = None
     includeCost: bool = False
+    webhookURL: Optional[str] = None
 
 
 @dataclass
@@ -512,6 +521,7 @@ class IPromptEnhance:
     promptVersions: int
     prompt: str
     includeCost: bool = False
+    webhookURL: Optional[str] = None
 
 
 @dataclass
@@ -529,6 +539,7 @@ class IImageUpscale:
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IOutputFormat] = None
     includeCost: bool = False
+    webhookURL: Optional[str] = None
 
 
 class ReconnectingWebsocketProps:
@@ -745,6 +756,7 @@ class IVideoInference:
     CFGScale: Optional[float] = None
     numberResults: Optional[int] = 1
     providerSettings: Optional[VideoProviderSettings] = None
+    webhookURL: Optional[str] = None
 
 @dataclass
 class IVideo:
