@@ -57,18 +57,10 @@ class RunwareServer(RunwareBase):
         self.logger.setLevel(log_level)
 
     async def connect(self):
-        import ssl
-        import certifi
-        import websockets
         self.logger.info("Connecting to Runware server from server")
         self._last_pong_time = time.perf_counter()
-        ssl_context = ssl.create_default_context(cafile=certifi.where())
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         try:
-            self._ws = await websockets.connect(self._url, ssl=ssl_context,
-        close_timeout=1,
-        max_size=None)
+            self._ws = await websockets.connect(self._url)
             # update close_timeout so that we end the script sooner for inference examples
             self._ws.close_timeout = 1
             self._ws.max_size = None
