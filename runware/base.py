@@ -1447,7 +1447,7 @@ class RunwareBase:
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
         optional_fields = [
             "outputType", "outputFormat", "outputQuality", "uploadEndpoint",
-            "includeCost", "negativePrompt", "inputAudios", "fps", "steps", "seed",
+            "includeCost", "negativePrompt", "fps", "steps", "seed",
             "CFGScale", "seedImage", "duration", "width", "height",
         ]
 
@@ -1469,8 +1469,26 @@ class RunwareBase:
     def _addProviderSettings(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
         if not requestVideo.providerSettings:
             return
+        
         provider_dict = requestVideo.providerSettings.to_request_dict()
-        if provider_dict:
+        if not provider_dict:
+            return
+            
+        # Special handling for Bytedance provider - move inputAudios to top level
+        if requestVideo.providerSettings.provider_key == "bytedance":
+            bytedance_settings = provider_dict["bytedance"]
+            
+            # Move inputAudios to top level if it exists
+            if "inputAudios" in bytedance_settings:
+                request_object["inputAudios"] = bytedance_settings["inputAudios"]
+                # Remove from provider settings since it's now at top level
+                bytedance_settings = {k: v for k, v in bytedance_settings.items() if k != "inputAudios"}
+            
+            # Only add providerSettings if there are other settings besides inputAudios
+            if bytedance_settings:
+                request_object["providerSettings"] = {"bytedance": bytedance_settings}
+        else:
+            # Normal provider settings handling for other providers
             request_object["providerSettings"] = provider_dict
 
     async def _handleInitialVideoResponse(self, task_uuid: str, number_results: int) -> List[IVideo]:

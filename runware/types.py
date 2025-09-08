@@ -672,11 +672,11 @@ class IMinimaxProviderSettings(BaseProviderSettings):
 @dataclass
 class IBytedanceProviderSettings(BaseProviderSettings):
     cameraFixed: Optional[bool] = None
+    inputAudios: Optional[List[str]] = None
 
     @property
     def provider_key(self) -> str:
         return "bytedance"
-    
     
 
 
@@ -741,7 +741,6 @@ class IVideoInference:
     negativePrompt: Optional[str] = None
     frameImages: Optional[List[Union[IFrameImage, str]]] = field(default_factory=list)
     referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
-    inputAudios: Optional[List[str]] = None
     fps: Optional[int] = None
     steps: Optional[int] = None
     seed: Optional[int] = None
