@@ -1431,19 +1431,23 @@ class RunwareBase:
             "taskType": ETaskType.VIDEO_INFERENCE.value,
             "taskUUID": requestVideo.taskUUID,
             "model": requestVideo.model,
-            "positivePrompt": requestVideo.positivePrompt.strip(),
             "numberResults": requestVideo.numberResults,
         }
+        
+        # Only add positivePrompt if it's not None
+        if requestVideo.positivePrompt is not None:
+            request_object["positivePrompt"] = requestVideo.positivePrompt.strip()
 
         self._addOptionalVideoFields(request_object, requestVideo)
         self._addVideoImages(request_object, requestVideo)
         self._addProviderSettings(request_object, requestVideo)
+        
         return request_object
 
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
         optional_fields = [
             "outputType", "outputFormat", "outputQuality", "uploadEndpoint",
-            "includeCost", "negativePrompt", "fps", "steps", "seed",
+            "includeCost", "negativePrompt", "inputAudios", "fps", "steps", "seed",
             "CFGScale", "seedImage", "duration", "width", "height",
         ]
 
