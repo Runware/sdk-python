@@ -678,7 +678,28 @@ class IBytedanceProviderSettings(BaseProviderSettings):
     def provider_key(self) -> str:
         return "bytedance"
     
-
+    def to_request_dict(self) -> Dict[str, Any]:
+        """Override to handle IBytedanceProviderSettings parameter placement.
+        """
+        data = self.serialize()
+        if not data:
+            return {}
+        
+        # Handle inputAudios specially - it needs to go at top level
+        input_audios = data.pop("inputAudios", None)
+        
+        result = {}
+        
+        # Add remaining provider settings normally if any
+        if data:
+            result[self.provider_key] = data
+            
+        # Add special marker for top-level parameters
+        if input_audios:
+            result["__top_level__"] = {"inputAudios": input_audios}
+            
+        return result
+    
 
 @dataclass
 class IKlingAIProviderSettings(BaseProviderSettings):
