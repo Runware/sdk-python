@@ -676,6 +676,8 @@ class IBytedanceProviderSettings(BaseProviderSettings):
     @property
     def provider_key(self) -> str:
         return "bytedance"
+    
+    
 
 
 @dataclass
@@ -725,7 +727,7 @@ VideoProviderSettings = IKlingAIProviderSettings | IGoogleProviderSettings | IMi
 @dataclass
 class IVideoInference:
     model: str
-    positivePrompt: str
+    positivePrompt: Optional[str] = None
     duration: float | None = None
     width: int | None = None
     height: int | None = None
@@ -739,6 +741,7 @@ class IVideoInference:
     negativePrompt: Optional[str] = None
     frameImages: Optional[List[Union[IFrameImage, str]]] = field(default_factory=list)
     referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
+    inputAudios: Optional[List[str]] = None
     fps: Optional[int] = None
     steps: Optional[int] = None
     seed: Optional[int] = None
