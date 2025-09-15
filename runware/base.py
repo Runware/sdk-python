@@ -600,7 +600,6 @@ class RunwareBase:
         if requestImageToText.includeCost:
             task_params["includeCost"] = requestImageToText.includeCost
 
-        print(task_params)
         # Send the task with all applicable parameters
         await self.send([task_params])
 
@@ -608,7 +607,6 @@ class RunwareBase:
             taskUUID=taskUUID,
         )
 
-        print(lis)
 
         def check(resolve: callable, reject: callable, *args: Any) -> bool:
             response = self._globalMessages.get(taskUUID)
@@ -632,7 +630,6 @@ class RunwareBase:
             check, debugKey="image-to-text", timeOutDuration=self._timeout
         )
 
-        print(response)
 
         lis["destroy"]()
 
