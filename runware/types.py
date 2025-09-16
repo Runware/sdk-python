@@ -478,6 +478,7 @@ class IImageCaption:
     prompt: List[str] = field(default_factory=lambda: ["Describe this image in detail"])  # Array of prompts with default
     model: Optional[str] = None  # Optional: AIR ID (runware:150@1, runware:150@2) - backend handles default
     includeCost: bool = False
+    template: Optional[str] = None
 
 
 @dataclass
