@@ -589,17 +589,23 @@ class RunwareBase:
             # Multiple images - use inputImages parameter
             task_params["inputImages"] = uploaded_images
 
-        # Add prompt parameter (array of strings)
-        task_params["prompt"] = requestImageToText.prompt
-
         # Add model parameter only if specified - backend handles default
         if requestImageToText.model is not None:
             task_params["model"] = requestImageToText.model
+
+        # Add template parameter if specified
+        if requestImageToText.template is not None:
+            task_params["template"] = requestImageToText.template
+            # When using template, do NOT include prompt parameter
+        else:
+            # Use the provided prompt when no template
+            task_params["prompt"] = requestImageToText.prompt
 
         # Add optional parameters if they are provided
         if requestImageToText.includeCost:
             task_params["includeCost"] = requestImageToText.includeCost
 
+        
         # Send the task with all applicable parameters
         await self.send([task_params])
 
