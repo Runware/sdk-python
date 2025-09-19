@@ -465,7 +465,7 @@ class RunwareBase:
             if requestImage.providerSettings:
                 provider_data = requestImage.providerSettings.to_request_dict()
                 request_object.update(provider_data)
-
+            
             return await asyncRetry(
                 lambda: self._requestImages(
                     request_object=request_object,
@@ -513,6 +513,7 @@ class RunwareBase:
                 "numberResults": image_remaining,
             }
         }
+
         await self.send(new_request_object)
 
         let_lis = await self.listenToImages(
@@ -550,12 +551,27 @@ class RunwareBase:
     async def _requestImageToText(
         self, requestImageToText: IImageCaption
     ) -> IImageToText:
-        inputImage = requestImageToText.inputImage
-
-        image_uploaded = await self.uploadImage(inputImage)
-
-        if not image_uploaded or not image_uploaded.imageUUID:
-            return None
+        # Prepare image list - inputImages is primary, inputImage is convenience
+        if requestImageToText.inputImages is not None:
+            images_to_process = requestImageToText.inputImages
+        elif requestImageToText.inputImage is not None:
+            # Single image provided via inputImage - convert to array
+            images_to_process = [requestImageToText.inputImage]
+        else:
+            raise ValueError("Either inputImages or inputImage must be provided")
+        
+        # Set inputImage to inputImages[0] if not already provided
+        actual_input_image = requestImageToText.inputImage
+        if actual_input_image is None and images_to_process:
+            actual_input_image = images_to_process[0]
+        
+        # Upload all images
+        uploaded_images = []
+        for image in images_to_process:
+            image_uploaded = await self.uploadImage(image)
+            if not image_uploaded or not image_uploaded.imageUUID:
+                return None
+            uploaded_images.append(image_uploaded.imageUUID)
 
         taskUUID = getUUID()
 
@@ -563,19 +579,40 @@ class RunwareBase:
         task_params = {
             "taskType": ETaskType.IMAGE_CAPTION.value,
             "taskUUID": taskUUID,
-            "inputImage": image_uploaded.imageUUID,
         }
+        
+        # Add either inputImage or inputImages, but not both (API requirement)
+        if len(uploaded_images) == 1:
+            # Single image - use inputImage parameter
+            task_params["inputImage"] = uploaded_images[0]
+        else:
+            # Multiple images - use inputImages parameter
+            task_params["inputImages"] = uploaded_images
+
+        # Add model parameter only if specified - backend handles default
+        if requestImageToText.model is not None:
+            task_params["model"] = requestImageToText.model
+
+        # Add template parameter if specified
+        if requestImageToText.template is not None:
+            task_params["template"] = requestImageToText.template
+            # When using template, do NOT include prompt parameter
+        else:
+            # Use the provided prompt when no template
+            task_params["prompt"] = requestImageToText.prompt
 
         # Add optional parameters if they are provided
         if requestImageToText.includeCost:
             task_params["includeCost"] = requestImageToText.includeCost
 
+        
         # Send the task with all applicable parameters
         await self.send([task_params])
 
         lis = self.globalListener(
             taskUUID=taskUUID,
         )
+
 
         def check(resolve: callable, reject: callable, *args: Any) -> bool:
             response = self._globalMessages.get(taskUUID)
@@ -598,6 +635,7 @@ class RunwareBase:
         response = await getIntervalWithPromise(
             check, debugKey="image-to-text", timeOutDuration=self._timeout
         )
+
 
         lis["destroy"]()
 

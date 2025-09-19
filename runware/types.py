@@ -473,8 +473,12 @@ class IImageInference:
 
 @dataclass
 class IImageCaption:
-    inputImage: Optional[Union[File, str]] = None
+    inputImages: Optional[List[Union[File, str]]] = None  # Primary: array of images (UUIDs, URLs, base64, dataURI)
+    inputImage: Optional[Union[File, str]] = None  # Convenience: single image, defaults to inputImages[0] if not provided
+    prompt: List[str] = field(default_factory=lambda: ["Describe this image in detail"])  # Array of prompts with default
+    model: Optional[str] = None  # Optional: AIR ID (runware:150@1, runware:150@2) - backend handles default
     includeCost: bool = False
+    template: Optional[str] = None
 
 
 @dataclass
@@ -672,6 +676,7 @@ class IMinimaxProviderSettings(BaseProviderSettings):
 @dataclass
 class IBytedanceProviderSettings(BaseProviderSettings):
     cameraFixed: Optional[bool] = None
+    maxSequentialImages: Optional[int] = None  # Min: 1, Max: 15 - Maximum number of sequential images to generate
 
     @property
     def provider_key(self) -> str:

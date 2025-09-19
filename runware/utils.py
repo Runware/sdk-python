@@ -654,7 +654,11 @@ async def getIntervalWithPromise(
                 nonlocal iteration_resolved, iteration_error
                 if not iteration_resolved:
                     iteration_resolved = True
-                    iteration_error = error
+                    # Ensure error is a proper exception fixes TypeError: exceptions must derive from BaseException
+                    if isinstance(error, BaseException):
+                        iteration_error = error
+                    else:
+                        iteration_error = Exception(str(error))
 
             try:
                 callback_returned = callback(safe_resolve, safe_reject, interval_handle)
