@@ -698,6 +698,12 @@ class IKlingAIProviderSettings(BaseProviderSettings):
 
 
 @dataclass
+class IPixverseSpeechSettings:
+    voice: Optional[str] = None  # Speaker voice from the available TTS speaker list
+    text: Optional[str] = None  # Text script to be converted to speech (~200 characters, not UTF-8 Encoding)
+
+
+@dataclass
 class IPixverseProviderSettings(BaseProviderSettings):
     effect: Optional[str] = None
     cameraMovement: Optional[str] = None
@@ -741,6 +747,7 @@ class IVideoInference:
     negativePrompt: Optional[str] = None
     frameImages: Optional[List[Union[IFrameImage, str]]] = field(default_factory=list)
     referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
+    referenceVideos: Optional[List[int]] = None  # Array of video media IDs (integers) - Max 30 seconds, supported formats (mp4, mov)
     inputAudios: Optional[List[str]] = None
     fps: Optional[int] = None
     steps: Optional[int] = None
@@ -748,6 +755,7 @@ class IVideoInference:
     CFGScale: Optional[float] = None
     numberResults: Optional[int] = 1
     providerSettings: Optional[VideoProviderSettings] = None
+    speech: Optional[IPixverseSpeechSettings] = None
 
 @dataclass
 class IVideo:

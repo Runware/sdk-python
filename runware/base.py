@@ -1438,6 +1438,14 @@ class RunwareBase:
         if requestVideo.positivePrompt is not None:
             request_object["positivePrompt"] = requestVideo.positivePrompt.strip()
 
+        # Add speech settings if provided (top level)
+        if requestVideo.speech is not None:
+            speech_dict = asdict(requestVideo.speech)
+            # Remove None values
+            speech_dict = {k: v for k, v in speech_dict.items() if v is not None}
+            if speech_dict:
+                request_object["speech"] = speech_dict
+
         self._addOptionalVideoFields(request_object, requestVideo)
         self._addVideoImages(request_object, requestVideo)
         self._addProviderSettings(request_object, requestVideo)
@@ -1447,7 +1455,7 @@ class RunwareBase:
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
         optional_fields = [
             "outputType", "outputFormat", "outputQuality", "uploadEndpoint",
-            "includeCost", "negativePrompt", "inputAudios", "fps", "steps", "seed",
+            "includeCost", "negativePrompt", "inputAudios", "referenceVideos", "fps", "steps", "seed",
             "CFGScale", "seedImage", "duration", "width", "height",
         ]
 
