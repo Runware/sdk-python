@@ -33,6 +33,9 @@ from .types import (
     IControlNet,
     IVideo,
     IVideoInference,
+    IAudio,
+    IAudioInference,
+    IAudioSettings,
     IGoogleProviderSettings,
     IKlingAIProviderSettings,
     IFrameImage,
@@ -1615,6 +1618,161 @@ class RunwareBase:
 
     def _hasPendingVideos(self, responses: List[Dict[str, Any]]) -> bool:
         return any(response.get("status") == "pending" for response in responses)
+
+    async def audioInference(self, requestAudio: IAudioInference) -> List[IAudio]:
+        await self.ensureConnection()
+        return await asyncRetry(lambda: self._requestAudio(requestAudio))
+
+    async def _requestAudio(self, requestAudio: IAudioInference) -> List[IAudio]:
+        requestAudio.taskUUID = requestAudio.taskUUID or getUUID()
+        request_object = self._buildAudioRequest(requestAudio)
+        await self.send([request_object])
+        return await self._handleInitialAudioResponse(requestAudio.taskUUID, requestAudio.numberResults)
+
+    def _buildAudioRequest(self, requestAudio: IAudioInference) -> Dict[str, Any]:
+        request_object = {
+            "deliveryMethod": requestAudio.deliveryMethod,
+            "taskType": ETaskType.AUDIO_INFERENCE.value,
+            "taskUUID": requestAudio.taskUUID,
+            "model": requestAudio.model,
+            "numberResults": requestAudio.numberResults,
+        }
+        
+        # Only add positivePrompt if it's provided
+        if requestAudio.positivePrompt is not None:
+            request_object["positivePrompt"] = requestAudio.positivePrompt.strip()
+        
+        # Only add duration if it's provided and not using composition plan
+        if requestAudio.duration is not None:
+                request_object["duration"] = requestAudio.duration
+        
+        self._addOptionalAudioFields(request_object, requestAudio)
+        self._addAudioSettings(request_object, requestAudio)
+        self._addAudioProviderSettings(request_object, requestAudio)
+        
+        return request_object
+
+    def _addOptionalAudioFields(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
+        optional_fields = [
+            "outputType", "outputFormat", "includeCost", "uploadEndpoint", "webhookURL"
+        ]
+
+        for field in optional_fields:
+            value = getattr(requestAudio, field, None)
+            if value is not None:
+                request_object[field] = value
+
+    def _addAudioSettings(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
+        if requestAudio.audioSettings:
+            audio_settings_dict = asdict(requestAudio.audioSettings)
+            # Remove None values
+            audio_settings_dict = {k: v for k, v in audio_settings_dict.items() if v is not None}
+            if audio_settings_dict:
+                request_object["audioSettings"] = audio_settings_dict
+
+    def _addAudioProviderSettings(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
+        if not requestAudio.providerSettings:
+            return
+        provider_dict = requestAudio.providerSettings.to_request_dict()
+        if provider_dict:
+            request_object["providerSettings"] = provider_dict
+
+    async def _handleInitialAudioResponse(self, task_uuid: str, number_results: int) -> List[IAudio]:
+        if number_results == 1:
+            # Single result - wait for completion
+            response = await self._waitForAudioCompletion(task_uuid)
+            return [response] if response else []
+        else:
+            # Multiple results - use polling
+            return await self._pollForAudioResults(task_uuid, number_results)
+
+    async def _waitForAudioCompletion(self, task_uuid: str) -> Optional[IAudio]:
+        lis = self.globalListener(taskUUID=task_uuid)
+
+        def check(resolve: Callable, reject: Callable, *args: Any) -> bool:
+            response = self._globalMessages.get(task_uuid)
+            if response:
+                audio_response = response[0] if isinstance(response, list) else response
+            else:
+                audio_response = response
+
+            if audio_response and audio_response.get("error"):
+                reject(audio_response)
+                return True
+
+            if audio_response:
+                del self._globalMessages[task_uuid]
+                resolve(audio_response)
+                return True
+
+            return False
+
+        try:
+            response = await getIntervalWithPromise(
+                check, debugKey="audio-inference", timeOutDuration=self._timeout
+            )
+            lis["destroy"]()
+
+            if "code" in response:
+                raise RunwareAPIError(response)
+
+            return self._createAudioFromResponse(response) if response else None
+        except Exception as e:
+            lis["destroy"]()
+            raise e
+
+    async def _pollForAudioResults(self, task_uuid: str, number_results: int) -> List[IAudio]:
+        completed_results = []
+        lis = self.globalListener(taskUUID=task_uuid)
+
+        try:
+            while len(completed_results) < number_results:
+                responses = self._globalMessages.get(task_uuid, [])
+                if not isinstance(responses, list):
+                    responses = [responses] if responses else []
+
+                processed_responses = self._processAudioPollingResponse(responses)
+                completed_results.extend(processed_responses)
+
+                if len(completed_results) >= number_results:
+                    break
+
+                await asyncio.sleep(1)  # Poll every second
+
+            # Clean up
+            if task_uuid in self._globalMessages:
+                del self._globalMessages[task_uuid]
+            lis["destroy"]()
+
+            return [self._createAudioFromResponse(response) for response in completed_results[:number_results]]
+
+        except Exception as e:
+            lis["destroy"]()
+            raise e
+
+    def _processAudioPollingResponse(self, responses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        completed_results = []
+
+        for response in responses:
+            if response.get("code"):
+                raise RunwareAPIError(response)
+            status = response.get("status")
+            if status == "success":
+                completed_results.append(response)
+
+        return completed_results
+
+    def _createAudioFromResponse(self, response: Dict[str, Any]) -> IAudio:
+        return IAudio(
+            taskType=response.get("taskType", ""),
+            taskUUID=response.get("taskUUID", ""),
+            status=response.get("status"),
+            audioUUID=response.get("audioUUID"),
+            audioURL=response.get("audioURL"),
+            audioBase64Data=response.get("audioBase64Data"),
+            audioDataURI=response.get("audioDataURI"),
+            cost=response.get("cost")
+        )
 
     def connected(self) -> bool:
         """
