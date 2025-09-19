@@ -523,9 +523,33 @@ class IEnhancedPrompt(IImageToText):
 
 
 @dataclass
+class IUpscaleSettings:
+    # Common parameters across all upscaler models
+    steps: Optional[int] = None  # Quality steps (4-60 depending on model)
+    seed: Optional[int] = None  # Reproducibility toggle
+    CFGScale: Optional[float] = None  # Guidance CFG (3-20 depending on model)
+    positivePrompt: Optional[str] = None  
+    negativePrompt: Optional[str] = None  
+    
+    # Clarity upscaler specific
+    controlNetWeight: Optional[float] = None  # Style preservation/Resemblance (0-1)
+    strength: Optional[float] = None  # Creativity (0-1)
+    scheduler: Optional[str] = None  # Controls noise addition/removal
+    
+    # CCSR and Latent upscaler specific
+    colorFix: Optional[bool] = None  # Color correction (ADAIN/NOFIX)
+    tileDiffusion: Optional[bool] = None  # Tile diffusion for large images
+    
+    # Latent upscaler specific
+    clipSkip: Optional[int] = None  # Skip CLIP layers during guidance (0-2)
+
+
+@dataclass
 class IImageUpscale:
     inputImage: Union[str, File]
-    upscaleFactor: int
+    upscaleFactor: float  # Changed to float to support decimal values like 1.5
+    model: Optional[str] = None  # Model AIR ID (runware:500@1, runware:501@1, runware:502@1, runware:503@1)
+    settings: Optional[IUpscaleSettings] = None  # Advanced upscaling settings
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IOutputFormat] = None
     includeCost: bool = False
