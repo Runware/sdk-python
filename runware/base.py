@@ -1,6 +1,5 @@
 import asyncio
 import inspect
-import json
 import logging
 import os
 import re
@@ -751,7 +750,7 @@ class RunwareBase:
             task_params["includeCost"] = upscaleGanPayload.includeCost
 
         # Send the task with all applicable parameters
-        print(json.dumps(task_params, indent=4))
+        
         await self.send([task_params])
 
         lis = self.globalListener(
