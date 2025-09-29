@@ -33,6 +33,9 @@ from .types import (
     IControlNet,
     IVideo,
     IVideoInference,
+    IAudio,
+    IAudioInference,
+    IAudioSettings,
     IGoogleProviderSettings,
     IKlingAIProviderSettings,
     IFrameImage,
@@ -465,7 +468,7 @@ class RunwareBase:
             if requestImage.providerSettings:
                 provider_data = requestImage.providerSettings.to_request_dict()
                 request_object.update(provider_data)
-
+            
             return await asyncRetry(
                 lambda: self._requestImages(
                     request_object=request_object,
@@ -513,6 +516,7 @@ class RunwareBase:
                 "numberResults": image_remaining,
             }
         }
+
         await self.send(new_request_object)
 
         let_lis = await self.listenToImages(
@@ -550,12 +554,27 @@ class RunwareBase:
     async def _requestImageToText(
         self, requestImageToText: IImageCaption
     ) -> IImageToText:
-        inputImage = requestImageToText.inputImage
-
-        image_uploaded = await self.uploadImage(inputImage)
-
-        if not image_uploaded or not image_uploaded.imageUUID:
-            return None
+        # Prepare image list - inputImages is primary, inputImage is convenience
+        if requestImageToText.inputImages is not None:
+            images_to_process = requestImageToText.inputImages
+        elif requestImageToText.inputImage is not None:
+            # Single image provided via inputImage - convert to array
+            images_to_process = [requestImageToText.inputImage]
+        else:
+            raise ValueError("Either inputImages or inputImage must be provided")
+        
+        # Set inputImage to inputImages[0] if not already provided
+        actual_input_image = requestImageToText.inputImage
+        if actual_input_image is None and images_to_process:
+            actual_input_image = images_to_process[0]
+        
+        # Upload all images
+        uploaded_images = []
+        for image in images_to_process:
+            image_uploaded = await self.uploadImage(image)
+            if not image_uploaded or not image_uploaded.imageUUID:
+                return None
+            uploaded_images.append(image_uploaded.imageUUID)
 
         taskUUID = getUUID()
 
@@ -563,19 +582,40 @@ class RunwareBase:
         task_params = {
             "taskType": ETaskType.IMAGE_CAPTION.value,
             "taskUUID": taskUUID,
-            "inputImage": image_uploaded.imageUUID,
         }
+        
+        # Add either inputImage or inputImages, but not both (API requirement)
+        if len(uploaded_images) == 1:
+            # Single image - use inputImage parameter
+            task_params["inputImage"] = uploaded_images[0]
+        else:
+            # Multiple images - use inputImages parameter
+            task_params["inputImages"] = uploaded_images
+
+        # Add model parameter only if specified - backend handles default
+        if requestImageToText.model is not None:
+            task_params["model"] = requestImageToText.model
+
+        # Add template parameter if specified
+        if requestImageToText.template is not None:
+            task_params["template"] = requestImageToText.template
+            # When using template, do NOT include prompt parameter
+        else:
+            # Use the provided prompt when no template
+            task_params["prompt"] = requestImageToText.prompt
 
         # Add optional parameters if they are provided
         if requestImageToText.includeCost:
             task_params["includeCost"] = requestImageToText.includeCost
 
+        
         # Send the task with all applicable parameters
         await self.send([task_params])
 
         lis = self.globalListener(
             taskUUID=taskUUID,
         )
+
 
         def check(resolve: callable, reject: callable, *args: Any) -> bool:
             response = self._globalMessages.get(taskUUID)
@@ -598,6 +638,7 @@ class RunwareBase:
         response = await getIntervalWithPromise(
             check, debugKey="image-to-text", timeOutDuration=self._timeout
         )
+
 
         lis["destroy"]()
 
@@ -1451,6 +1492,14 @@ class RunwareBase:
         if requestVideo.positivePrompt is not None:
             request_object["positivePrompt"] = requestVideo.positivePrompt.strip()
 
+        # Add speech settings if provided (top level)
+        if requestVideo.speech is not None:
+            speech_dict = asdict(requestVideo.speech)
+            # Remove None values
+            speech_dict = {k: v for k, v in speech_dict.items() if v is not None}
+            if speech_dict:
+                request_object["speech"] = speech_dict
+
         self._addOptionalVideoFields(request_object, requestVideo)
         self._addVideoImages(request_object, requestVideo)
         self._addProviderSettings(request_object, requestVideo)
@@ -1460,7 +1509,7 @@ class RunwareBase:
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
         optional_fields = [
             "outputType", "outputFormat", "outputQuality", "uploadEndpoint",
-            "includeCost", "negativePrompt", "inputAudios", "fps", "steps", "seed",
+            "includeCost", "negativePrompt", "inputAudios", "referenceVideos", "fps", "steps", "seed",
             "CFGScale", "seedImage", "duration", "width", "height",
         ]
 
@@ -1582,6 +1631,161 @@ class RunwareBase:
 
     def _hasPendingVideos(self, responses: List[Dict[str, Any]]) -> bool:
         return any(response.get("status") == "pending" for response in responses)
+
+    async def audioInference(self, requestAudio: IAudioInference) -> List[IAudio]:
+        await self.ensureConnection()
+        return await asyncRetry(lambda: self._requestAudio(requestAudio))
+
+    async def _requestAudio(self, requestAudio: IAudioInference) -> List[IAudio]:
+        requestAudio.taskUUID = requestAudio.taskUUID or getUUID()
+        request_object = self._buildAudioRequest(requestAudio)
+        await self.send([request_object])
+        return await self._handleInitialAudioResponse(requestAudio.taskUUID, requestAudio.numberResults)
+
+    def _buildAudioRequest(self, requestAudio: IAudioInference) -> Dict[str, Any]:
+        request_object = {
+            "deliveryMethod": requestAudio.deliveryMethod,
+            "taskType": ETaskType.AUDIO_INFERENCE.value,
+            "taskUUID": requestAudio.taskUUID,
+            "model": requestAudio.model,
+            "numberResults": requestAudio.numberResults,
+        }
+        
+        # Only add positivePrompt if it's provided
+        if requestAudio.positivePrompt is not None:
+            request_object["positivePrompt"] = requestAudio.positivePrompt.strip()
+        
+        # Only add duration if it's provided and not using composition plan
+        if requestAudio.duration is not None:
+                request_object["duration"] = requestAudio.duration
+        
+        self._addOptionalAudioFields(request_object, requestAudio)
+        self._addAudioSettings(request_object, requestAudio)
+        self._addAudioProviderSettings(request_object, requestAudio)
+        
+        return request_object
+
+    def _addOptionalAudioFields(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
+        optional_fields = [
+            "outputType", "outputFormat", "includeCost", "uploadEndpoint", "webhookURL"
+        ]
+
+        for field in optional_fields:
+            value = getattr(requestAudio, field, None)
+            if value is not None:
+                request_object[field] = value
+
+    def _addAudioSettings(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
+        if requestAudio.audioSettings:
+            audio_settings_dict = asdict(requestAudio.audioSettings)
+            # Remove None values
+            audio_settings_dict = {k: v for k, v in audio_settings_dict.items() if v is not None}
+            if audio_settings_dict:
+                request_object["audioSettings"] = audio_settings_dict
+
+    def _addAudioProviderSettings(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
+        if not requestAudio.providerSettings:
+            return
+        provider_dict = requestAudio.providerSettings.to_request_dict()
+        if provider_dict:
+            request_object["providerSettings"] = provider_dict
+
+    async def _handleInitialAudioResponse(self, task_uuid: str, number_results: int) -> List[IAudio]:
+        if number_results == 1:
+            # Single result - wait for completion
+            response = await self._waitForAudioCompletion(task_uuid)
+            return [response] if response else []
+        else:
+            # Multiple results - use polling
+            return await self._pollForAudioResults(task_uuid, number_results)
+
+    async def _waitForAudioCompletion(self, task_uuid: str) -> Optional[IAudio]:
+        lis = self.globalListener(taskUUID=task_uuid)
+
+        def check(resolve: Callable, reject: Callable, *args: Any) -> bool:
+            response = self._globalMessages.get(task_uuid)
+            if response:
+                audio_response = response[0] if isinstance(response, list) else response
+            else:
+                audio_response = response
+
+            if audio_response and audio_response.get("error"):
+                reject(audio_response)
+                return True
+
+            if audio_response:
+                del self._globalMessages[task_uuid]
+                resolve(audio_response)
+                return True
+
+            return False
+
+        try:
+            response = await getIntervalWithPromise(
+                check, debugKey="audio-inference", timeOutDuration=self._timeout
+            )
+            lis["destroy"]()
+
+            if "code" in response:
+                raise RunwareAPIError(response)
+
+            return self._createAudioFromResponse(response) if response else None
+        except Exception as e:
+            lis["destroy"]()
+            raise e
+
+    async def _pollForAudioResults(self, task_uuid: str, number_results: int) -> List[IAudio]:
+        completed_results = []
+        lis = self.globalListener(taskUUID=task_uuid)
+
+        try:
+            while len(completed_results) < number_results:
+                responses = self._globalMessages.get(task_uuid, [])
+                if not isinstance(responses, list):
+                    responses = [responses] if responses else []
+
+                processed_responses = self._processAudioPollingResponse(responses)
+                completed_results.extend(processed_responses)
+
+                if len(completed_results) >= number_results:
+                    break
+
+                await asyncio.sleep(1)  # Poll every second
+
+            # Clean up
+            if task_uuid in self._globalMessages:
+                del self._globalMessages[task_uuid]
+            lis["destroy"]()
+
+            return [self._createAudioFromResponse(response) for response in completed_results[:number_results]]
+
+        except Exception as e:
+            lis["destroy"]()
+            raise e
+
+    def _processAudioPollingResponse(self, responses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        completed_results = []
+
+        for response in responses:
+            if response.get("code"):
+                raise RunwareAPIError(response)
+            status = response.get("status")
+            if status == "success":
+                completed_results.append(response)
+
+        return completed_results
+
+    def _createAudioFromResponse(self, response: Dict[str, Any]) -> IAudio:
+        return IAudio(
+            taskType=response.get("taskType", ""),
+            taskUUID=response.get("taskUUID", ""),
+            status=response.get("status"),
+            audioUUID=response.get("audioUUID"),
+            audioURL=response.get("audioURL"),
+            audioBase64Data=response.get("audioBase64Data"),
+            audioDataURI=response.get("audioDataURI"),
+            cost=response.get("cost")
+        )
 
     def connected(self) -> bool:
         """

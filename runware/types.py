@@ -39,6 +39,7 @@ class ETaskType(Enum):
     MODEL_UPLOAD = "modelUpload"
     MODEL_SEARCH = "modelSearch"
     VIDEO_INFERENCE = "videoInference"
+    AUDIO_INFERENCE = "audioInference"
     GET_RESPONSE = "getResponse"
 
 
@@ -98,6 +99,8 @@ class EOpenPosePreProcessor(Enum):
 # Define the types using Literal
 IOutputType = Literal["base64Data", "dataURI", "URL"]
 IOutputFormat = Literal["JPG", "PNG", "WEBP"]
+IAudioOutputType = Literal["base64Data", "dataURI", "URL"]
+IAudioOutputFormat = Literal["MP3"]
 
 
 @dataclass
@@ -473,8 +476,39 @@ class IImageInference:
 
 @dataclass
 class IImageCaption:
-    inputImage: Optional[Union[File, str]] = None
+    inputImages: Optional[List[Union[File, str]]] = None  # Primary: array of images (UUIDs, URLs, base64, dataURI)
+    inputImage: Optional[Union[File, str]] = None  # Convenience: single image, defaults to inputImages[0] if not provided
+    prompt: List[str] = field(default_factory=lambda: ["Describe this image in detail"])  # Array of prompts with default
+    model: Optional[str] = None  # Optional: AIR ID (runware:150@1, runware:150@2) - backend handles default
     includeCost: bool = False
+    template: Optional[str] = None
+
+
+@dataclass
+class IAudioSettings:
+    sampleRate: Optional[int] = None  # Min: 8000, Max: 48000, Default: 44100
+    bitrate: Optional[int] = None  # Min: 32, Max: 320, Default: 128
+
+
+@dataclass
+class IElevenLabsCompositionSection:
+    sectionName: str  # 1-100 characters
+    positiveLocalStyles: List[str]  # Styles that should be present in this section
+    negativeLocalStyles: List[str]  # Styles that should not be present in this section
+    lines: List[str]  # Lyrics of the section
+    duration: Optional[int] = None  # Duration in seconds (3-120s)
+
+
+@dataclass
+class IElevenLabsCompositionPlan:
+    positiveGlobalStyles: List[str]  # Styles that should be present in the entire song
+    negativeGlobalStyles: List[str]  # Styles that should not be present in the entire song
+    sections: List[IElevenLabsCompositionSection]  # Sections of the song
+
+
+@dataclass
+class IElevenLabsMusicSettings:
+    compositionPlan: IElevenLabsCompositionPlan  # Music composition structure
 
 
 @dataclass
@@ -696,6 +730,7 @@ class IMinimaxProviderSettings(BaseProviderSettings):
 @dataclass
 class IBytedanceProviderSettings(BaseProviderSettings):
     cameraFixed: Optional[bool] = None
+    maxSequentialImages: Optional[int] = None  # Min: 1, Max: 15 - Maximum number of sequential images to generate
 
     @property
     def provider_key(self) -> str:
@@ -719,6 +754,12 @@ class IKlingAIProviderSettings(BaseProviderSettings):
             if camera_control_data:
                 result["cameraControl"] = camera_control_data
         return result
+
+
+@dataclass
+class IPixverseSpeechSettings:
+    voice: Optional[str] = None  # Speaker voice from the available TTS speaker list
+    text: Optional[str] = None  # Text script to be converted to speech (~200 characters, not UTF-8 Encoding)
 
 
 @dataclass
@@ -746,7 +787,18 @@ class IViduProviderSettings(BaseProviderSettings):
         return "vidu"
 
 
+@dataclass
+class IElevenLabsProviderSettings(BaseProviderSettings):
+    music: Optional[IElevenLabsMusicSettings] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "elevenlabs"
+
+
 VideoProviderSettings = IKlingAIProviderSettings | IGoogleProviderSettings | IMinimaxProviderSettings | IBytedanceProviderSettings | IPixverseProviderSettings | IViduProviderSettings
+
+AudioProviderSettings = IElevenLabsProviderSettings
 
 @dataclass
 class IVideoInference:
@@ -765,6 +817,7 @@ class IVideoInference:
     negativePrompt: Optional[str] = None
     frameImages: Optional[List[Union[IFrameImage, str]]] = field(default_factory=list)
     referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
+    referenceVideos: Optional[List[int]] = None  # Array of video media IDs (integers) - Max 30 seconds, supported formats (mp4, mov)
     inputAudios: Optional[List[str]] = None
     fps: Optional[int] = None
     steps: Optional[int] = None
@@ -772,6 +825,25 @@ class IVideoInference:
     CFGScale: Optional[float] = None
     numberResults: Optional[int] = 1
     providerSettings: Optional[VideoProviderSettings] = None
+    speech: Optional[IPixverseSpeechSettings] = None
+
+
+@dataclass
+class IAudioInference:
+    model: str
+    positivePrompt: Optional[str] = None  # Optional when using composition plan
+    duration: Optional[float] = None  # Min: 10, Max: 300 - Optional when using composition plan
+    taskUUID: Optional[str] = None
+    outputType: Optional[IAudioOutputType] = None
+    outputFormat: Optional[IAudioOutputFormat] = None
+    audioSettings: Optional[IAudioSettings] = None
+    includeCost: Optional[bool] = None
+    numberResults: Optional[int] = 1
+    deliveryMethod: str = "sync"  # "sync" | "async"
+    uploadEndpoint: Optional[str] = None
+    webhookURL: Optional[str] = None
+    providerSettings: Optional[AudioProviderSettings] = None  # ElevenLabs provider settings
+
 
 @dataclass
 class IVideo:
@@ -782,6 +854,18 @@ class IVideo:
     videoURL: Optional[str] = None
     cost: Optional[float] = None
     seed: Optional[int] = None
+
+
+@dataclass
+class IAudio:
+    taskType: str
+    taskUUID: str
+    status: Optional[str] = None
+    audioUUID: Optional[str] = None
+    audioURL: Optional[str] = None
+    audioBase64Data: Optional[str] = None
+    audioDataURI: Optional[str] = None
+    cost: Optional[float] = None
 
 
 # The GetWithPromiseCallBackType is defined using the Callable type from the typing module. It represents a function that takes a dictionary
