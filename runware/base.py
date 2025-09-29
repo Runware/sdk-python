@@ -327,147 +327,7 @@ class RunwareBase:
                         requestImage.acePlusPlus.inputMasks
                     )
 
-            request_object = {
-                "offset": 0,
-                "taskUUID": requestImage.taskUUID,
-                "modelId": requestImage.model,
-                "positivePrompt": prompt,
-                "numberResults": requestImage.numberResults,
-                "taskType": ETaskType.IMAGE_INFERENCE.value,
-                **({"steps": requestImage.steps} if requestImage.steps else {}),
-                **(
-                    {"controlNet": control_net_data_dicts}
-                    if control_net_data_dicts
-                    else {}
-                ),
-                **(
-                    {
-                        "lora": [
-                            {"model": lora.model, "weight": lora.weight}
-                            for lora in requestImage.lora
-                        ]
-                    }
-                    if requestImage.lora
-                    else {}
-                ),
-                **(
-                    {
-                        "lycoris": [
-                            {"model": lycoris.model, "weight": lycoris.weight}
-                            for lycoris in requestImage.lycoris
-                        ]
-                    }
-                    if requestImage.lycoris
-                    else {}
-                ),
-                **(
-                    {
-                        "embeddings": [
-                            {"model": embedding.model}
-                            for embedding in requestImage.embeddings
-                        ]
-                    }
-                    if requestImage.embeddings
-                    else {}
-                ),
-                **({"seed": requestImage.seed} if requestImage.seed else {}),
-                **(
-                    {
-                        "refiner": {
-                            "model": requestImage.refiner.model,
-                            **(
-                                {"startStep": requestImage.refiner.startStep}
-                                if requestImage.refiner.startStep is not None
-                                else {}
-                            ),
-                            **(
-                                {
-                                    "startStepPercentage": requestImage.refiner.startStepPercentage
-                                }
-                                if requestImage.refiner.startStepPercentage is not None
-                                else {}
-                            ),
-                        }
-                    }
-                    if requestImage.refiner
-                    else {}
-                ),
-                **({"instantID": instant_id_data} if instant_id_data else {}),
-                **(
-                    {
-                        "outpaint": {
-                            k: v
-                            for k, v in vars(requestImage.outpaint).items()
-                            if v is not None
-                        }
-                    }
-                    if requestImage.outpaint
-                    else {}
-                ),
-                **({"ipAdapters": ip_adapters_data} if ip_adapters_data else {}),
-                **({"acePlusPlus": ace_plus_plus_data} if ace_plus_plus_data else {}),
-            }
-
-            # Add optional parameters if they are provided
-            if requestImage.outputType is not None:
-                request_object["outputType"] = requestImage.outputType
-            if requestImage.outputFormat is not None:
-                request_object["outputFormat"] = requestImage.outputFormat
-            if requestImage.includeCost:
-                request_object["includeCost"] = requestImage.includeCost
-            if requestImage.checkNsfw:
-                request_object["checkNSFW"] = requestImage.checkNsfw
-
-            if requestImage.negativePrompt:
-                request_object["negativePrompt"] = requestImage.negativePrompt
-            if requestImage.CFGScale:
-                request_object["CFGScale"] = requestImage.CFGScale
-            if requestImage.seedImage:
-                request_object["seedImage"] = requestImage.seedImage
-            if requestImage.acceleratorOptions:
-                pipeline_options_dict = {
-                    k: v
-                    for k, v in vars(requestImage.acceleratorOptions).items()
-                    if v is not None
-                }
-                request_object.update({"acceleratorOptions": pipeline_options_dict})
-            if requestImage.advancedFeatures:
-                pipeline_options_dict = {
-                    k: v.__dict__
-                    for k, v in vars(requestImage.advancedFeatures).items()
-                    if v is not None
-                }
-                request_object.update({"advancedFeatures": pipeline_options_dict})
-            if requestImage.maskImage:
-                request_object["maskImage"] = requestImage.maskImage
-            if requestImage.referenceImages:
-                request_object["referenceImages"] = requestImage.referenceImages
-            if requestImage.strength:
-                request_object["strength"] = requestImage.strength
-            if requestImage.height:
-                request_object["height"] = requestImage.height
-            if requestImage.width:
-                request_object["width"] = requestImage.width
-            if requestImage.scheduler:
-                request_object["scheduler"] = requestImage.scheduler
-            if requestImage.vae:
-                request_object["vae"] = requestImage.vae
-            if requestImage.promptWeighting:
-                request_object["promptWeighting"] = requestImage.promptWeighting
-            if requestImage.maskMargin:
-                request_object["maskMargin"] = requestImage.maskMargin
-            if hasattr(requestImage, "extraArgs"):
-                # if extraArgs is present, and a dictionary, we will add its attributes to the request.
-                # these may contain options used for public beta testing.
-                if isinstance(requestImage.extraArgs, dict):
-                    request_object.update(requestImage.extraArgs)
-
-            if requestImage.outputQuality:
-                request_object["outputQuality"] = requestImage.outputQuality
-
-            if requestImage.providerSettings:
-                provider_data = requestImage.providerSettings.to_request_dict()
-                request_object.update(provider_data)
+            request_object = self._buildImageRequest(requestImage, prompt, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data)
             
             return await asyncRetry(
                 lambda: self._requestImages(
@@ -510,14 +370,13 @@ class RunwareBase:
 
         image_remaining = number_of_images - len(images_with_similar_task)
         new_request_object = {
-            "newTask": {
-                **request_object,
-                "taskUUID": task_uuid,
-                "numberResults": image_remaining,
-            }
+            **request_object,
+            "taskUUID": task_uuid,
+            "numberResults": image_remaining,
         }
 
-        await self.send(new_request_object)
+        
+        await self.send([new_request_object])
 
         let_lis = await self.listenToImages(
             onPartialImages=on_partial_images,
@@ -609,7 +468,6 @@ class RunwareBase:
             task_params["includeCost"] = requestImageToText.includeCost
 
         
-        # Send the task with all applicable parameters
         await self.send([task_params])
 
         lis = self.globalListener(
@@ -1527,6 +1385,125 @@ class RunwareBase:
 
         if requestVideo.referenceImages:
             request_object["referenceImages"] = requestVideo.referenceImages
+
+    def _buildImageRequest(self, requestImage: IImageInference, prompt: str, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict]) -> Dict[str, Any]:
+        request_object = {
+            "taskType": ETaskType.IMAGE_INFERENCE.value,
+            "model": requestImage.model,
+            "positivePrompt": prompt,
+        }
+        
+        self._addOptionalImageFields(request_object, requestImage)
+        self._addImageSpecialFields(request_object, requestImage, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data)
+        self._addImageProviderSettings(request_object, requestImage)
+        
+        return request_object
+
+    def _addOptionalImageFields(self, request_object: Dict[str, Any], requestImage: IImageInference) -> None:
+        optional_fields = [
+            "outputType", "outputFormat", "outputQuality", "uploadEndpoint",
+            "includeCost", "checkNsfw", "negativePrompt", "seedImage", "maskImage",
+            "strength", "height", "width", "steps", "scheduler", "seed", "CFGScale",
+            "clipSkip", "promptWeighting", "maskMargin", "vae"
+        ]
+        
+        for field in optional_fields:
+            value = getattr(requestImage, field, None)
+            if value is not None:
+                # Special handling for checkNsfw -> checkNSFW
+                if field == "checkNsfw":
+                    request_object["checkNSFW"] = value
+                else:
+                    request_object[field] = value
+
+    def _addImageSpecialFields(self, request_object: Dict[str, Any], requestImage: IImageInference, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict]) -> None:
+        # Add controlNet if present
+        if control_net_data_dicts:
+            request_object["controlNet"] = control_net_data_dicts
+            
+        # Add lora if present
+        if requestImage.lora:
+            request_object["lora"] = [
+                {"model": lora.model, "weight": lora.weight}
+                for lora in requestImage.lora
+            ]
+            
+        # Add lycoris if present
+        if requestImage.lycoris:
+            request_object["lycoris"] = [
+                {"model": lycoris.model, "weight": lycoris.weight}
+                for lycoris in requestImage.lycoris
+            ]
+            
+        # Add embeddings if present
+        if requestImage.embeddings:
+            request_object["embeddings"] = [
+                {"model": embedding.model}
+                for embedding in requestImage.embeddings
+            ]
+            
+        # Add refiner if present
+        if requestImage.refiner:
+            refiner_dict = {"model": requestImage.refiner.model}
+            if requestImage.refiner.startStep is not None:
+                refiner_dict["startStep"] = requestImage.refiner.startStep
+            if requestImage.refiner.startStepPercentage is not None:
+                refiner_dict["startStepPercentage"] = requestImage.refiner.startStepPercentage
+            request_object["refiner"] = refiner_dict
+            
+        # Add instantID if present
+        if instant_id_data:
+            request_object["instantID"] = instant_id_data
+            
+        # Add outpaint if present
+        if requestImage.outpaint:
+            outpaint_dict = {
+                k: v
+                for k, v in vars(requestImage.outpaint).items()
+                if v is not None
+            }
+            request_object["outpaint"] = outpaint_dict
+            
+        # Add ipAdapters if present
+        if ip_adapters_data:
+            request_object["ipAdapters"] = ip_adapters_data
+            
+        # Add acePlusPlus if present
+        if ace_plus_plus_data:
+            request_object["acePlusPlus"] = ace_plus_plus_data
+            
+        # Add referenceImages if present
+        if requestImage.referenceImages:
+            request_object["referenceImages"] = requestImage.referenceImages
+            
+        # Add acceleratorOptions if present
+        if requestImage.acceleratorOptions:
+            pipeline_options_dict = {
+                k: v
+                for k, v in vars(requestImage.acceleratorOptions).items()
+                if v is not None
+            }
+            request_object["acceleratorOptions"] = pipeline_options_dict
+            
+        # Add advancedFeatures if present
+        if requestImage.advancedFeatures:
+            pipeline_options_dict = {
+                k: v.__dict__
+                for k, v in vars(requestImage.advancedFeatures).items()
+                if v is not None
+            }
+            request_object["advancedFeatures"] = pipeline_options_dict
+            
+        # Add extraArgs if present
+        if hasattr(requestImage, "extraArgs") and isinstance(requestImage.extraArgs, dict):
+            request_object.update(requestImage.extraArgs)
+
+    def _addImageProviderSettings(self, request_object: Dict[str, Any], requestImage: IImageInference) -> None:
+        if not requestImage.providerSettings:
+            return
+        provider_dict = requestImage.providerSettings.to_request_dict()
+        if provider_dict:
+            request_object["providerSettings"] = provider_dict
 
     def _addProviderSettings(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
         if not requestVideo.providerSettings:
