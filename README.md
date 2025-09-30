@@ -56,9 +56,9 @@ async def main() -> None:
         print(f"Image URL: {image.imageURL}")
 ```
 
-#### Enabling teaCache/deepCache for faster inference
+#### Enabling teaCache/deepCache/fbCache for faster inference
 
-Flux and SDXL models support teaCache and deepCache for faster inference, with the trade-off of quality loss with more aggressive settings.
+Some models support teaCache, deepCache, and fbCache for faster inference, with the trade-off of quality loss with more aggressive settings.
 
 ```python
 from runware import Runware, IImageInference, IAcceleratorOptions
@@ -85,6 +85,35 @@ async def main() -> None:
         print(f"Image URL: {image.imageURL}")
 ```
 
+#### Using fbCache for enhanced performance
+
+fbCache (First Block Cache) provides additional acceleration options for compatible models:
+
+```python
+from runware import Runware, IImageInference, IAcceleratorOptions
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    request_image = IImageInference(
+        positivePrompt="a futuristic cityscape with flying cars",
+        model="runware:108@22",  # Qwen model with fbCache support
+        numberResults=1,
+        height=1024,
+        width=1024,
+        acceleratorOptions=IAcceleratorOptions(
+            fbcache=True,           # Enable First Block cache
+            cacheStartStep=0,       # Start caching from step 0
+            cacheStopStep=8         # Stop caching at step 8
+        ),
+    )
+
+    images = await runware.imageInference(requestImage=request_image)
+    for image in images:
+        print(f"Image URL: {image.imageURL}")
+```
+
 ##### teaCache
 
 - `teaCache` is a boolean that enables or disables the teaCache feature. If set to `True`, it will use teaCache for faster inference.
@@ -103,6 +132,16 @@ async def main() -> None:
 - `deepCacheBranchId` represents which branch of the network (ordered from the shallowest to the deepest layer) is responsible for executing the caching processes.
   - Opting for a lower branch ID will result in a more aggressive caching process, while a higher branch ID will yield a more conservative approach.
   - The default value is `0`
+
+##### fbCache
+
+- `fbcache` is a boolean that enables or disables the First Block cache feature. If set to `True`, it will use fbCache for faster inference.
+  - fbCache is compatible with specific models and provides additional acceleration options.
+  - Works in conjunction with `cacheStartStep` and `cacheStopStep` to control the caching behavior.
+- `cacheStartStep` and `cacheStopStep` control the range of steps where caching is applied.
+  - `cacheStartStep`: The step at which caching begins (default: 0)
+  - `cacheStopStep`: The step at which caching ends (default: total steps)
+  - These parameters allow fine-grained control over when caching is active during the generation process.
 
 ### Enhancing Prompts
 
@@ -553,6 +592,69 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+### Audio Inference
+
+To generate audio using the Runware SDK, you can use the `audioInference` method with the `IAudioInference` class. The SDK supports various audio generation models including ElevenLabs and other providers.
+
+Here's an example of generating audio using ElevenLabs:
+
+```python
+import asyncio
+from runware import Runware, IAudioInference, IAudioSettings
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    # Create audio settings
+    audio_settings = IAudioSettings(
+        sampleRate=22050,  # Sample rate in Hz
+        bitrate=32         # Audio bitrate
+    )
+
+    # Create audio inference request
+    request_audio = IAudioInference(
+        model="elevenlabs:1@1",           # ElevenLabs model
+        positivePrompt="upbeat electronic music with synthesizers and drums",
+        outputFormat="MP3",               # Output format: MP3, WAV, etc.
+        outputType="URL",                 # Return URL or base64
+        audioSettings=audio_settings,
+        numberResults=1,                  # Number of audio files to generate
+        duration=10,                      # Duration in seconds
+        includeCost=True                  # Include cost information
+    )
+
+    
+    audio_results = await runware.audioInference(requestAudio=request_audio)
+    for audio in audio_results:
+        print(f"Audio URL: {audio.audioURL}")
+        print(f"Duration: {audio.duration}")
+        print(f"Cost: {audio.cost}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+#### Audio Settings
+
+The `IAudioSettings` class allows you to configure audio generation parameters:
+
+- `sampleRate`: Audio sample rate in Hz (e.g., 22050, 44100)
+- `bitrate`: Audio bitrate for compressed formats
+
+#### Audio Inference Parameters
+
+The `IAudioInference` class supports the following parameters:
+
+- `model`: Audio generation model identifier (e.g., "elevenlabs:1@1")
+- `positivePrompt`: Text description of the audio to generate
+- `outputFormat`: Output audio format ("MP3", "WAV", etc.)
+- `outputType`: Return type ("URL" or "BASE64")
+- `audioSettings`: Audio configuration settings
+- `numberResults`: Number of audio files to generate
+- `duration`: Duration of the generated audio in seconds
+- `includeCost`: Whether to include cost information in the response
 
 ### Model Upload
 
