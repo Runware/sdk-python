@@ -380,6 +380,7 @@ class IAcePlusPlus:
 @dataclass
 class IAcceleratorOptions:
     fbcache: Optional[bool] = None
+    cacheDistance: Optional[float] = None
     teaCache: Optional[bool] = None
     cacheStartStep: Optional[int] = None
     cacheStopStep: Optional[int] = None
