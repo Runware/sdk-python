@@ -755,10 +755,17 @@ class IPixverseProviderSettings(BaseProviderSettings):
 
 
 @dataclass
+class IViduTemplate:
+    name: Optional[str] = None
+    area: Optional[str] = None
+    beast: Optional[str] = None
+
+@dataclass
 class IViduProviderSettings(BaseProviderSettings):
     bgm: Optional[bool] = None
     style: Optional[str] = None
     movementAmplitude: Optional[str] = None
+    template: Optional[IViduTemplate] = None
 
     @property
     def provider_key(self) -> str:
