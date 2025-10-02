@@ -628,6 +628,18 @@ class RunwareBase:
             "upscaleFactor": upscaleGanPayload.upscaleFactor,
         }
 
+        # Add model parameter if specified
+        if upscaleGanPayload.model is not None:
+            task_params["model"] = upscaleGanPayload.model
+
+        # Add settings if provided
+        if upscaleGanPayload.settings is not None:
+            settings_dict = asdict(upscaleGanPayload.settings)
+            # Remove None values
+            settings_dict = {k: v for k, v in settings_dict.items() if v is not None}
+            if settings_dict:
+                task_params["settings"] = settings_dict
+
         # Add optional parameters if they are provided
         if upscaleGanPayload.outputType is not None:
             task_params["outputType"] = upscaleGanPayload.outputType
@@ -637,6 +649,7 @@ class RunwareBase:
             task_params["includeCost"] = upscaleGanPayload.includeCost
 
         # Send the task with all applicable parameters
+        
         await self.send([task_params])
 
         lis = self.globalListener(
