@@ -39,6 +39,7 @@ from .types import (
     IGoogleProviderSettings,
     IKlingAIProviderSettings,
     IFrameImage,
+    IAsyncTaskResponse,
 )
 from .types import IImage, IError, SdkType, ListenerType
 from .utils import (
@@ -59,6 +60,7 @@ from .utils import (
     LISTEN_TO_IMAGES_KEY,
     isLocalFile,
     process_image, delay,
+    createAsyncTaskResponse,
 )
 
 # Configure logging
@@ -199,6 +201,8 @@ class RunwareBase:
                 request_object["includeCost"] = requestPhotoMaker.includeCost
             if requestPhotoMaker.outputType:
                 request_object["outputType"] = requestPhotoMaker.outputType
+            if requestPhotoMaker.webhookURL:
+                request_object["webhookURL"] = requestPhotoMaker.webhookURL
 
             await self.send([request_object])
 
@@ -466,8 +470,9 @@ class RunwareBase:
         # Add optional parameters if they are provided
         if requestImageToText.includeCost:
             task_params["includeCost"] = requestImageToText.includeCost
+        if requestImageToText.webhookURL:
+            task_params["webhookURL"] = requestImageToText.webhookURL
 
-        
         await self.send([task_params])
 
         lis = self.globalListener(
@@ -552,6 +557,8 @@ class RunwareBase:
             task_params["model"] = removeImageBackgroundPayload.model
         if removeImageBackgroundPayload.outputQuality:
             task_params["outputQuality"] = removeImageBackgroundPayload.outputQuality
+        if removeImageBackgroundPayload.webhookURL:
+            task_params["webhookURL"] = removeImageBackgroundPayload.webhookURL
 
         # Handle settings if provided - convert dataclass to dictionary and add non-None values
         if removeImageBackgroundPayload.settings:
@@ -647,6 +654,8 @@ class RunwareBase:
             task_params["outputFormat"] = upscaleGanPayload.outputFormat
         if upscaleGanPayload.includeCost:
             task_params["includeCost"] = upscaleGanPayload.includeCost
+        if upscaleGanPayload.webhookURL:
+            task_params["webhookURL"] = upscaleGanPayload.webhookURL
 
         # Send the task with all applicable parameters
         
@@ -733,6 +742,10 @@ class RunwareBase:
         # Add optional parameters if they are provided
         if promptEnhancer.includeCost:
             task_params["includeCost"] = promptEnhancer.includeCost
+
+        has_webhook = promptEnhancer.webhookURL
+        if has_webhook:
+            task_params["webhookURL"] = promptEnhancer.webhookURL
 
         # Send the task with all applicable parameters
         await self.send([task_params])
@@ -1297,12 +1310,16 @@ class RunwareBase:
         await self.ensureConnection()
         return await asyncRetry(lambda: self._requestVideo(requestVideo))
 
-    async def _requestVideo(self, requestVideo: IVideoInference) -> List[IVideo]:
+    async def _requestVideo(self, requestVideo: IVideoInference) -> Union[List[IVideo], IAsyncTaskResponse]:
         await self._processVideoImages(requestVideo)
         requestVideo.taskUUID = requestVideo.taskUUID or getUUID()
         request_object = self._buildVideoRequest(requestVideo)
+
+        if requestVideo.webhookURL:
+            request_object["webhookURL"] = requestVideo.webhookURL
+
         await self.send([request_object])
-        return await self._handleInitialVideoResponse(requestVideo.taskUUID, requestVideo.numberResults)
+        return await self._handleInitialVideoResponse(requestVideo.taskUUID, requestVideo.numberResults, request_object.get("webhookURL"))
 
     async def _processVideoImages(self, requestVideo: IVideoInference) -> None:
         frame_tasks = []
@@ -1404,7 +1421,7 @@ class RunwareBase:
             "outputType", "outputFormat", "outputQuality", "uploadEndpoint",
             "includeCost", "checkNsfw", "negativePrompt", "seedImage", "maskImage",
             "strength", "height", "width", "steps", "scheduler", "seed", "CFGScale",
-            "clipSkip", "promptWeighting", "maskMargin", "vae"
+            "clipSkip", "promptWeighting", "maskMargin", "vae", "webhookURL"
         ]
         
         for field in optional_fields:
@@ -1512,7 +1529,7 @@ class RunwareBase:
         if provider_dict:
             request_object["providerSettings"] = provider_dict
 
-    async def _handleInitialVideoResponse(self, task_uuid: str, number_results: int) -> List[IVideo]:
+    async def _handleInitialVideoResponse(self, task_uuid: str, number_results: int, webhook_url: Optional[str] = None) -> Union[List[IVideo], IAsyncTaskResponse]:
         lis = self.globalListener(taskUUID=task_uuid)
 
         def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
@@ -1529,6 +1546,14 @@ class RunwareBase:
             if response.get("status") == "success":
                 del self._globalMessages[task_uuid]
                 resolve([response])
+                return True
+
+            # Check if this is a webhook response (no imageUUID means async task accepted)
+            if not response.get("imageUUID") and webhook_url:
+                del self._globalMessages[task_uuid]
+                # Return async task response for webhook
+                async_response = createAsyncTaskResponse(response)
+                resolve([async_response])
                 return True
 
             del self._globalMessages[task_uuid]

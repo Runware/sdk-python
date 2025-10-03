@@ -143,6 +143,64 @@ async def main() -> None:
   - `cacheStopStep`: The step at which caching ends (default: total steps)
   - These parameters allow fine-grained control over when caching is active during the generation process.
 
+### Asynchronous Processing with Webhooks
+
+The Runware SDK supports asynchronous processing via webhooks for long-running operations. When you provide a `webhookURL`, the API immediately returns a task response and sends the final result to your webhook endpoint when processing completes.
+
+#### How it works
+
+1. Include `webhookURL` parameter in your request
+2. Receive immediate response with `taskType` and `taskUUID`
+3. Final result is POSTed to your webhook URL when ready
+
+Supported operations:
+- Image Inference
+- Photo Maker
+- Image Caption
+- Image Background Removal
+- Image Upscale
+- Prompt Enhance
+- Video Inference
+
+#### Example
+
+```python
+from runware import Runware, IImageInference
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    request_image = IImageInference(
+        positivePrompt="a beautiful mountain landscape",
+        model="civitai:36520@76907",
+        height=512,
+        width=512,
+        webhookURL="https://your-server.com/webhook/runware"
+    )
+
+    # Returns immediately with task info
+    response = await runware.imageInference(requestImage=request_image)
+    print(f"Task Type: {response.taskType}")
+    print(f"Task UUID: {response.taskUUID}")
+    # Result will be sent to your webhook URL
+```
+
+#### Webhook Payload Format
+Your webhook endpoint will receive a POST request with the same format as synchronous responses:
+```json{
+  "data": [
+    {
+      "taskType": "imageInference",
+      "taskUUID": "a770f077-f413-47de-9dac-be0b26a35da6",
+      "imageUUID": "77da2d99-a6d3-44d9-b8c0-ae9fb06b6200",
+      "imageURL": "https://im.runware.ai/image/...",
+      "cost": 0.0013
+    }
+  ]
+}
+```
+
 ### Enhancing Prompts
 
 To enhance prompts using the Runware API, you can use the `promptEnhance` method of the `Runware` class. Here's an example:
