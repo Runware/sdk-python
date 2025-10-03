@@ -27,6 +27,7 @@ from .types import (
     IEnhancedPrompt,
     IError,
     UploadImageType,
+    IAsyncTaskResponse,
 )
 import logging
 
@@ -583,6 +584,16 @@ def createEnhancedPromptsFromResponse(response: List[dict]) -> List[IEnhancedPro
         return instantiateDataclass(IEnhancedPrompt, processed_fields)
 
     return [process_single_prompt(prompt) for prompt in response]
+
+
+def createAsyncTaskResponse(response: dict) -> IAsyncTaskResponse:
+    processed_fields = {}
+
+    for field in fields(IAsyncTaskResponse):
+        if field.name in response:
+            processed_fields[field.name] = response[field.name]
+
+    return instantiateDataclass(IAsyncTaskResponse, processed_fields)
 
 
 def createImageFromResponse(response: dict) -> IImage:

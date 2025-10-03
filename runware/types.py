@@ -109,6 +109,12 @@ class File:
 
 
 @dataclass
+class IAsyncTaskResponse:
+    taskType: str
+    taskUUID: str
+
+
+@dataclass
 class RunwareBaseType:
     apiKey: str
     url: Optional[str] = None
@@ -304,6 +310,7 @@ class IPhotoMaker:
     outputFormat: Optional[IOutputFormat] = None
     includeCost: Optional[bool] = None
     taskUUID: Optional[str] = None
+    webhookURL: Optional[str] = None
 
     def __post_init__(self):
         # Validate `inputImages` to ensure it has a maximum of 4 elements
@@ -484,6 +491,7 @@ class IImageCaption:
     model: Optional[str] = None  # Optional: AIR ID (runware:150@1, runware:150@2) - backend handles default
     includeCost: bool = False
     template: Optional[str] = None
+    webhookURL: Optional[str] = None
 
 
 @dataclass
@@ -548,6 +556,7 @@ class IPromptEnhance:
     promptVersions: int
     prompt: str
     includeCost: bool = False
+    webhookURL: Optional[str] = None
 
 
 @dataclass
@@ -565,6 +574,7 @@ class IImageUpscale:
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IOutputFormat] = None
     includeCost: bool = False
+    webhookURL: Optional[str] = None
 
 
 class ReconnectingWebsocketProps:
@@ -811,6 +821,7 @@ class IVideoInference:
     numberResults: Optional[int] = 1
     providerSettings: Optional[VideoProviderSettings] = None
     speech: Optional[IPixverseSpeechSettings] = None
+    webhookURL: Optional[str] = None
 
 
 @dataclass
