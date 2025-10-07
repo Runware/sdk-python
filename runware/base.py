@@ -1412,7 +1412,9 @@ class RunwareBase:
         
         self._addOptionalImageFields(request_object, requestImage)
         self._addImageSpecialFields(request_object, requestImage, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data)
+        self._addImageInputs(request_object, requestImage)
         self._addImageProviderSettings(request_object, requestImage)
+        
         
         return request_object
 
@@ -1514,6 +1516,16 @@ class RunwareBase:
         # Add extraArgs if present
         if hasattr(requestImage, "extraArgs") and isinstance(requestImage.extraArgs, dict):
             request_object.update(requestImage.extraArgs)
+
+    def _addImageInputs(self, request_object: Dict[str, Any], requestImage: IImageInference) -> None:
+        # Add inputs if present
+        if requestImage.inputs:
+            inputs_dict = {
+                k: v for k, v in asdict(requestImage.inputs).items() 
+                if v is not None
+            }
+            if inputs_dict:
+                request_object["inputs"] = inputs_dict
 
     def _addImageProviderSettings(self, request_object: Dict[str, Any], requestImage: IImageInference) -> None:
         if not requestImage.providerSettings:
