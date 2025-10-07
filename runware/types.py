@@ -447,8 +447,8 @@ class IInputs:
 
 @dataclass
 class IImageInference:
-    positivePrompt: str
     model: Union[int, str]
+    positivePrompt: Optional[str] = None
     taskUUID: Optional[str] = None
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IOutputFormat] = None
