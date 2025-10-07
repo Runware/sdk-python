@@ -846,6 +846,7 @@ class IVideoInference:
     providerSettings: Optional[VideoProviderSettings] = None
     speech: Optional[IPixverseSpeechSettings] = None
     webhookURL: Optional[str] = None
+    nsfw_check: Optional[Literal["none", "fast", "full"]] = None
 
 
 @dataclass

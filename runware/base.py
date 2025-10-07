@@ -1385,7 +1385,7 @@ class RunwareBase:
         optional_fields = [
             "outputType", "outputFormat", "outputQuality", "uploadEndpoint",
             "includeCost", "negativePrompt", "inputAudios", "referenceVideos", "fps", "steps", "seed",
-            "CFGScale", "seedImage", "duration", "width", "height",
+            "CFGScale", "seedImage", "duration", "width", "height", "nsfw_check",
         ]
 
         for field in optional_fields:
