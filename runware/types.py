@@ -441,9 +441,14 @@ ImageProviderSettings = IOpenAIProviderSettings
 
 
 @dataclass
+class IInputs:
+    references: Optional[List[Union[str, File]]] = field(default_factory=list)
+
+
+@dataclass
 class IImageInference:
-    positivePrompt: str
     model: Union[int, str]
+    positivePrompt: Optional[str] = None
     taskUUID: Optional[str] = None
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IOutputFormat] = None
@@ -480,6 +485,7 @@ class IImageInference:
     referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
     acePlusPlus: Optional[IAcePlusPlus] = None
     providerSettings: Optional[ImageProviderSettings] = None
+    inputs: Optional[IInputs] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
 
 
