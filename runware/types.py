@@ -437,12 +437,27 @@ class IOpenAIProviderSettings(BaseProviderSettings):
     def provider_key(self) -> str:
         return "openai"
 
-ImageProviderSettings = IOpenAIProviderSettings
+
+@dataclass
+class IBriaProviderSettings(BaseProviderSettings):
+    medium: Optional[Literal["photography", "art"]] = None
+    promptEnhancement: Optional[bool] = None
+    enhanceImage: Optional[bool] = None
+    promptContentModeration: Optional[bool] = None
+    contentModeration: Optional[bool] = None
+    ipSignal: Optional[bool] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "bria"
 
 
 @dataclass
 class IInputs:
     references: Optional[List[Union[str, File]]] = field(default_factory=list)
+
+
+ImageProviderSettings = IOpenAIProviderSettings | IBriaProviderSettings
 
 
 @dataclass
@@ -822,7 +837,6 @@ class IElevenLabsProviderSettings(BaseProviderSettings):
 
 
 VideoProviderSettings = IKlingAIProviderSettings | IGoogleProviderSettings | IMinimaxProviderSettings | IBytedanceProviderSettings | IPixverseProviderSettings | IViduProviderSettings
-
 AudioProviderSettings = IElevenLabsProviderSettings
 
 @dataclass
