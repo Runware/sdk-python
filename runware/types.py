@@ -856,6 +856,7 @@ class IVideoInference:
     negativePrompt: Optional[str] = None
     frameImages: Optional[List[Union[IFrameImage, str]]] = field(default_factory=list)
     referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
+    lora: Optional[List[ILora]] = field(default_factory=list)
     referenceVideos: Optional[List[int]] = None  # Array of video media IDs (integers) - Max 30 seconds, supported formats (mp4, mov)
     inputAudios: Optional[List[str]] = None
     fps: Optional[int] = None
@@ -866,6 +867,8 @@ class IVideoInference:
     providerSettings: Optional[VideoProviderSettings] = None
     speech: Optional[IPixverseSpeechSettings] = None
     webhookURL: Optional[str] = None
+    nsfw_check: Optional[Literal["none", "fast", "full"]] = None
+    inputs: Optional[IInputs] = None
 
 
 @dataclass
