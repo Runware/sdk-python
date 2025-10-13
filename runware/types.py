@@ -40,6 +40,7 @@ class ETaskType(Enum):
     MODEL_SEARCH = "modelSearch"
     VIDEO_INFERENCE = "videoInference"
     AUDIO_INFERENCE = "audioInference"
+    CAPTION = "caption"
     GET_RESPONSE = "getResponse"
 
 
@@ -905,6 +906,30 @@ class IAudio:
     audioURL: Optional[str] = None
     audioBase64Data: Optional[str] = None
     audioDataURI: Optional[str] = None
+    cost: Optional[float] = None
+
+
+@dataclass
+class IVideoCaptionInputs:
+    video: str  # Video URL or UUID
+
+
+@dataclass
+class IVideoCaption:
+    model: str
+    inputs: IVideoCaptionInputs
+    deliveryMethod: str = "async"
+    taskUUID: Optional[str] = None
+    includeCost: Optional[bool] = None
+    webhookURL: Optional[str] = None
+
+
+@dataclass
+class IVideoToText:
+    taskType: str
+    taskUUID: str
+    text: Optional[str] = None
+    status: Optional[str] = None
     cost: Optional[float] = None
 
 

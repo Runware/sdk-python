@@ -32,6 +32,9 @@ from .types import (
     IModelSearchResponse,
     IControlNet,
     IVideo,
+    IVideoCaption,
+    IVideoToText,
+    IVideoCaptionInputs,
     IVideoInference,
     IAudio,
     IAudioInference,
@@ -48,6 +51,7 @@ from .utils import (
     fileToBase64,
     createImageFromResponse,
     createImageToTextFromResponse,
+    createVideoToTextFromResponse,
     createEnhancedPromptsFromResponse,
     instantiateDataclassList,
     RunwareAPIError,
@@ -513,6 +517,141 @@ class RunwareBase:
             return createImageToTextFromResponse(response)
         else:
             return None
+
+    async def videoCaption(self, requestVideoCaption: IVideoCaption) -> IVideoToText:
+        try:
+            await self.ensureConnection()
+            return await asyncRetry(
+                lambda: self._requestVideoCaption(requestVideoCaption)
+            )
+        except Exception as e:
+            raise e
+
+    async def _requestVideoCaption(
+        self, requestVideoCaption: IVideoCaption
+    ) -> IVideoToText:
+        taskUUID = requestVideoCaption.taskUUID or getUUID()
+
+        # Create the request object
+        task_params = {
+            "taskType": ETaskType.CAPTION.value,
+            "taskUUID": taskUUID,
+            "model": requestVideoCaption.model,
+            "inputs": {
+                "video": requestVideoCaption.inputs.video
+            },
+            "deliveryMethod": requestVideoCaption.deliveryMethod,
+        }
+
+        # Add optional parameters
+        if requestVideoCaption.includeCost is not None:
+            task_params["includeCost"] = requestVideoCaption.includeCost
+        if requestVideoCaption.webhookURL:
+            task_params["webhookURL"] = requestVideoCaption.webhookURL
+
+        await self.send([task_params])
+
+        # If webhook is specified, return immediately with task acknowledgment
+        if requestVideoCaption.webhookURL:
+            lis = self.globalListener(taskUUID=taskUUID)
+            
+            def check_webhook_ack(resolve: callable, reject: callable, *args: Any) -> bool:
+                response = self._globalMessages.get(taskUUID)
+                if response:
+                    caption_response = response[0]
+                else:
+                    caption_response = response
+
+                if caption_response and caption_response.get("error"):
+                    reject(caption_response)
+                    return True
+
+                if caption_response:
+                    del self._globalMessages[taskUUID]
+                    resolve(caption_response)
+                    return True
+
+                return False
+
+            response = await getIntervalWithPromise(
+                check_webhook_ack, debugKey="video-caption-webhook", timeOutDuration=30000
+            )
+            
+            lis["destroy"]()
+            
+            if "code" in response:
+                raise RunwareAPIError(response)
+            
+            return createVideoToTextFromResponse(response) if response else None
+
+        # For async without webhook, poll for results
+        return await self._pollVideoCaptionResults(taskUUID)
+
+    async def _pollVideoCaptionResults(self, task_uuid: str) -> IVideoToText:
+        # Wait for initial acknowledgment
+        lis = self.globalListener(taskUUID=task_uuid)
+        
+        def check_initial(resolve: callable, reject: callable, *args: Any) -> bool:
+            response = self._globalMessages.get(task_uuid)
+            if response:
+                initial_response = response[0]
+                if initial_response and initial_response.get("error"):
+                    reject(initial_response)
+                    return True
+                if initial_response:
+                    del self._globalMessages[task_uuid]
+                    resolve(initial_response)
+                    return True
+            return False
+
+        await getIntervalWithPromise(
+            check_initial, debugKey="video-caption-initial", timeOutDuration=30000
+        )
+        lis["destroy"]()
+
+        # Now poll for the actual result with text
+        max_polls = 60  # Poll for up to 3 minutes (60 * 3 seconds)
+        for poll_count in range(max_polls):
+            await self.send([{
+                "taskType": ETaskType.GET_RESPONSE.value,
+                "taskUUID": task_uuid
+            }])
+
+            lis = self.globalListener(taskUUID=task_uuid)
+
+            def check_poll_response(resolve: callable, reject: callable, *args: Any) -> bool:
+                response_list = self._globalMessages.get(task_uuid, [])
+                if response_list:
+                    del self._globalMessages[task_uuid]
+                    resolve(response_list[0] if response_list else None)
+                    return True
+                return False
+
+            try:
+                response = await getIntervalWithPromise(
+                    check_poll_response, debugKey=f"video-caption-poll-{poll_count}", timeOutDuration=5000
+                )
+                lis["destroy"]()
+
+                if response and "code" in response:
+                    raise RunwareAPIError(response)
+
+                # Check if we have the text field (result is ready)
+                if response and response.get("text"):
+                    return createVideoToTextFromResponse(response)
+
+                # If status is error or failed, raise exception
+                if response and response.get("status") in ["error", "failed"]:
+                    raise RunwareAPIError({"message": f"Video caption task failed: {response}"})
+
+            except Exception as e:
+                lis["destroy"]()
+                if poll_count >= max_polls - 1:
+                    raise e
+
+            await delay(3)  # Wait 3 seconds between polls
+
+        raise RunwareAPIError({"message": "Video caption generation timed out"})
 
     async def imageBackgroundRemoval(
         self, removeImageBackgroundPayload: IImageBackgroundRemoval

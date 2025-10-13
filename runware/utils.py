@@ -24,6 +24,7 @@ from .types import (
     IImage,
     ETaskType,
     IImageToText,
+    IVideoToText,
     IEnhancedPrompt,
     IError,
     UploadImageType,
@@ -37,7 +38,7 @@ if not mimetypes.guess_type("test.webp")[0]:
     mimetypes.add_type("image/webp", ".webp")
 
 BASE_RUNWARE_URLS = {
-    Environment.PRODUCTION: "wss://ws-api.runware.ai/v1",
+    Environment.PRODUCTION: "wss://ws-api.runware.dev/v1",
     Environment.TEST: "ws://localhost:8080",
 }
 
@@ -625,6 +626,19 @@ def createImageToTextFromResponse(response: dict) -> IImageToText:
                 processed_fields[field.name] = response[field.name]
 
     return instantiateDataclass(IImageToText, processed_fields)
+
+
+def createVideoToTextFromResponse(response: dict) -> IVideoToText:
+    processed_fields = {}
+
+    for field in fields(IVideoToText):
+        if field.name in response:
+            if field.type == float or field.type == Optional[float]:
+                processed_fields[field.name] = float(response[field.name])
+            else:
+                processed_fields[field.name] = response[field.name]
+
+    return instantiateDataclass(IVideoToText, processed_fields)
 
 
 async def getIntervalWithPromise(
