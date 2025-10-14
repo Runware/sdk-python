@@ -33,6 +33,7 @@ from .types import (
     IControlNet,
     IVideo,
     IVideoInference,
+    IVideoInputs,
     IAudio,
     IAudioInference,
     IAudioSettings,
