@@ -586,7 +586,7 @@ class RunwareBase:
             return createVideoToTextFromResponse(response) if response else None
 
         # For async without webhook, poll for results using _pollVideoResults
-        return await self._pollVideoResults(taskUUID, 1, "caption")
+        return await self._pollVideoResults(taskUUID, 1)
 
 
     async def imageBackgroundRemoval(
@@ -1679,25 +1679,26 @@ class RunwareBase:
         else:
             return instantiateDataclassList(IVideo, initial_response)
 
-    async def _pollVideoResults(self, task_uuid: str, number_results: int, response_type: str = "video") -> Union[List[IVideo], IVideoToText]:
+    async def _pollVideoResults(self, task_uuid: str, number_results: int) -> Union[List[IVideo], IVideoToText]:
         for poll_count in range(MAX_POLLS_VIDEO_GENERATION):
             try:
                 responses = await self._sendPollRequest(task_uuid, poll_count)
                 
-                if response_type == "caption":
+                if responses[0]["taskType"] == "caption":
                     # Handle caption responses
                     for response in responses:
+                        # Check for errors first (both code and status)
                         if response.get("code"):
                             raise RunwareAPIError(response)
+                        
+                        if response and response.get("status") in ["error", "failed"]:
+                            raise RunwareAPIError({"message": f"Video caption task failed: {response}"})
                         
                         # Check if we have the text field (caption result is ready)
                         if response and response.get("text"):
                             return createVideoToTextFromResponse(response)
-                        
-                        # If status is error or failed, raise exception
-                        if response and response.get("status") in ["error", "failed"]:
-                            raise RunwareAPIError({"message": f"Video caption task failed: {response}"})
                 else:
+                    
                     # Handle video responses (original logic)
                     completed_results = self._processVideoPollingResponse(responses)
 
@@ -1708,13 +1709,17 @@ class RunwareBase:
                         raise RunwareAPIError({"message": f"Unexpected polling response at poll {poll_count}"})
 
             except Exception as e:
+                # For RunwareAPIError, always raise immediately (don't continue polling)
+                if isinstance(e, RunwareAPIError):
+                    raise e
+                # For other exceptions, only raise on last poll
                 if poll_count >= MAX_POLLS_VIDEO_GENERATION - 1:
                     raise e
 
             await delay(3)
 
         # Different timeout messages based on response type
-        timeout_msg = "Video caption generation timed out" if response_type == "caption" else "Video generation timed out"
+        timeout_msg = "Timed out"
         raise RunwareAPIError({"message": timeout_msg})
 
     async def _sendPollRequest(self, task_uuid: str, poll_count: int) -> List[Dict[str, Any]]:
@@ -1755,7 +1760,7 @@ class RunwareBase:
         return completed_results
 
     def _hasPendingVideos(self, responses: List[Dict[str, Any]]) -> bool:
-        return any(response.get("status") == "pending" for response in responses)
+        return any(response.get("status") in ["pending", "processing"] for response in responses)
 
     async def audioInference(self, requestAudio: IAudioInference) -> List[IAudio]:
         await self.ensureConnection()
