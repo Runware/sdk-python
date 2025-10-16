@@ -1689,8 +1689,8 @@ class RunwareBase:
                     if response.get("code"):
                         raise RunwareAPIError(response)
                 
-                # Process responses using the response class type
-                completed_results = self._processPollingResponse(responses, response_cls)
+                # Process responses using the unified method
+                completed_results = self._processVideoPollingResponse(responses)
 
                 if len(completed_results) >= number_results:
                     return instantiateDataclassList(response_cls, completed_results[:number_results])
@@ -1736,31 +1736,13 @@ class RunwareBase:
         finally:
             lis["destroy"]()
 
-    def _processPollingResponse(self, responses: List[Dict[str, Any]], response_cls) -> List[Any]:
-        completed_results = []
-
-        for response in responses:
-            if response.get("code"):
-                raise RunwareAPIError(response)
-            
-            if response_cls == IVideoToText:
-                # For caption responses, check if we have the text field
-                if response and response.get("text"):
-                    completed_results.append(createVideoToTextFromResponse(response))
-            else:
-                # For video responses, check for success status
-                status = response.get("status")
-                if status == "success":
-                    completed_results.append(response)
-
-        return completed_results
-
     def _processVideoPollingResponse(self, responses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         completed_results = []
 
         for response in responses:
             if response.get("code"):
                 raise RunwareAPIError(response)
+            
             status = response.get("status")
             if status == "success":
                 completed_results.append(response)
