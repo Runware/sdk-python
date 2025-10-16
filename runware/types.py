@@ -462,6 +462,14 @@ ImageProviderSettings = IOpenAIProviderSettings | IBriaProviderSettings
 
 
 @dataclass
+class IVideoInputs:
+    references: Optional[List[Union[str, File]]] = field(default_factory=list)
+    image: Optional[Union[str, File]] = None
+    audio: Optional[str] = None
+    mask: Optional[Union[str, File]] = None
+
+
+@dataclass
 class IImageInference:
     model: Union[int, str]
     positivePrompt: Optional[str] = None
@@ -765,6 +773,7 @@ class IMinimaxProviderSettings(BaseProviderSettings):
 class IBytedanceProviderSettings(BaseProviderSettings):
     cameraFixed: Optional[bool] = None
     maxSequentialImages: Optional[int] = None  # Min: 1, Max: 15 - Maximum number of sequential images to generate
+    fastMode: Optional[bool] = False  # When enabled, speeds up generation by sacrificing some effects. Default: false. RTF: 25-28 (fast) vs 35 (normal)
 
     @property
     def provider_key(self) -> str:
@@ -857,6 +866,7 @@ class IVideoInference:
     negativePrompt: Optional[str] = None
     frameImages: Optional[List[Union[IFrameImage, str]]] = field(default_factory=list)
     referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
+    lora: Optional[List[ILora]] = field(default_factory=list)
     referenceVideos: Optional[List[int]] = None  # Array of video media IDs (integers) - Max 30 seconds, supported formats (mp4, mov)
     inputAudios: Optional[List[str]] = None
     fps: Optional[int] = None
@@ -867,6 +877,8 @@ class IVideoInference:
     providerSettings: Optional[VideoProviderSettings] = None
     speech: Optional[IPixverseSpeechSettings] = None
     webhookURL: Optional[str] = None
+    nsfw_check: Optional[Literal["none", "fast", "full"]] = None
+    inputs: Optional[IVideoInputs] = None
 
 
 @dataclass

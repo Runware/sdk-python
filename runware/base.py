@@ -36,6 +36,7 @@ from .types import (
     IVideoToText,
     IVideoCaptionInputs,
     IVideoInference,
+    IVideoInputs,
     IAudio,
     IAudioInference,
     IAudioSettings,
@@ -1451,15 +1452,17 @@ class RunwareBase:
 
         self._addOptionalVideoFields(request_object, requestVideo)
         self._addVideoImages(request_object, requestVideo)
+        self._addVideoInputs(request_object, requestVideo)
         self._addProviderSettings(request_object, requestVideo)
         
+        print(f"\n\n {request_object}\n\n")
         return request_object
 
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
         optional_fields = [
             "outputType", "outputFormat", "outputQuality", "uploadEndpoint",
             "includeCost", "negativePrompt", "inputAudios", "referenceVideos", "fps", "steps", "seed",
-            "CFGScale", "seedImage", "duration", "width", "height",
+            "CFGScale", "seedImage", "duration", "width", "height", "nsfw_check",
         ]
 
         for field in optional_fields:
@@ -1476,6 +1479,13 @@ class RunwareBase:
 
         if requestVideo.referenceImages:
             request_object["referenceImages"] = requestVideo.referenceImages
+        
+        # Add lora if present
+        if requestVideo.lora:
+            request_object["lora"] = [
+                {"model": lora.model, "weight": lora.weight}
+                for lora in requestVideo.lora
+            ]
 
     def _buildImageRequest(self, requestImage: IImageInference, prompt: str, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict]) -> Dict[str, Any]:
         request_object = {
@@ -1489,7 +1499,7 @@ class RunwareBase:
         self._addImageInputs(request_object, requestImage)
         self._addImageProviderSettings(request_object, requestImage)
         
-        
+
         return request_object
 
     def _addOptionalImageFields(self, request_object: Dict[str, Any], requestImage: IImageInference) -> None:
@@ -1596,6 +1606,16 @@ class RunwareBase:
         if requestImage.inputs:
             inputs_dict = {
                 k: v for k, v in asdict(requestImage.inputs).items() 
+                if v is not None
+            }
+            if inputs_dict:
+                request_object["inputs"] = inputs_dict
+
+    def _addVideoInputs(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
+        # Add inputs if present
+        if requestVideo.inputs:
+            inputs_dict = {
+                k: v for k, v in asdict(requestVideo.inputs).items() 
                 if v is not None
             }
             if inputs_dict:
