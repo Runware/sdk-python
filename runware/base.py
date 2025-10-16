@@ -32,6 +32,9 @@ from .types import (
     IModelSearchResponse,
     IControlNet,
     IVideo,
+    IVideoCaption,
+    IVideoToText,
+    IVideoCaptionInputs,
     IVideoInference,
     IVideoInputs,
     IAudio,
@@ -49,6 +52,7 @@ from .utils import (
     fileToBase64,
     createImageFromResponse,
     createImageToTextFromResponse,
+    createVideoToTextFromResponse,
     createEnhancedPromptsFromResponse,
     instantiateDataclassList,
     RunwareAPIError,
@@ -514,6 +518,76 @@ class RunwareBase:
             return createImageToTextFromResponse(response)
         else:
             return None
+
+    async def videoCaption(self, requestVideoCaption: IVideoCaption) -> List[IVideoToText]:
+        try:
+            await self.ensureConnection()
+            return await asyncRetry(
+                lambda: self._requestVideoCaption(requestVideoCaption)
+            )
+        except Exception as e:
+            raise e
+
+    async def _requestVideoCaption(
+        self, requestVideoCaption: IVideoCaption
+    ) -> IVideoToText:
+        taskUUID = requestVideoCaption.taskUUID or getUUID()
+
+        # Create the request object
+        task_params = {
+            "taskType": ETaskType.CAPTION.value,
+            "taskUUID": taskUUID,
+            "model": requestVideoCaption.model,
+            "inputs": {
+                "video": requestVideoCaption.inputs.video
+            },
+            "deliveryMethod": requestVideoCaption.deliveryMethod,
+        }
+
+        # Add optional parameters
+        if requestVideoCaption.includeCost is not None:
+            task_params["includeCost"] = requestVideoCaption.includeCost
+        if requestVideoCaption.webhookURL:
+            task_params["webhookURL"] = requestVideoCaption.webhookURL
+
+        await self.send([task_params])
+
+        # If webhook is specified, return immediately with task acknowledgment
+        if requestVideoCaption.webhookURL:
+            lis = self.globalListener(taskUUID=taskUUID)
+            
+            def check_webhook_ack(resolve: callable, reject: callable, *args: Any) -> bool:
+                response = self._globalMessages.get(taskUUID)
+                if response:
+                    caption_response = response[0]
+                else:
+                    caption_response = response
+
+                if caption_response and caption_response.get("error"):
+                    reject(caption_response)
+                    return True
+
+                if caption_response:
+                    del self._globalMessages[taskUUID]
+                    resolve(caption_response)
+                    return True
+
+                return False
+
+            response = await getIntervalWithPromise(
+                check_webhook_ack, debugKey="video-caption-webhook", timeOutDuration=30000
+            )
+            
+            lis["destroy"]()
+            
+            if "code" in response:
+                raise RunwareAPIError(response)
+            
+            return [createVideoToTextFromResponse(response)] if response else []
+
+        # For async without webhook, poll for results using _pollVideoResults
+        return await self._pollVideoResults(taskUUID, 1, IVideoToText)
+
 
     async def imageBackgroundRemoval(
         self, removeImageBackgroundPayload: IImageBackgroundRemoval
@@ -1381,7 +1455,6 @@ class RunwareBase:
         self._addVideoInputs(request_object, requestVideo)
         self._addProviderSettings(request_object, requestVideo)
         
-        print(f"\n\n {request_object}\n\n")
         return request_object
 
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
@@ -1606,25 +1679,37 @@ class RunwareBase:
         else:
             return instantiateDataclassList(IVideo, initial_response)
 
-    async def _pollVideoResults(self, task_uuid: str, number_results: int) -> List[IVideo]:
+    async def _pollVideoResults(self, task_uuid: str, number_results: int, response_cls: IVideo | IVideoToText = IVideo) -> Union[List[IVideo], List[IVideoToText]]:
         for poll_count in range(MAX_POLLS_VIDEO_GENERATION):
             try:
                 responses = await self._sendPollRequest(task_uuid, poll_count)
+                
+                # Check for errors first in all responses
+                for response in responses:
+                    if response.get("code"):
+                        raise RunwareAPIError(response)
+                
+                # Process responses using the unified method
                 completed_results = self._processVideoPollingResponse(responses)
 
                 if len(completed_results) >= number_results:
-                    return instantiateDataclassList(IVideo, completed_results[:number_results])
+                    return instantiateDataclassList(response_cls, completed_results[:number_results])
 
                 if not self._hasPendingVideos(responses) and not completed_results:
                     raise RunwareAPIError({"message": f"Unexpected polling response at poll {poll_count}"})
 
             except Exception as e:
+                # For RunwareAPIError, always raise immediately (don't continue polling)
+                if isinstance(e, RunwareAPIError):
+                    raise e
+                # For other exceptions, only raise on last poll
                 if poll_count >= MAX_POLLS_VIDEO_GENERATION - 1:
                     raise e
-
             await delay(3)
 
-        raise RunwareAPIError({"message": "Video generation timed out"})
+        # Different timeout messages based on response type
+        timeout_msg = "Timed out"
+        raise RunwareAPIError({"message": timeout_msg})
 
     async def _sendPollRequest(self, task_uuid: str, poll_count: int) -> List[Dict[str, Any]]:
         await self.send([{
@@ -1657,6 +1742,7 @@ class RunwareBase:
         for response in responses:
             if response.get("code"):
                 raise RunwareAPIError(response)
+            
             status = response.get("status")
             if status == "success":
                 completed_results.append(response)
@@ -1664,7 +1750,7 @@ class RunwareBase:
         return completed_results
 
     def _hasPendingVideos(self, responses: List[Dict[str, Any]]) -> bool:
-        return any(response.get("status") == "pending" for response in responses)
+        return any(response.get("status") in ["pending", "processing"] for response in responses)
 
     async def audioInference(self, requestAudio: IAudioInference) -> List[IAudio]:
         await self.ensureConnection()
