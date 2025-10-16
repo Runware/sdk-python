@@ -519,7 +519,7 @@ class RunwareBase:
         else:
             return None
 
-    async def videoCaption(self, requestVideoCaption: IVideoCaption) -> IVideoToText:
+    async def videoCaption(self, requestVideoCaption: IVideoCaption) -> List[IVideoToText]:
         try:
             await self.ensureConnection()
             return await asyncRetry(
@@ -583,10 +583,10 @@ class RunwareBase:
             if "code" in response:
                 raise RunwareAPIError(response)
             
-            return createVideoToTextFromResponse(response) if response else None
+            return [createVideoToTextFromResponse(response)] if response else []
 
         # For async without webhook, poll for results using _pollVideoResults
-        return await self._pollVideoResults(taskUUID, 1)
+        return await self._pollVideoResults(taskUUID, 1, IVideoToText)
 
 
     async def imageBackgroundRemoval(
@@ -1679,38 +1679,24 @@ class RunwareBase:
         else:
             return instantiateDataclassList(IVideo, initial_response)
 
-    async def _pollVideoResults(self, task_uuid: str, number_results: int) -> Union[List[IVideo], IVideoToText]:
+    async def _pollVideoResults(self, task_uuid: str, number_results: int, response_cls=IVideo) -> Union[List[IVideo], List[IVideoToText]]:
         for poll_count in range(MAX_POLLS_VIDEO_GENERATION):
             try:
                 responses = await self._sendPollRequest(task_uuid, poll_count)
                 
-                # Check for errors first in all responses (before checking task type)
+                # Check for errors first in all responses
                 for response in responses:
                     if response.get("code"):
                         raise RunwareAPIError(response)
                 
-                # Check task type and handle accordingly
-                if responses[0].get("taskType") == "caption":
-                    # Handle caption responses
-                    for response in responses:
-                        if response and response.get("status") in ["error", "failed"]:
-                            raise RunwareAPIError({"message": f"Video caption task failed: {response}"})
-                        
-                        # Check if we have the text field (caption result is ready)
-                        if response and response.get("text"):
-                            return createVideoToTextFromResponse(response)
-                else:
-                    
-                    # Handle video responses (original logic)
-                    completed_results = self._processVideoPollingResponse(responses)
+                # Process responses using the response class type
+                completed_results = self._processPollingResponse(responses, response_cls)
 
-                    if len(completed_results) >= number_results:
-                        return instantiateDataclassList(IVideo, completed_results[:number_results])
+                if len(completed_results) >= number_results:
+                    return instantiateDataclassList(response_cls, completed_results[:number_results])
 
-                    if not self._hasPendingVideos(responses) and not completed_results:
-                        raise RunwareAPIError({"message": f"Unexpected polling response at poll {poll_count}"})
-
-                
+                if not self._hasPendingVideos(responses) and not completed_results:
+                    raise RunwareAPIError({"message": f"Unexpected polling response at poll {poll_count}"})
 
             except Exception as e:
                 # For RunwareAPIError, always raise immediately (don't continue polling)
@@ -1749,6 +1735,25 @@ class RunwareBase:
             )
         finally:
             lis["destroy"]()
+
+    def _processPollingResponse(self, responses: List[Dict[str, Any]], response_cls) -> List[Any]:
+        completed_results = []
+
+        for response in responses:
+            if response.get("code"):
+                raise RunwareAPIError(response)
+            
+            if response_cls == IVideoToText:
+                # For caption responses, check if we have the text field
+                if response and response.get("text"):
+                    completed_results.append(createVideoToTextFromResponse(response))
+            else:
+                # For video responses, check for success status
+                status = response.get("status")
+                if status == "success":
+                    completed_results.append(response)
+
+        return completed_results
 
     def _processVideoPollingResponse(self, responses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         completed_results = []
