@@ -1710,8 +1710,7 @@ class RunwareBase:
                     if not self._hasPendingVideos(responses) and not completed_results:
                         raise RunwareAPIError({"message": f"Unexpected polling response at poll {poll_count}"})
 
-                # Only delay if no exception was raised in this iteration
-                await delay(3)
+                
 
             except Exception as e:
                 # For RunwareAPIError, always raise immediately (don't continue polling)
@@ -1720,6 +1719,7 @@ class RunwareBase:
                 # For other exceptions, only raise on last poll
                 if poll_count >= MAX_POLLS_VIDEO_GENERATION - 1:
                     raise e
+            await delay(3)
 
         # Different timeout messages based on response type
         timeout_msg = "Timed out"
