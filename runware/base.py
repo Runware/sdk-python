@@ -1455,7 +1455,6 @@ class RunwareBase:
         self._addVideoInputs(request_object, requestVideo)
         self._addProviderSettings(request_object, requestVideo)
         
-        print(f"\n\n {request_object}\n\n")
         return request_object
 
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
