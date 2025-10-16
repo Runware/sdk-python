@@ -584,74 +584,9 @@ class RunwareBase:
             
             return createVideoToTextFromResponse(response) if response else None
 
-        # For async without webhook, poll for results
-        return await self._pollVideoCaptionResults(taskUUID)
+        # For async without webhook, poll for results using _pollVideoResults
+        return await self._pollVideoResults(taskUUID, 1, "caption")
 
-    async def _pollVideoCaptionResults(self, task_uuid: str) -> IVideoToText:
-        # Wait for initial acknowledgment
-        lis = self.globalListener(taskUUID=task_uuid)
-        
-        def check_initial(resolve: callable, reject: callable, *args: Any) -> bool:
-            response = self._globalMessages.get(task_uuid)
-            if response:
-                initial_response = response[0]
-                if initial_response and initial_response.get("error"):
-                    reject(initial_response)
-                    return True
-                if initial_response:
-                    del self._globalMessages[task_uuid]
-                    resolve(initial_response)
-                    return True
-            return False
-
-        await getIntervalWithPromise(
-            check_initial, debugKey="video-caption-initial", timeOutDuration=30000
-        )
-        lis["destroy"]()
-
-        # Now poll for the actual result with text
-        max_polls = 60  # Poll for up to 3 minutes (60 * 3 seconds)
-        for poll_count in range(max_polls):
-            await self.send([{
-                "taskType": ETaskType.GET_RESPONSE.value,
-                "taskUUID": task_uuid
-            }])
-
-            lis = self.globalListener(taskUUID=task_uuid)
-
-            def check_poll_response(resolve: callable, reject: callable, *args: Any) -> bool:
-                response_list = self._globalMessages.get(task_uuid, [])
-                if response_list:
-                    del self._globalMessages[task_uuid]
-                    resolve(response_list[0] if response_list else None)
-                    return True
-                return False
-
-            try:
-                response = await getIntervalWithPromise(
-                    check_poll_response, debugKey=f"video-caption-poll-{poll_count}", timeOutDuration=5000
-                )
-                lis["destroy"]()
-
-                if response and "code" in response:
-                    raise RunwareAPIError(response)
-
-                # Check if we have the text field (result is ready)
-                if response and response.get("text"):
-                    return createVideoToTextFromResponse(response)
-
-                # If status is error or failed, raise exception
-                if response and response.get("status") in ["error", "failed"]:
-                    raise RunwareAPIError({"message": f"Video caption task failed: {response}"})
-
-            except Exception as e:
-                lis["destroy"]()
-                if poll_count >= max_polls - 1:
-                    raise e
-
-            await delay(3)  # Wait 3 seconds between polls
-
-        raise RunwareAPIError({"message": "Video caption generation timed out"})
 
     async def imageBackgroundRemoval(
         self, removeImageBackgroundPayload: IImageBackgroundRemoval
@@ -1725,17 +1660,33 @@ class RunwareBase:
         else:
             return instantiateDataclassList(IVideo, initial_response)
 
-    async def _pollVideoResults(self, task_uuid: str, number_results: int) -> List[IVideo]:
+    async def _pollVideoResults(self, task_uuid: str, number_results: int, response_type: str = "video") -> Union[List[IVideo], IVideoToText]:
         for poll_count in range(MAX_POLLS_VIDEO_GENERATION):
             try:
                 responses = await self._sendPollRequest(task_uuid, poll_count)
-                completed_results = self._processVideoPollingResponse(responses)
+                
+                if response_type == "caption":
+                    # Handle caption responses
+                    for response in responses:
+                        if response.get("code"):
+                            raise RunwareAPIError(response)
+                        
+                        # Check if we have the text field (caption result is ready)
+                        if response and response.get("text"):
+                            return createVideoToTextFromResponse(response)
+                        
+                        # If status is error or failed, raise exception
+                        if response and response.get("status") in ["error", "failed"]:
+                            raise RunwareAPIError({"message": f"Video caption task failed: {response}"})
+                else:
+                    # Handle video responses (original logic)
+                    completed_results = self._processVideoPollingResponse(responses)
 
-                if len(completed_results) >= number_results:
-                    return instantiateDataclassList(IVideo, completed_results[:number_results])
+                    if len(completed_results) >= number_results:
+                        return instantiateDataclassList(IVideo, completed_results[:number_results])
 
-                if not self._hasPendingVideos(responses) and not completed_results:
-                    raise RunwareAPIError({"message": f"Unexpected polling response at poll {poll_count}"})
+                    if not self._hasPendingVideos(responses) and not completed_results:
+                        raise RunwareAPIError({"message": f"Unexpected polling response at poll {poll_count}"})
 
             except Exception as e:
                 if poll_count >= MAX_POLLS_VIDEO_GENERATION - 1:
@@ -1743,7 +1694,9 @@ class RunwareBase:
 
             await delay(3)
 
-        raise RunwareAPIError({"message": "Video generation timed out"})
+        # Different timeout messages based on response type
+        timeout_msg = "Video caption generation timed out" if response_type == "caption" else "Video generation timed out"
+        raise RunwareAPIError({"message": timeout_msg})
 
     async def _sendPollRequest(self, task_uuid: str, poll_count: int) -> List[Dict[str, Any]]:
         await self.send([{
