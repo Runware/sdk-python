@@ -1684,13 +1684,15 @@ class RunwareBase:
             try:
                 responses = await self._sendPollRequest(task_uuid, poll_count)
                 
-                if responses[0]["taskType"] == "caption":
+                # Check for errors first in all responses (before checking task type)
+                for response in responses:
+                    if response.get("code"):
+                        raise RunwareAPIError(response)
+                
+                # Check task type and handle accordingly
+                if responses[0].get("taskType") == "caption":
                     # Handle caption responses
                     for response in responses:
-                        # Check for errors first (both code and status)
-                        if response.get("code"):
-                            raise RunwareAPIError(response)
-                        
                         if response and response.get("status") in ["error", "failed"]:
                             raise RunwareAPIError({"message": f"Video caption task failed: {response}"})
                         
@@ -1708,6 +1710,9 @@ class RunwareBase:
                     if not self._hasPendingVideos(responses) and not completed_results:
                         raise RunwareAPIError({"message": f"Unexpected polling response at poll {poll_count}"})
 
+                # Only delay if no exception was raised in this iteration
+                await delay(3)
+
             except Exception as e:
                 # For RunwareAPIError, always raise immediately (don't continue polling)
                 if isinstance(e, RunwareAPIError):
@@ -1715,8 +1720,6 @@ class RunwareBase:
                 # For other exceptions, only raise on last poll
                 if poll_count >= MAX_POLLS_VIDEO_GENERATION - 1:
                     raise e
-
-            await delay(3)
 
         # Different timeout messages based on response type
         timeout_msg = "Timed out"
