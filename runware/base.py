@@ -1679,7 +1679,7 @@ class RunwareBase:
         else:
             return instantiateDataclassList(IVideo, initial_response)
 
-    async def _pollVideoResults(self, task_uuid: str, number_results: int, response_cls=IVideo) -> Union[List[IVideo], List[IVideoToText]]:
+    async def _pollVideoResults(self, task_uuid: str, number_results: int, response_cls: IVideo | IVideoToText = IVideo) -> Union[List[IVideo], List[IVideoToText]]:
         for poll_count in range(MAX_POLLS_VIDEO_GENERATION):
             try:
                 responses = await self._sendPollRequest(task_uuid, poll_count)
