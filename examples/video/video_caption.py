@@ -13,7 +13,7 @@ async def main():
     request = IVideoCaption(
         model="memories:1@1",
         inputs=IVideoCaptionInputs(
-            video="https://vm.runware.dev/video/ws/5/vi/b395d4bb-364c-44b5-91ba-f768e5ff3e98.mp4"
+            video="https://example.com/video.mp4"
         ),
         deliveryMethod="async",
         includeCost=True
