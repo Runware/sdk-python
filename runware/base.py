@@ -1536,8 +1536,6 @@ class RunwareBase:
         self._addVideoImages(request_object, requestVideo)
         self._addVideoInputs(request_object, requestVideo)
         self._addProviderSettings(request_object, requestVideo)
-
-
         return request_object
 
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
@@ -1769,7 +1767,6 @@ class RunwareBase:
                 # Process responses using the unified method
                 completed_results = self._processVideoPollingResponse(responses)
 
-
                 if len(completed_results) >= number_results:
                     return instantiateDataclassList(response_cls, completed_results[:number_results])
 
@@ -1785,6 +1782,7 @@ class RunwareBase:
                 # For other exceptions, only raise on last poll
                 if poll_count >= MAX_POLLS_VIDEO_GENERATION - 1:
                     raise e
+
             await delay(3)
 
         # Different timeout messages based on response type
@@ -1822,12 +1820,10 @@ class RunwareBase:
         for response in responses:
             if response.get("code"):
                 raise RunwareAPIError(response)
-            
             status = response.get("status")
             
             if status == "success":
                 completed_results.append(response)
-            
         return completed_results
 
     def _hasPendingVideos(self, responses: List[Dict[str, Any]]) -> bool:
