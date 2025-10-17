@@ -32,6 +32,7 @@ class ETaskType(Enum):
     IMAGE_UPLOAD = "imageUpload"
     IMAGE_UPSCALE = "imageUpscale"
     IMAGE_BACKGROUND_REMOVAL = "imageBackgroundRemoval"
+    BACKGROUND_REMOVAL = "removeBackground"
     IMAGE_CAPTION = "imageCaption"
     IMAGE_CONTROL_NET_PRE_PROCESS = "imageControlNetPreProcess"
     PROMPT_ENHANCE = "promptEnhance"
@@ -927,6 +928,11 @@ class IVideoCaptionInputs:
 
 
 @dataclass
+class IVideoBackgroundRemovalInputs:
+    video: str  # Video URL or UUID
+
+
+@dataclass
 class IVideoCaption:
     model: str
     inputs: IVideoCaptionInputs
@@ -934,6 +940,24 @@ class IVideoCaption:
     taskUUID: Optional[str] = None
     includeCost: Optional[bool] = None
     webhookURL: Optional[str] = None
+
+
+@dataclass
+class IVideoBackgroundRemovalSettings:
+    rgba: Optional[List[int]] = None  # Background color [r, g, b, a]
+    background_color: Optional[str] = None  # Predefined colors: "Transparent", "Black", "White", etc.
+
+
+@dataclass
+class IVideoBackgroundRemoval:
+    model: str
+    inputs: IVideoBackgroundRemovalInputs
+    deliveryMethod: str = "async"
+    taskUUID: Optional[str] = None
+    includeCost: Optional[bool] = None
+    webhookURL: Optional[str] = None
+    outputFormat: Optional[str] = None  # MP4, WEBM
+    settings: Optional[IVideoBackgroundRemovalSettings] = None
 
 
 @dataclass

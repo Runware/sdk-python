@@ -35,6 +35,9 @@ from .types import (
     IVideoCaption,
     IVideoToText,
     IVideoCaptionInputs,
+    IVideoBackgroundRemoval,
+    IVideoBackgroundRemovalInputs,
+    IVideoBackgroundRemovalSettings,
     IVideoInference,
     IVideoInputs,
     IAudio,
@@ -588,6 +591,85 @@ class RunwareBase:
         # For async without webhook, poll for results using _pollVideoResults
         return await self._pollVideoResults(taskUUID, 1, IVideoToText)
 
+    async def videoBackgroundRemoval(self, requestVideoBackgroundRemoval: IVideoBackgroundRemoval) -> List[IVideo]:
+
+        try:
+            await self.ensureConnection()
+            return await asyncRetry(
+                lambda: self._requestVideoBackgroundRemoval(requestVideoBackgroundRemoval)
+            )
+        except Exception as e:
+            raise e
+
+    async def _requestVideoBackgroundRemoval(
+        self, requestVideoBackgroundRemoval: IVideoBackgroundRemoval
+    ) -> List[IVideo]:
+        taskUUID = requestVideoBackgroundRemoval.taskUUID or getUUID()
+
+        # Create the request object
+        task_params = {
+            "taskType": ETaskType.BACKGROUND_REMOVAL.value,  # "removeBackground"
+            "taskUUID": taskUUID,
+            "model": requestVideoBackgroundRemoval.model,
+            "inputs": {
+                "video": requestVideoBackgroundRemoval.inputs.video
+            },
+            "deliveryMethod": requestVideoBackgroundRemoval.deliveryMethod,
+        }
+
+        # Add optional parameters
+        if requestVideoBackgroundRemoval.outputFormat:
+            task_params["outputFormat"] = requestVideoBackgroundRemoval.outputFormat
+        if requestVideoBackgroundRemoval.includeCost is not None:
+            task_params["includeCost"] = requestVideoBackgroundRemoval.includeCost
+        if requestVideoBackgroundRemoval.webhookURL:
+            task_params["webhookURL"] = requestVideoBackgroundRemoval.webhookURL
+        if requestVideoBackgroundRemoval.settings:
+            # Convert IBackgroundRemovalSettings to dict, filtering out None values
+            settings_dict = {
+                k: v
+                for k, v in vars(requestVideoBackgroundRemoval.settings).items()
+                if v is not None
+            }
+            task_params["settings"] = settings_dict
+
+        await self.send([task_params])
+
+        # If webhook is specified, return immediately with task acknowledgment
+        if requestVideoBackgroundRemoval.webhookURL:
+            lis = self.globalListener(taskUUID=taskUUID)
+            
+            def check_webhook_ack(resolve: callable, reject: callable, *args: Any) -> bool:
+                response = self._globalMessages.get(taskUUID)
+                if response:
+                    bg_removal_response = response[0]
+                else:
+                    bg_removal_response = response
+
+                if bg_removal_response and bg_removal_response.get("error"):
+                    reject(bg_removal_response)
+                    return True
+
+                if bg_removal_response:
+                    del self._globalMessages[taskUUID]
+                    resolve(bg_removal_response)
+                    return True
+
+                return False
+
+            response = await getIntervalWithPromise(
+                check_webhook_ack, debugKey="video-background-removal-webhook", timeOutDuration=30000
+            )
+            
+            lis["destroy"]()
+            
+            if "code" in response:
+                raise RunwareAPIError(response)
+            
+            return [instantiateDataclass(IVideo, response)] if response else []
+
+        # For async without webhook, poll for results using _pollVideoResults
+        return await self._pollVideoResults(taskUUID, 1, IVideo)
 
     async def imageBackgroundRemoval(
         self, removeImageBackgroundPayload: IImageBackgroundRemoval
@@ -1683,14 +1765,9 @@ class RunwareBase:
         for poll_count in range(MAX_POLLS_VIDEO_GENERATION):
             try:
                 responses = await self._sendPollRequest(task_uuid, poll_count)
-                
-                # Check for errors first in all responses
-                for response in responses:
-                    if response.get("code"):
-                        raise RunwareAPIError(response)
-                
                 # Process responses using the unified method
                 completed_results = self._processVideoPollingResponse(responses)
+
 
                 if len(completed_results) >= number_results:
                     return instantiateDataclassList(response_cls, completed_results[:number_results])
@@ -1699,9 +1776,11 @@ class RunwareBase:
                     raise RunwareAPIError({"message": f"Unexpected polling response at poll {poll_count}"})
 
             except Exception as e:
-                # For RunwareAPIError, always raise immediately (don't continue polling)
-                if isinstance(e, RunwareAPIError):
-                    raise e
+                # Check if there are any error code, if so, raise RunwareAPIError
+                if responses:
+                    for response in responses:
+                        if response.get("code"):
+                            raise RunwareAPIError(response)
                 # For other exceptions, only raise on last poll
                 if poll_count >= MAX_POLLS_VIDEO_GENERATION - 1:
                     raise e
@@ -1744,9 +1823,10 @@ class RunwareBase:
                 raise RunwareAPIError(response)
             
             status = response.get("status")
+            
             if status == "success":
                 completed_results.append(response)
-
+            
         return completed_results
 
     def _hasPendingVideos(self, responses: List[Dict[str, Any]]) -> bool:

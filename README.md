@@ -300,6 +300,48 @@ async def main() -> None:
 - `includeCost`: Include cost information in the response (optional)
 - `webhookURL`: Webhook URL for async delivery without polling (optional)
 
+### Video Background Removal
+
+To remove the background from videos you can use the `videoBackgroundRemoval` method of the `Runware` class. The SDK automatically polls for results when using async delivery. Here's an example:
+
+```python
+from runware import Runware, IVideoBackgroundRemoval, IVideoBackgroundRemovalInputs, IVideoBackgroundRemovalSettings
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    request_bg_removal = IVideoBackgroundRemoval(
+        model="bria:51@1",
+        inputs=IVideoBackgroundRemovalInputs(
+            video="https://example.com/video.mp4"
+        ),
+        outputFormat="WEBM",
+        includeCost=True,
+        settings=IVideoBackgroundRemovalSettings(
+            rgba=[255, 255, 255, 0]  
+        )
+    )
+
+    processed_videos = await runware.videoBackgroundRemoval(
+        requestVideoBackgroundRemoval=request_bg_removal
+    )
+    for video in processed_videos:
+        print(f"Video URL: {video.videoURL}")
+        if video.cost:
+            print(f"Cost: {video.cost}")
+```
+
+**Video Background Removal Parameters:**
+- `model`: Background removal model identifier (e.g., "bria:51@1")
+- `inputs`: IVideoBackgroundRemovalInputs containing the video URL or UUID
+- `outputFormat`: Output video format ("WEBM", "MP4", etc.)
+- `includeCost`: Include cost information in the response (optional)
+- `settings`: IVideoBackgroundRemovalSettings for custom background configuration
+- `webhookURL`: Webhook URL for async delivery without polling (optional)
+
+**Background Removal Settings:**
+- `rgba`: Background color as [R, G, B, A] array (0-255 for RGB, 0.0-1.0 for alpha)
 
 ### Upscaling Images
 
