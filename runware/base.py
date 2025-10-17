@@ -1536,7 +1536,8 @@ class RunwareBase:
         self._addVideoImages(request_object, requestVideo)
         self._addVideoInputs(request_object, requestVideo)
         self._addProviderSettings(request_object, requestVideo)
-        
+
+
         return request_object
 
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
@@ -1830,7 +1831,7 @@ class RunwareBase:
         return completed_results
 
     def _hasPendingVideos(self, responses: List[Dict[str, Any]]) -> bool:
-        return any(response.get("status") in ["pending", "processing"] for response in responses)
+        return any(response.get("status") == "processing" for response in responses)
 
     async def audioInference(self, requestAudio: IAudioInference) -> List[IAudio]:
         await self.ensureConnection()
