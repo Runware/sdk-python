@@ -484,6 +484,7 @@ class IImageInference:
     height: Optional[int] = None
     width: Optional[int] = None
     acceleratorOptions: Optional[IAcceleratorOptions] = None
+    acceleration: Optional[str] = None
     advancedFeatures: Optional[IAdvancedFeatures] = None
     steps: Optional[int] = None
     scheduler: Optional[str] = None
