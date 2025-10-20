@@ -50,6 +50,8 @@ class RunwareServer(RunwareBase):
         self._retry_delay: int = retry_delay
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._tasks: Dict[str, asyncio.Task] = {}
+        self._consecutive_auth_failures: int = 0
+        self._max_auth_failures: int = 5
 
         # Configure logging
         configure_logging(log_level)
@@ -59,6 +61,10 @@ class RunwareServer(RunwareBase):
     async def connect(self):
         self.logger.info("Connecting to Runware server from server")
         self._last_pong_time = time.perf_counter()
+
+        if self._consecutive_auth_failures < self._max_auth_failures:
+            self._invalidAPIkey = None
+
         try:
             self._ws = await websockets.connect(self._url)
             # update close_timeout so that we end the script sooner for inference examples
@@ -86,6 +92,7 @@ class RunwareServer(RunwareBase):
                             if error.get("taskType") == "authentication":
                                 err_msg = "Authentication error"
                                 self._invalidAPIkey = error.get("message") or err_msg
+                                self._consecutive_auth_failures += 1
                                 self._connection_session_uuid_event.set()
                                 return
                     if m.get("data") and len(m["data"]) > 0:
@@ -93,6 +100,7 @@ class RunwareServer(RunwareBase):
                             "connectionSessionUUID"
                         )
                         self._invalidAPIkey = None
+                        self._consecutive_auth_failures = 0
                         self._connection_session_uuid_event.set()
 
                 if not self._loginListener:
@@ -272,8 +280,9 @@ class RunwareServer(RunwareBase):
     async def handleClose(self):
         self.logger.debug("Handling close")
 
-        if self._invalidAPIkey:
+        if self._invalidAPIkey and self._consecutive_auth_failures >= self._max_auth_failures:
             self.logger.error(f"Error: {self._invalidAPIkey}")
+            self._is_shutting_down = True
             return
 
         reconnecting_task = self._tasks.get("Task_Reconnecting")
