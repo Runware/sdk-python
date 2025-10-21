@@ -32,7 +32,7 @@ class ETaskType(Enum):
     IMAGE_UPLOAD = "imageUpload"
     IMAGE_UPSCALE = "imageUpscale"
     IMAGE_BACKGROUND_REMOVAL = "imageBackgroundRemoval"
-    BACKGROUND_REMOVAL = "removeBackground"
+    VIDEO_BACKGROUND_REMOVAL = "removeBackground"
     IMAGE_CAPTION = "imageCaption"
     IMAGE_CONTROL_NET_PRE_PROCESS = "imageControlNetPreProcess"
     PROMPT_ENHANCE = "promptEnhance"

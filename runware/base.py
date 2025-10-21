@@ -608,7 +608,7 @@ class RunwareBase:
 
         # Create the request object
         task_params = {
-            "taskType": ETaskType.BACKGROUND_REMOVAL.value,  # "removeBackground"
+            "taskType": ETaskType.VIDEO_BACKGROUND_REMOVAL.value,  # "removeBackground"
             "taskUUID": taskUUID,
             "model": requestVideoBackgroundRemoval.model,
             "inputs": {
@@ -1761,6 +1761,8 @@ class RunwareBase:
 
     async def _pollVideoResults(self, task_uuid: str, number_results: int, response_cls: IVideo | IVideoToText = IVideo) -> Union[List[IVideo], List[IVideoToText]]:
         for poll_count in range(MAX_POLLS_VIDEO_GENERATION):
+            
+            responses = None
             try:
                 responses = await self._sendPollRequest(task_uuid, poll_count)
                 # Process responses using the unified method
