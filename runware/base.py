@@ -1579,7 +1579,6 @@ class RunwareBase:
         self._addImageInputs(request_object, requestImage)
         self._addImageProviderSettings(request_object, requestImage)
         
-
         return request_object
 
     def _addOptionalImageFields(self, request_object: Dict[str, Any], requestImage: IImageInference) -> None:
@@ -1587,7 +1586,7 @@ class RunwareBase:
             "outputType", "outputFormat", "outputQuality", "uploadEndpoint",
             "includeCost", "checkNsfw", "negativePrompt", "seedImage", "maskImage",
             "strength", "height", "width", "steps", "scheduler", "seed", "CFGScale",
-            "clipSkip", "promptWeighting", "maskMargin", "vae", "webhookURL"
+            "clipSkip", "promptWeighting", "maskMargin", "vae", "webhookURL", "acceleration"
         ]
         
         for field in optional_fields:
