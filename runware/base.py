@@ -1381,7 +1381,6 @@ class RunwareBase:
         self._addVideoInputs(request_object, requestVideo)
         self._addProviderSettings(request_object, requestVideo)
         
-        print(f"\n\n {request_object}\n\n")
         return request_object
 
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
@@ -1539,10 +1538,12 @@ class RunwareBase:
     def _addVideoInputs(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
         # Add inputs if present
         if requestVideo.inputs:
-            inputs_dict = {
-                k: v for k, v in asdict(requestVideo.inputs).items() 
-                if v is not None
-            }
+            inputs_dict = {}
+            
+            for key, value in asdict(requestVideo.inputs).items():
+                if value is not None:
+                    inputs_dict[key] = value
+            
             if inputs_dict:
                 request_object["inputs"] = inputs_dict
 
