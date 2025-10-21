@@ -8,7 +8,7 @@ import websockets
 from websockets.protocol import State
 from typing import Any, Dict, Optional
 
-
+from .reconnection import ReconnectionManager
 from .types import SdkType
 from .utils import (
     BASE_RUNWARE_URLS,
@@ -50,24 +50,20 @@ class RunwareServer(RunwareBase):
         self._retry_delay: int = retry_delay
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._tasks: Dict[str, asyncio.Task] = {}
-        self._consecutive_auth_failures: int = 0
-        self._max_auth_failures: int = 5
 
         # Configure logging
         configure_logging(log_level)
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(log_level)
 
+        self._reconnection_manager = ReconnectionManager(logger=self.logger)
+
     async def connect(self):
         self.logger.info("Connecting to Runware server from server")
         self._last_pong_time = time.perf_counter()
 
-        if self._consecutive_auth_failures < self._max_auth_failures:
-            self._invalidAPIkey = None
-
         try:
             self._ws = await websockets.connect(self._url)
-            # update close_timeout so that we end the script sooner for inference examples
             self._ws.close_timeout = 1
             self._ws.max_size = None
             self.logger.info(f"Connected to WebSocket URL: {self._url}")
@@ -90,17 +86,20 @@ class RunwareServer(RunwareBase):
                     if m.get("errors"):
                         for error in m["errors"]:
                             if error.get("taskType") == "authentication":
-                                err_msg = "Authentication error"
-                                self._invalidAPIkey = error.get("message") or err_msg
-                                self._consecutive_auth_failures += 1
+                                err_msg = error.get("message") or "Authentication error"
+                                self._invalidAPIkey = err_msg
+
+                                should_open_circuit = self._reconnection_manager.on_auth_failure()
+
+                                if should_open_circuit:
+                                    self.logger.error(f"Circuit opened: {self._invalidAPIkey}")
+
                                 self._connection_session_uuid_event.set()
                                 return
                     if m.get("data") and len(m["data"]) > 0:
-                        self._connectionSessionUUID = m["data"][0].get(
-                            "connectionSessionUUID"
-                        )
+                        self._connectionSessionUUID = m["data"][0].get("connectionSessionUUID")
                         self._invalidAPIkey = None
-                        self._consecutive_auth_failures = 0
+                        self._reconnection_manager.on_connection_success()
                         self._connection_session_uuid_event.set()
 
                 if not self._loginListener:
@@ -162,11 +161,11 @@ class RunwareServer(RunwareBase):
             )
             self._tasks["Task_Message_Handler"] = self._message_handler_task
             await on_open(self._ws)
-            # Wait for the _connectionSessionUUID to be set
             await self._connection_session_uuid_event.wait()
 
         except websockets.exceptions.ConnectionClosedError:
             await self.handleClose()
+
 
     def connected(self) -> bool:
         return self._ws is not None and self._ws.state is State.OPEN
@@ -175,7 +174,6 @@ class RunwareServer(RunwareBase):
         self.logger.info("Disconnecting from Runware server")
         self._is_shutting_down = True
 
-        # Cancel all tasks
         for task_name, task in list(self._tasks.items()):
             if task and not task.done():
                 task.cancel()
@@ -186,7 +184,6 @@ class RunwareServer(RunwareBase):
                 finally:
                     self._tasks.pop(task_name, None)
 
-        # Cancel other tasks
         if self._pingTimeout and not self._pingTimeout.done():
             self._pingTimeout.cancel()
             try:
@@ -194,7 +191,6 @@ class RunwareServer(RunwareBase):
             except asyncio.CancelledError:
                 pass
 
-        # Close websocket
         if self._ws and self._ws.state is State.OPEN:
             await self._ws.close()
 
@@ -280,11 +276,6 @@ class RunwareServer(RunwareBase):
     async def handleClose(self):
         self.logger.debug("Handling close")
 
-        if self._invalidAPIkey and self._consecutive_auth_failures >= self._max_auth_failures:
-            self.logger.error(f"Error: {self._invalidAPIkey}")
-            self._is_shutting_down = True
-            return
-
         reconnecting_task = self._tasks.get("Task_Reconnecting")
         if reconnecting_task is not None:
             if not reconnecting_task.done() and not reconnecting_task.cancelled():
@@ -320,31 +311,28 @@ class RunwareServer(RunwareBase):
                     self.logger.error(f"Error while cancelling Task_Heartbeat:", exc_info=e)
 
         async def reconnect():
-            reconnect_attempts = 0
-            max_reconnect_attempts = 5
+            while not self._is_shutting_down:
+                delay = self._reconnection_manager.calculate_delay()
+                self.logger.info(
+                    f"Reconnecting in {delay:.1f}s (state: {self._reconnection_manager.get_state().value})"
+                )
+                await asyncio.sleep(delay)
 
-            while reconnect_attempts < max_reconnect_attempts and not self._is_shutting_down:
-                self.logger.info(f"Reconnecting... (attempt {reconnect_attempts + 1})")
-                await asyncio.sleep(min(reconnect_attempts * 2 + 1, 10))
+                if self._is_shutting_down:
+                    break
+
                 try:
                     await self.connect()
                     if self.isWebsocketReadyState():
                         self.logger.info("Reconnected successfully")
-                        break  # Break out of the loop if the connection is successful and in a ready state
+                        break
                     else:
-                        self.logger.warning(
-                            "WebSocket connection is not in a ready state after reconnecting"
-                        )
+                        self.logger.warning("WebSocket not ready after reconnect")
+                        self._reconnection_manager.on_connection_failure()
                 except Exception as e:
                     self.logger.error(f"Error while reconnecting:", exc_info=e)
+                    self._reconnection_manager.on_connection_failure()
 
-                reconnect_attempts += 1
-
-            if reconnect_attempts >= max_reconnect_attempts:
-                self.logger.error("Max reconnection attempts reached. Giving up.")
-                self._is_shutting_down = True
-
-        # Attempting to reconnect...
         if not self._is_shutting_down:
             self._reconnecting_task = asyncio.create_task(
                 reconnect(), name="Task_Reconnecting"
