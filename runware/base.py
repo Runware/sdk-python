@@ -25,6 +25,7 @@ from .types import (
     IUploadModelResponse,
     ReconnectingWebsocketProps,
     UploadImageType,
+    MediaStorageType,
     EPreProcessorGroup,
     File,
     ETaskType,
@@ -861,6 +862,88 @@ class RunwareBase:
         else:
             image = None
         return image
+
+    async def uploadMedia(self, media_url: str) -> Optional[MediaStorageType]:
+        try:
+            await self.ensureConnection()
+            return await asyncRetry(lambda: self._uploadMedia(media_url))
+        except Exception as e:
+            raise e
+
+    async def _uploadMedia(self, media_url: str) -> Optional[MediaStorageType]:
+        task_uuid = getUUID()
+        local_file = True
+        
+        if isinstance(media_url, str):
+            if os.path.exists(media_url):
+                local_file = True
+            else:
+                local_file = isLocalFile(media_url)
+                
+                # Check if it's a base64 string (with or without data URI prefix)
+                if media_url.startswith("data:") or re.match(
+                    r"^[A-Za-z0-9+/]+={0,2}$", media_url
+                ):
+                    # Assume it's a base64 string (with or without data URI prefix)
+                    local_file = False
+            
+            if not local_file:
+                return MediaStorageType(
+                    mediaUUID=media_url,
+                    taskUUID=task_uuid,
+                )
+            
+            media_url = await fileToBase64(media_url)
+            # Strip the data URI prefix for media storage API
+            if media_url.startswith("data:"):
+                media_url = media_url.split(",", 1)[1]
+        
+        await self.send(
+            [
+                {
+                    "taskType": ETaskType.MEDIA_STORAGE.value,
+                    "taskUUID": task_uuid,
+                    "operation": "upload",
+                    "media": media_url,
+                }
+            ]
+        )
+
+        lis = self.globalListener(taskUUID=task_uuid)
+
+        def check(resolve: callable, reject: callable, *args: Any) -> bool:
+            uploaded_media_list = self._globalMessages.get(task_uuid)
+            uploaded_media = uploaded_media_list[0] if uploaded_media_list else None
+
+            if uploaded_media and uploaded_media.get("error"):
+                reject(uploaded_media)
+                return True
+
+            if uploaded_media:
+                del self._globalMessages[task_uuid]
+                resolve(uploaded_media)
+                return True
+
+            return False
+
+        response = await getIntervalWithPromise(
+            check, debugKey="upload-media", timeOutDuration=self._timeout
+        )
+
+        lis["destroy"]()
+
+        if "code" in response:
+            # This indicates an error response
+            raise RunwareAPIError(response)
+
+        if response:
+            media = MediaStorageType(
+                mediaUUID=response["mediaUUID"],
+                taskUUID=response["taskUUID"],
+            )
+        else:
+            media = None
+        return media
 
     async def uploadUnprocessedImage(
         self,

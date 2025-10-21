@@ -40,6 +40,7 @@ class ETaskType(Enum):
     MODEL_SEARCH = "modelSearch"
     VIDEO_INFERENCE = "videoInference"
     AUDIO_INFERENCE = "audioInference"
+    MEDIA_STORAGE = "mediaStorage"
     GET_RESPONSE = "getResponse"
 
 
@@ -649,6 +650,12 @@ class ReconnectingWebsocketProps:
 class UploadImageType:
     imageUUID: str
     imageURL: str
+    taskUUID: str
+
+
+@dataclass
+class MediaStorageType:
+    mediaUUID: str
     taskUUID: str
 
 
