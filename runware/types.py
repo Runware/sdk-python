@@ -907,6 +907,8 @@ class IVideo:
     status: Optional[str] = None
     videoUUID: Optional[str] = None
     videoURL: Optional[str] = None
+    mediaUUID: Optional[str] = None
+    mediaURL: Optional[str] = None
     cost: Optional[float] = None
     seed: Optional[int] = None
 
