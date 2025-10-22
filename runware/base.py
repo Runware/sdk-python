@@ -876,27 +876,12 @@ class RunwareBase:
         
         if isinstance(media_url, str):
             if os.path.exists(media_url):
-                local_file = True
-            else:
-                local_file = isLocalFile(media_url)
-                
-                # Check if it's a base64 string (with or without data URI prefix)
-                if media_url.startswith("data:") or re.match(
-                    r"^[A-Za-z0-9+/]+={0,2}$", media_url
-                ):
-                    # Assume it's a base64 string (with or without data URI prefix)
-                    local_file = False
-            
-            if not local_file:
-                return MediaStorageType(
-                    mediaUUID=media_url,
-                    taskUUID=task_uuid,
-                )
-            
-            media_url = await fileToBase64(media_url)
-            # Strip the data URI prefix for media storage API
-            if media_url.startswith("data:"):
-                media_url = media_url.split(",", 1)[1]
+                # Local file - convert to base64
+                media_url = await fileToBase64(media_url)
+                # Strip the data URI prefix for media storage API
+                if media_url.startswith("data:"):
+                    media_url = media_url.split(",", 1)[1]
+            # For URLs and base64 strings, send them directly to the API
         
         await self.send(
             [
