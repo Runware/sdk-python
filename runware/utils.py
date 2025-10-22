@@ -662,7 +662,13 @@ async def getIntervalWithPromise(
                 if interval_handle:
                     logger.debug(f"Interval cleared due to timeout for {debugKey}")
                 if shouldThrowError:
-                    raise Exception(f"Message could not be received for {debugKey}")
+                    error_msg = (
+                        f"Timeout error: Message could not be received for {debugKey} | "
+                        f"Operation: {debugKey} | "
+                        f"Timeout: {timeOutDuration}ms | "
+                        f"Elapsed: {elapsed_ms:.2f}ms"
+                    )
+                    raise Exception(error_msg)
                 return None
 
             iteration_resolved = False
@@ -679,7 +685,6 @@ async def getIntervalWithPromise(
                 nonlocal iteration_resolved, iteration_error
                 if not iteration_resolved:
                     iteration_resolved = True
-                    # Ensure error is a proper exception fixes TypeError: exceptions must derive from BaseException
                     if isinstance(error, BaseException):
                         iteration_error = error
                     else:

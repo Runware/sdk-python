@@ -359,13 +359,13 @@ class RunwareBase:
                 raise e
 
     async def _requestImages(
-        self,
-        request_object: Dict[str, Any],
-        task_uuids: List[str],
-        let_lis: Optional[Any],
-        retry_count: int,
-        number_of_images: int,
-        on_partial_images: Optional[Callable[[List[IImage], Optional[IError]], None]],
+            self,
+            request_object: Dict[str, Any],
+            task_uuids: List[str],
+            let_lis: Optional[Any],
+            retry_count: int,
+            number_of_images: int,
+            on_partial_images: Optional[Callable[[List[IImage], Optional[IError]], None]],
     ) -> List[IImage]:
         retry_count += 1
         if let_lis:
@@ -387,14 +387,14 @@ class RunwareBase:
             "numberResults": image_remaining,
         }
 
-        
-        await self.send([new_request_object])
-
         let_lis = await self.listenToImages(
             onPartialImages=on_partial_images,
             taskUUID=task_uuid,
             groupKey=LISTEN_TO_IMAGES_KEY.REQUEST_IMAGES,
         )
+
+        await self.send([new_request_object])
+
         images = await self.getSimililarImage(
             taskUUID=task_uuids,
             numberOfImages=number_of_images,
@@ -403,15 +403,11 @@ class RunwareBase:
         )
 
         let_lis["destroy"]()
-        # TODO: NameError("name 'image_path' is not defined"). I think I remove the images when I have onPartialImages
         if images:
             if "code" in images:
-                # This indicates an error response
                 raise RunwareAPIError(images)
 
             return instantiateDataclassList(IImage, images)
-
-        # return images
 
     async def imageCaption(self, requestImageToText: IImageCaption) -> IImageToText:
         try:
@@ -1038,51 +1034,46 @@ class RunwareBase:
         return uploaded_unprocessed_image
 
     async def listenToImages(
-        self,
-        onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]],
-        taskUUID: str,
-        groupKey: LISTEN_TO_IMAGES_KEY,
+            self,
+            onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]],
+            taskUUID: str,
+            groupKey: LISTEN_TO_IMAGES_KEY,
     ) -> Dict[str, Callable[[], None]]:
-        """
-        Set up a listener to receive partial image updates for a specific task.
-
-        :param onPartialImages: A callback function to be invoked with the filtered images and any error.
-        :param taskUUID: The unique identifier of the task to filter images for.
-        :param groupKey: The group key to categorize the listener.
-        :return: A dictionary containing a 'destroy' function to remove the listener.
-        """
         logger.debug("Setting up images listener for taskUUID: %s", taskUUID)
 
         def listen_to_images_lis(m: Dict[str, Any]) -> None:
-            # Handle successful image generation
             if isinstance(m.get("data"), list):
                 images = [
                     img
                     for img in m["data"]
                     if img.get("taskType") == "imageInference"
-                    and img.get("taskUUID") == taskUUID
+                       and img.get("taskUUID") == taskUUID
                 ]
 
                 if images:
-                    self._globalImages.extend(images)
+                    async def update_images():
+                        async with self._images_lock:
+                            self._globalImages.extend(images)
+
+                    asyncio.create_task(update_images())
+
                     try:
                         partial_images = instantiateDataclassList(IImage, images)
                         if onPartialImages:
                             onPartialImages(
                                 partial_images, None
-                            )  # No error in this case
+                            )
                     except Exception as e:
                         logger.error(
                             f"Error occurred in user on_partial_images callback function: {e}"
                         )
-            # Handle error messages
             elif isinstance(m.get("errors"), list):
                 errors = [
                     error for error in m["errors"] if error.get("taskUUID") == taskUUID
                 ]
                 if errors:
                     error = IError(
-                        error=True,  # Since this is an error message, we set this to True
+                        error=True,
                         error_message=errors[0].get("message", "Unknown error"),
                         task_uuid=errors[0].get("taskUUID", ""),
                         error_code=errors[0].get("code"),
@@ -1090,21 +1081,17 @@ class RunwareBase:
                         parameter=errors[0].get("parameter"),
                         documentation=errors[0].get("documentation"),
                     )
-                    self._globalError = (
-                        error  # Store the first error related to this task
-                    )
+                    self._globalError = error
                     if onPartialImages:
                         onPartialImages(
                             [], self._globalError
-                        )  # Empty list for images, pass the error
+                        )
 
         def listen_to_images_check(m):
             logger.debug("Images check message: %s", m)
-            # Check for successful image inference messages
             image_inference_check = isinstance(m.get("data"), list) and any(
                 item.get("taskType") == "imageInference" for item in m["data"]
             )
-            # Check for error messages with matching taskUUID
             error_check = isinstance(m.get("errors"), list) and any(
                 error.get("taskUUID") == taskUUID for error in m["errors"]
             )
@@ -1233,16 +1220,6 @@ class RunwareBase:
         lis: Optional[ListenerType] = None,
         timeout: Optional[int] = None,
     ) -> Union[List[IImage], IError]:
-        """
-        Retrieve similar images based on the provided task UUID(s) and desired number of images.
-
-        :param taskUUID: A single task UUID or a list of task UUIDs to filter images.
-        :param numberOfImages: The desired number of images to retrieve.
-        :param shouldThrowError: A flag indicating whether to throw an error if the desired number of images is not reached.
-        :param lis: An optional listener to handle image updates.
-        :param timeout: The timeout duration for the operation.
-        :return: A list of retrieved images or an error object if the desired number of images is not reached.
-        """
         taskUUIDs = taskUUID if isinstance(taskUUID, list) else [taskUUID]
 
         if timeout is None:
@@ -1253,10 +1230,6 @@ class RunwareBase:
             reject: Callable[[IError], None],
             intervalId: Any,
         ) -> Optional[bool]:
-            # print(f"Check # Task UUIDs: {taskUUIDs}")
-            # print(f"Check # Global images: {self._globalImages}")
-            # print(f"Check # reject: {reject}")
-            # print(f"Check # resolve: {resolve}")
             logger.debug(f"Check # Global images: {self._globalImages}")
             imagesWithSimilarTask = [
                 img
@@ -1264,7 +1237,6 @@ class RunwareBase:
                 if img.get("taskType") == "imageInference"
                 and img.get("taskUUID") in taskUUIDs
             ]
-            # logger.debug(f"Check # imagesWithSimilarTask: {imagesWithSimilarTask}")
 
             if self._globalError:
                 logger.debug(f"Check # _globalError: {self._globalError}")
@@ -1277,22 +1249,37 @@ class RunwareBase:
                 reject(RunwareError(error))
                 return True
             elif len(imagesWithSimilarTask) >= numberOfImages:
-                resolve(imagesWithSimilarTask[:numberOfImages])
                 self._globalImages = [
                     img
                     for img in self._globalImages
                     if img.get("taskType") == "imageInference"
                     and img.get("taskUUID") not in taskUUIDs
                 ]
+                resolve(imagesWithSimilarTask[:numberOfImages])
                 return True
-            # return False
 
-        return await getIntervalWithPromise(
-            check,
-            debugKey="getting images",
-            shouldThrowError=shouldThrowError,
-            timeOutDuration=timeout,
-        )
+        try:
+            return await getIntervalWithPromise(
+                check,
+                debugKey="getting images",
+                shouldThrowError=shouldThrowError,
+                timeOutDuration=timeout,
+            )
+        except Exception as e:
+            current_images = len([
+                img for img in self._globalImages
+                if img.get("taskType") == "imageInference"
+                and img.get("taskUUID") in taskUUIDs
+            ])
+            error_msg = (
+                f"Timeout waiting for images | "
+                f"TaskUUIDs: {taskUUIDs} | "
+                f"Expected: {numberOfImages} images | "
+                f"Received: {current_images} images | "
+                f"Timeout: {timeout}ms | "
+                f"Original error: {str(e)}"
+            )
+            raise Exception(error_msg) from e
 
     async def _modelUpload(
         self, requestModel: IUploadModelBaseType
@@ -1791,26 +1778,26 @@ class RunwareBase:
         raise RunwareAPIError({"message": timeout_msg})
 
     async def _sendPollRequest(self, task_uuid: str, poll_count: int) -> List[Dict[str, Any]]:
-        await self.send([{
-            "taskType": ETaskType.GET_RESPONSE.value,
-            "taskUUID": task_uuid
-        }])
-
         lis = self.globalListener(taskUUID=task_uuid)
 
-        def check_poll_response(resolve: callable, reject: callable, *args: Any) -> bool:
-            response_list = self._globalMessages.get(task_uuid, [])
-            if response_list:
-                del self._globalMessages[task_uuid]
-                resolve(response_list)
-                return True
-            return False
-
         try:
+            await self.send([{
+                "taskType": ETaskType.GET_RESPONSE.value,
+                "taskUUID": task_uuid
+            }])
+
+            def check_poll_response(resolve: callable, reject: callable, *args: Any) -> bool:
+                response_list = self._globalMessages.get(task_uuid, [])
+                if response_list:
+                    del self._globalMessages[task_uuid]
+                    resolve(response_list)
+                    return True
+                return False
+
             return await getIntervalWithPromise(
                 check_poll_response,
                 debugKey=f"video-poll-{poll_count}",
-                timeOutDuration=10000
+                timeOutDuration=120000
             )
         finally:
             lis["destroy"]()
