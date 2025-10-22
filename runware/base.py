@@ -1039,6 +1039,14 @@ class RunwareBase:
         taskUUID: str,
         groupKey: LISTEN_TO_IMAGES_KEY,
     ) -> Dict[str, Callable[[], None]]:
+        """
+        Set up a listener to receive partial image updates for a specific task.
+
+        :param onPartialImages: A callback function to be invoked with the filtered images and any error.
+        :param taskUUID: The unique identifier of the task to filter images for.
+        :param groupKey: The group key to categorize the listener.
+        :return: A dictionary containing a 'destroy' function to remove the listener.
+        """
         logger.debug("Setting up images listener for taskUUID: %s", taskUUID)
 
         def listen_to_images_lis(m: Dict[str, Any]) -> None:
@@ -1220,6 +1228,16 @@ class RunwareBase:
         lis: Optional[ListenerType] = None,
         timeout: Optional[int] = None,
     ) -> Union[List[IImage], IError]:
+        """
+        Retrieve similar images based on the provided task UUID(s) and desired number of images.
+
+        :param taskUUID: A single task UUID or a list of task UUIDs to filter images.
+        :param numberOfImages: The desired number of images to retrieve.
+        :param shouldThrowError: A flag indicating whether to throw an error if the desired number of images is not reached.
+        :param lis: An optional listener to handle image updates.
+        :param timeout: The timeout duration for the operation.
+        :return: A list of retrieved images or an error object if the desired number of images is not reached.
+        """
         taskUUIDs = taskUUID if isinstance(taskUUID, list) else [taskUUID]
 
         if timeout is None:
