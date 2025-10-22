@@ -191,6 +191,14 @@ class RunwareServer(RunwareBase):
             except asyncio.CancelledError:
                 pass
 
+        if self._listener_tasks:
+            for task in list(self._listener_tasks):
+                if not task.done():
+                    task.cancel()
+            if self._listener_tasks:
+                await asyncio.gather(*self._listener_tasks, return_exceptions=True)
+            self._listener_tasks.clear()
+
         if self._ws and self._ws.state is State.OPEN:
             await self._ws.close()
 
@@ -210,12 +218,9 @@ class RunwareServer(RunwareBase):
 
         for lis in self._listeners:
             try:
-                if asyncio.iscoroutinefunction(lis.listener):
-                    result = await lis.listener(m)
-                else:
-                    result = lis.listener(m)
-                if result:
-                    return
+                result = lis.listener(m)
+                if asyncio.iscoroutine(result):
+                    self._create_tracked_task(result)
             except Exception as e:
                 self.logger.error(f"Error in listener {lis.key}:", exc_info=e)
                 continue

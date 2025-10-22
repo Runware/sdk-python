@@ -102,6 +102,19 @@ class RunwareBase:
         self._sdkType: SdkType = SdkType.SERVER
         self._messages_lock = asyncio.Lock()
         self._images_lock = asyncio.Lock()
+        self._listener_tasks: set = set()
+
+    def _create_tracked_task(self, coro):
+        task = asyncio.create_task(coro)
+        self._listener_tasks.add(task)
+
+        def task_done_callback(t):
+            self._listener_tasks.discard(t)
+            if not t.cancelled() and t.exception() is not None:
+                logger.error(f"Listener task failed: {t.exception()}", exc_info=t.exception())
+
+        task.add_done_callback(task_done_callback)
+        return task
 
     def isWebsocketReadyState(self) -> bool:
         if self._ws is None:
@@ -360,13 +373,13 @@ class RunwareBase:
                 raise e
 
     async def _requestImages(
-        self,
-        request_object: Dict[str, Any],
-        task_uuids: List[str],
-        let_lis: Optional[Any],
-        retry_count: int,
-        number_of_images: int,
-        on_partial_images: Optional[Callable[[List[IImage], Optional[IError]], None]],
+            self,
+            request_object: Dict[str, Any],
+            task_uuids: List[str],
+            let_lis: Optional[Any],
+            retry_count: int,
+            number_of_images: int,
+            on_partial_images: Optional[Callable[[List[IImage], Optional[IError]], None]],
     ) -> List[IImage]:
         retry_count += 1
         if let_lis:
@@ -388,14 +401,13 @@ class RunwareBase:
             "numberResults": image_remaining,
         }
 
+        await self.send([new_request_object])
+
         let_lis = await self.listenToImages(
             onPartialImages=on_partial_images,
             taskUUID=task_uuid,
             groupKey=LISTEN_TO_IMAGES_KEY.REQUEST_IMAGES,
         )
-
-        await self.send([new_request_object])
-
         images = await self.getSimililarImage(
             taskUUID=task_uuids,
             numberOfImages=number_of_images,
@@ -404,11 +416,15 @@ class RunwareBase:
         )
 
         let_lis["destroy"]()
+        # TODO: NameError("name 'image_path' is not defined"). I think I remove the images when I have onPartialImages
         if images:
             if "code" in images:
+                # This indicates an error response
                 raise RunwareAPIError(images)
 
             return instantiateDataclassList(IImage, images)
+
+        # return images
 
     async def imageCaption(self, requestImageToText: IImageCaption) -> IImageToText:
         try:
@@ -1108,9 +1124,12 @@ class RunwareBase:
             response = image_inference_check or error_check
             return response
 
+        def listen_to_images_lis_wrapper(m):
+            return self._create_tracked_task(listen_to_images_lis(m))
+
         temp_listener = self.addListener(
             check=listen_to_images_check,
-            lis=lambda m: asyncio.create_task(listen_to_images_lis(m)),
+            lis=listen_to_images_lis_wrapper,
             groupKey=groupKey
         )
 
@@ -1159,12 +1178,15 @@ class RunwareBase:
 
         logger.debug("Global Listener taskUUID: %s", taskUUID)
 
-        temp_listener = self.addListener(check=global_check, lis=lambda m: asyncio.create_task(global_lis(m)))
+        def global_lis_wrapper(m):
+            return self._create_tracked_task(global_lis(m))
+
+        temp_listener = self.addListener(check=global_check, lis=global_lis_wrapper)
         logger.debug("globalListener :: Temp listener: %s", temp_listener)
 
         return temp_listener
 
-    def handleIncompleteImages(
+    async def handleIncompleteImages(
         self, taskUUIDs: List[str], error: Any
     ) -> Optional[List[IImage]]:
         """
@@ -1175,16 +1197,17 @@ class RunwareBase:
         :return: A list of available images if there are more than one, otherwise None.
         :raises: The provided error if there are no or only one image.
         """
-        imagesWithSimilarTask = [
-            img for img in self._globalImages if img["taskUUID"] in taskUUIDs
-        ]
-        if len(imagesWithSimilarTask) > 1:
-            self._globalImages = [
-                img for img in self._globalImages if img["taskUUID"] not in taskUUIDs
+        async with self._images_lock:
+            imagesWithSimilarTask = [
+                img for img in self._globalImages if img["taskUUID"] in taskUUIDs
             ]
-            return imagesWithSimilarTask
-        else:
-            raise error
+            if len(imagesWithSimilarTask) > 1:
+                self._globalImages = [
+                    img for img in self._globalImages if img["taskUUID"] not in taskUUIDs
+                ]
+                return imagesWithSimilarTask
+            else:
+                raise error
 
     async def ensureConnection(self) -> None:
         """
@@ -1225,35 +1248,36 @@ class RunwareBase:
         if timeout is None:
             timeout = self._timeout
 
-        def check(
+        async def check(
                 resolve: Callable[[List[IImage]], None],
                 reject: Callable[[IError], None],
                 intervalId: Any,
         ) -> Optional[bool]:
-            logger.debug(f"Check # Global images: {self._globalImages}")
-            imagesWithSimilarTask = [
-                img
-                for img in self._globalImages
-                if img.get("taskType") == "imageInference"
-                   and img.get("taskUUID") in taskUUIDs
-            ]
-
-            if self._globalError:
-                logger.debug(f"Check # _globalError: {self._globalError}")
-                error = self._globalError
-                self._globalError = None
-                logger.debug(f"Rejecting with error: {error}")
-                reject(RunwareError(error))
-                return True
-            elif len(imagesWithSimilarTask) >= numberOfImages:
-                self._globalImages = [
+            async with self._images_lock:
+                logger.debug(f"Check # Global images: {self._globalImages}")
+                imagesWithSimilarTask = [
                     img
                     for img in self._globalImages
                     if img.get("taskType") == "imageInference"
-                       and img.get("taskUUID") not in taskUUIDs
+                       and img.get("taskUUID") in taskUUIDs
                 ]
-                resolve(imagesWithSimilarTask[:numberOfImages])
-                return True
+
+                if self._globalError:
+                    logger.debug(f"Check # _globalError: {self._globalError}")
+                    error = self._globalError
+                    self._globalError = None
+                    logger.debug(f"Rejecting with error: {error}")
+                    reject(RunwareError(error))
+                    return True
+                elif len(imagesWithSimilarTask) >= numberOfImages:
+                    self._globalImages = [
+                        img
+                        for img in self._globalImages
+                        if img.get("taskType") == "imageInference"
+                           and img.get("taskUUID") not in taskUUIDs
+                    ]
+                    resolve(imagesWithSimilarTask[:numberOfImages])
+                    return True
 
             return False
 
@@ -1265,11 +1289,12 @@ class RunwareBase:
                 timeOutDuration=timeout,
             )
         except Exception as e:
-            current_images = len([
-                img for img in self._globalImages
-                if img.get("taskType") == "imageInference"
-                   and img.get("taskUUID") in taskUUIDs
-            ])
+            async with self._images_lock:
+                current_images = len([
+                    img for img in self._globalImages
+                    if img.get("taskType") == "imageInference"
+                       and img.get("taskUUID") in taskUUIDs
+                ])
             error_msg = (
                 f"Timeout waiting for images | "
                 f"TaskUUIDs: {taskUUIDs} | "
