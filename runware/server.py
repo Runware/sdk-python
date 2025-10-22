@@ -3,6 +3,7 @@ import json
 import logging
 import time
 import uuid
+from asyncio import iscoroutine
 
 import websockets
 from websockets.protocol import State
@@ -216,14 +217,27 @@ class RunwareServer(RunwareBase):
             self.logger.error(f"Failed to parse JSON message:", exc_info=e)
             return
 
+        async_tasks = []
+
         for lis in self._listeners:
             try:
                 result = lis.listener(m)
-                if asyncio.iscoroutine(result):
-                    self._create_tracked_task(result)
+
+                if iscoroutine(result) or isinstance(result, asyncio.Task):
+                    async_tasks.append(result)
+                elif result:
+                    return
             except Exception as e:
                 self.logger.error(f"Error in listener {lis.key}:", exc_info=e)
                 continue
+
+        if async_tasks:
+            results = await asyncio.gather(*async_tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, Exception):
+                    self.logger.error(f"Error in async listener:", exc_info=result)
+                elif result:
+                    return
 
     async def _handle_messages(self):
         try:
@@ -287,36 +301,38 @@ class RunwareServer(RunwareBase):
         reconnecting_task = self._tasks.get("Task_Reconnecting")
         if reconnecting_task is not None:
             if not reconnecting_task.done() and not reconnecting_task.cancelled():
-                self.logger.debug(f"Cancelling Task_Reconnecting {reconnecting_task}")
+                reconnecting_task.cancel()
                 try:
-                    reconnecting_task.cancel()
-                    self._tasks.pop("Task_Reconnecting", None)
+                    await reconnecting_task
+                except asyncio.CancelledError:
+                    pass
                 except Exception as e:
                     self.logger.error(f"Error while cancelling Task_Reconnecting:", exc_info=e)
 
         message_handler_task = self._tasks.get("Task_Message_Handler")
         if message_handler_task is not None:
             if not message_handler_task.done() and not message_handler_task.cancelled():
-                self.logger.debug(
-                    f"Cancelling Task_Message_Handler {message_handler_task}"
-                )
+                message_handler_task.cancel()
                 try:
-                    message_handler_task.cancel()
-                    self._tasks.pop("Task_Message_Handler", None)
+                    await message_handler_task
+                except asyncio.CancelledError:
+                    pass
                 except Exception as e:
-                    self.logger.error(
-                        f"Error while cancelling Task_Message_Handler:", exc_info=e
-                    )
+                    self.logger.error(f"Error while cancelling Task_Message_Handler:", exc_info=e)
 
         heartbeat_task = self._tasks.get("Task_Heartbeat")
         if heartbeat_task is not None:
             if not heartbeat_task.done() and not heartbeat_task.cancelled():
-                self.logger.debug(f"Cancelling Task_Heartbeat {heartbeat_task}")
+                heartbeat_task.cancel()
                 try:
-                    heartbeat_task.cancel()
-                    self._tasks.pop("Task_Heartbeat", None)
+                    await heartbeat_task
+                except asyncio.CancelledError:
+                    pass
                 except Exception as e:
                     self.logger.error(f"Error while cancelling Task_Heartbeat:", exc_info=e)
+
+        if self._is_shutting_down:
+            await self._cleanup_listener_tasks()
 
         async def reconnect():
             while not self._is_shutting_down:
