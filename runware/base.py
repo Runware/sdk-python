@@ -359,13 +359,13 @@ class RunwareBase:
                 raise e
 
     async def _requestImages(
-            self,
-            request_object: Dict[str, Any],
-            task_uuids: List[str],
-            let_lis: Optional[Any],
-            retry_count: int,
-            number_of_images: int,
-            on_partial_images: Optional[Callable[[List[IImage], Optional[IError]], None]],
+        self,
+        request_object: Dict[str, Any],
+        task_uuids: List[str],
+        let_lis: Optional[Any],
+        retry_count: int,
+        number_of_images: int,
+        on_partial_images: Optional[Callable[[List[IImage], Optional[IError]], None]],
     ) -> List[IImage]:
         retry_count += 1
         if let_lis:
@@ -1034,10 +1034,10 @@ class RunwareBase:
         return uploaded_unprocessed_image
 
     async def listenToImages(
-            self,
-            onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]],
-            taskUUID: str,
-            groupKey: LISTEN_TO_IMAGES_KEY,
+        self,
+        onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]],
+        taskUUID: str,
+        groupKey: LISTEN_TO_IMAGES_KEY,
     ) -> Dict[str, Callable[[], None]]:
         logger.debug("Setting up images listener for taskUUID: %s", taskUUID)
 
