@@ -691,7 +691,10 @@ async def getIntervalWithPromise(
                         iteration_error = Exception(str(error))
 
             try:
-                callback_returned = callback(safe_resolve, safe_reject, interval_handle)
+                if asyncio.iscoroutinefunction(callback):
+                    callback_returned = await callback(safe_resolve, safe_reject, interval_handle)
+                else:
+                    callback_returned = callback(safe_resolve, safe_reject, interval_handle)
                 if callback_returned and iteration_resolved:
                     if iteration_error is not None:
                         raise iteration_error

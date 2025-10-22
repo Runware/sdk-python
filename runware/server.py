@@ -210,7 +210,10 @@ class RunwareServer(RunwareBase):
 
         for lis in self._listeners:
             try:
-                result = lis.listener(m)
+                if asyncio.iscoroutinefunction(lis.listener):
+                    result = await lis.listener(m)
+                else:
+                    result = lis.listener(m)
                 if result:
                     return
             except Exception as e:
