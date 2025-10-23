@@ -41,6 +41,7 @@ from .types import (
     IKlingAIProviderSettings,
     IFrameImage,
     IAsyncTaskResponse,
+    IVectorize,
 )
 from .types import IImage, IError, SdkType, ListenerType
 from .utils import (
@@ -696,6 +697,96 @@ class RunwareBase:
 
         image = createImageFromResponse(response)
         # TODO: The respones has an upscaleImageUUID field, should I return it as well?
+        image_list: List[IImage] = [image]
+        return image_list
+
+    async def imageVectorize(self, vectorizePayload: IVectorize) -> List[IImage]:
+        try:
+            await self.ensureConnection()
+            return await asyncRetry(lambda: self._vectorize(vectorizePayload))
+        except Exception as e:
+            raise e
+
+    async def _vectorize(self, vectorizePayload: IVectorize) -> List[IImage]:
+        # Process the image from inputs
+        input_image = vectorizePayload.inputs.image
+        
+        if not input_image:
+            raise ValueError("Image is required in inputs for vectorize task")
+        
+        # Upload the image if it's a local file
+        image_uploaded = await self.uploadImage(input_image)
+        
+        if not image_uploaded or not image_uploaded.imageUUID:
+            return []
+        
+        taskUUID = getUUID()
+        
+        # Create a dictionary with mandatory parameters
+        task_params = {
+            "taskType": ETaskType.IMAGE_VECTORIZE.value,
+            "taskUUID": taskUUID,
+            "inputs": {
+                "image": image_uploaded.imageUUID
+            }
+        }
+        
+        # Add optional parameters if they are provided
+        if vectorizePayload.model is not None:
+            task_params["model"] = vectorizePayload.model
+        if vectorizePayload.outputType is not None:
+            task_params["outputType"] = vectorizePayload.outputType
+        if vectorizePayload.outputFormat is not None:
+            task_params["outputFormat"] = vectorizePayload.outputFormat
+        if vectorizePayload.includeCost:
+            task_params["includeCost"] = vectorizePayload.includeCost
+        if vectorizePayload.webhookURL:
+            task_params["webhookURL"] = vectorizePayload.webhookURL
+        
+        # Send the task with all applicable parameters
+        print(f"Task params: {task_params}")
+        await self.send([task_params])
+        
+        lis = self.globalListener(
+            taskUUID=taskUUID,
+        )
+        
+        def check(resolve: callable, reject: callable, *args: Any) -> bool:
+            response = self._globalMessages.get(taskUUID)
+            print(f"Checking for response, taskUUID: {taskUUID}")
+            print(f"Global messages: {response}")
+            if response:
+                vectorized_image = response[0]
+            else:
+                vectorized_image = response
+            print(f"Vectorized image: {vectorized_image}")
+            if vectorized_image and vectorized_image.get("error"):
+                reject(vectorized_image)
+                return True
+            
+            if vectorized_image:
+                del self._globalMessages[taskUUID]
+                resolve(vectorized_image)
+                return True
+            
+            return False
+        
+        response = await getIntervalWithPromise(
+            check, debugKey="vectorize", timeOutDuration=self._timeout
+        )
+        
+        lis["destroy"]()
+        
+        print(f"Vectorize response: {response}")
+        
+        if "code" in response or "errors" in response:
+            # This indicates an error response
+            raise RunwareAPIError(response)
+        
+        print(f"Response type: {type(response)}")
+        print(f"Response keys: {response.keys() if isinstance(response, dict) else 'Not a dict'}")
+        
+        image = createImageFromResponse(response)
         image_list: List[IImage] = [image]
         return image_list
 
