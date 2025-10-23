@@ -744,7 +744,6 @@ class RunwareBase:
             task_params["webhookURL"] = vectorizePayload.webhookURL
         
         # Send the task with all applicable parameters
-        print(f"DEBUG: Sending vectorize request: {task_params}")
         await self.send([task_params])
         
         let_lis = await self.listenToImages(
@@ -760,15 +759,11 @@ class RunwareBase:
             lis=let_lis,
         )
         
-        print(f"DEBUG: getSimililarImage returned: {images}")
-        
         let_lis["destroy"]()
         
         if "code" in images or "errors" in images:
             # This indicates an error response
             raise RunwareAPIError(images)
-        
-        print(f"DEBUG: Raw images response: {images}")
         
         return instantiateDataclassList(IImage, images)
 
