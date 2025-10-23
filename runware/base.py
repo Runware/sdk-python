@@ -744,7 +744,6 @@ class RunwareBase:
             task_params["webhookURL"] = vectorizePayload.webhookURL
         
         # Send the task with all applicable parameters
-        print(f"DEBUG: Sending vectorize request: {task_params}")
         await self.send([task_params])
         
         let_lis = await self.listenToImages(
