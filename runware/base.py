@@ -396,13 +396,13 @@ class RunwareBase:
                 raise e
 
     async def _requestImages(
-            self,
-            request_object: Dict[str, Any],
-            task_uuids: List[str],
-            let_lis: Optional[Any],
-            retry_count: int,
-            number_of_images: int,
-            on_partial_images: Optional[Callable[[List[IImage], Optional[IError]], None]],
+        self,
+        request_object: Dict[str, Any],
+        task_uuids: List[str],
+        let_lis: Optional[Any],
+        retry_count: int,
+        number_of_images: int,
+        on_partial_images: Optional[Callable[[List[IImage], Optional[IError]], None]],
     ) -> List[IImage]:
         retry_count += 1
         if let_lis:
@@ -1074,10 +1074,10 @@ class RunwareBase:
         return uploaded_unprocessed_image
 
     async def listenToImages(
-            self,
-            onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]],
-            taskUUID: str,
-            groupKey: LISTEN_TO_IMAGES_KEY,
+        self,
+        onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]],
+        taskUUID: str,
+        groupKey: LISTEN_TO_IMAGES_KEY,
     ) -> Dict[str, Callable[[], None]]:
         logger.debug("Setting up images listener for taskUUID: %s", taskUUID)
 
@@ -1253,13 +1253,23 @@ class RunwareBase:
             )
 
     async def getSimililarImage(
-            self,
-            taskUUID: Union[str, List[str]],
-            numberOfImages: int,
-            shouldThrowError: bool = True,
-            lis: Optional[ListenerType] = None,
-            timeout: Optional[int] = None,
+        self,
+        taskUUID: Union[str, List[str]],
+        numberOfImages: int,
+        shouldThrowError: bool = True,
+        lis: Optional[ListenerType] = None,
+        timeout: Optional[int] = None,
     ) -> Union[List[IImage], IError]:
+        """
+        Retrieve similar images based on the provided task UUID(s) and desired number of images.
+
+        :param taskUUID: A single task UUID or a list of task UUIDs to filter images.
+        :param numberOfImages: The desired number of images to retrieve.
+        :param shouldThrowError: A flag indicating whether to throw an error if the desired number of images is not reached.
+        :param lis: An optional listener to handle image updates.
+        :param timeout: The timeout duration for the operation.
+        :return: A list of retrieved images or an error object if the desired number of images is not reached.
+        """
         taskUUIDs = taskUUID if isinstance(taskUUID, list) else [taskUUID]
 
         if timeout is None:
