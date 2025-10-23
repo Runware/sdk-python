@@ -453,11 +453,20 @@ class IBriaProviderSettings(BaseProviderSettings):
 
 
 @dataclass
+class ILightricksProviderSettings(BaseProviderSettings):
+    generateAudio: Optional[bool] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "lightricks"
+
+
+@dataclass
 class IInputs:
     references: Optional[List[Union[str, File]]] = field(default_factory=list)
 
 
-ImageProviderSettings = IOpenAIProviderSettings | IBriaProviderSettings
+ImageProviderSettings = IOpenAIProviderSettings | IBriaProviderSettings | ILightricksProviderSettings
 
 
 @dataclass
