@@ -744,6 +744,7 @@ class RunwareBase:
             task_params["webhookURL"] = vectorizePayload.webhookURL
         
         # Send the task with all applicable parameters
+        print(f"DEBUG: Sending vectorize request: {task_params}")
         await self.send([task_params])
         
         let_lis = await self.listenToImages(
@@ -758,6 +759,8 @@ class RunwareBase:
             shouldThrowError=True,
             lis=let_lis,
         )
+        
+        print(f"DEBUG: getSimililarImage returned: {images}")
         
         let_lis["destroy"]()
         
@@ -969,6 +972,7 @@ class RunwareBase:
 
         def listen_to_images_lis(m: Dict[str, Any]) -> None:
             # Handle successful image generation
+            print(f"DEBUG listenToImages: Received message: {m}")
             if isinstance(m.get("data"), list):
                 images = [
                     img
@@ -976,6 +980,8 @@ class RunwareBase:
                     if img.get("taskType") in ["imageInference", "vectorize"]
                     and img.get("taskUUID") == taskUUID
                 ]
+
+                print(f"DEBUG listenToImages: Filtered images: {images}")
 
                 if images:
                     self._globalImages.extend(images)
@@ -1014,6 +1020,7 @@ class RunwareBase:
 
         def listen_to_images_check(m):
             logger.debug("Images check message: %s", m)
+            print(f"DEBUG listenToImages check: Received message: {m}")
             # Check for successful image inference or vectorize messages
             image_inference_check = isinstance(m.get("data"), list) and any(
                 item.get("taskType") in ["imageInference", "vectorize"] for item in m["data"]
@@ -1035,6 +1042,7 @@ class RunwareBase:
                 )
 
             response = image_inference_check or error_check
+            print(f"DEBUG listenToImages check: response={response}")
             return response
 
         temp_listener = self.addListener(
