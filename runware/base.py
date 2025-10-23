@@ -744,51 +744,31 @@ class RunwareBase:
             task_params["webhookURL"] = vectorizePayload.webhookURL
         
         # Send the task with all applicable parameters
-        print(f"Task params: {task_params}")
+        print(f"DEBUG: Sending vectorize request: {task_params}")
         await self.send([task_params])
         
-        lis = self.globalListener(
+        let_lis = await self.listenToImages(
+            onPartialImages=None,
             taskUUID=taskUUID,
+            groupKey=LISTEN_TO_IMAGES_KEY.REQUEST_IMAGES,
         )
         
-        def check(resolve: callable, reject: callable, *args: Any) -> bool:
-            response = self._globalMessages.get(taskUUID)
-            print(f"Checking for response, taskUUID: {taskUUID}")
-            print(f"Global messages: {response}")
-            if response:
-                vectorized_image = response[0]
-            else:
-                vectorized_image = response
-            print(f"Vectorized image: {vectorized_image}")
-            if vectorized_image and vectorized_image.get("error"):
-                reject(vectorized_image)
-                return True
-            
-            if vectorized_image:
-                del self._globalMessages[taskUUID]
-                resolve(vectorized_image)
-                return True
-            
-            return False
-        
-        response = await getIntervalWithPromise(
-            check, debugKey="vectorize", timeOutDuration=self._timeout
+        images = await self.getSimililarImage(
+            taskUUID=taskUUID,
+            numberOfImages=1,
+            shouldThrowError=True,
+            lis=let_lis,
         )
         
-        lis["destroy"]()
+        let_lis["destroy"]()
         
-        print(f"Vectorize response: {response}")
-        
-        if "code" in response or "errors" in response:
+        if "code" in images or "errors" in images:
             # This indicates an error response
-            raise RunwareAPIError(response)
+            raise RunwareAPIError(images)
         
-        print(f"Response type: {type(response)}")
-        print(f"Response keys: {response.keys() if isinstance(response, dict) else 'Not a dict'}")
+        print(f"DEBUG: Raw images response: {images}")
         
-        image = createImageFromResponse(response)
-        image_list: List[IImage] = [image]
-        return image_list
+        return instantiateDataclassList(IImage, images)
 
     async def promptEnhance(
         self, promptEnhancer: IPromptEnhance
@@ -994,7 +974,7 @@ class RunwareBase:
                 images = [
                     img
                     for img in m["data"]
-                    if img.get("taskType") == "imageInference"
+                    if img.get("taskType") in ["imageInference", "vectorize"]
                     and img.get("taskUUID") == taskUUID
                 ]
 
@@ -1035,9 +1015,9 @@ class RunwareBase:
 
         def listen_to_images_check(m):
             logger.debug("Images check message: %s", m)
-            # Check for successful image inference messages
+            # Check for successful image inference or vectorize messages
             image_inference_check = isinstance(m.get("data"), list) and any(
-                item.get("taskType") == "imageInference" for item in m["data"]
+                item.get("taskType") in ["imageInference", "vectorize"] for item in m["data"]
             )
             # Check for error messages with matching taskUUID
             error_check = isinstance(m.get("errors"), list) and any(
@@ -1196,7 +1176,7 @@ class RunwareBase:
             imagesWithSimilarTask = [
                 img
                 for img in self._globalImages
-                if img.get("taskType") == "imageInference"
+                if img.get("taskType") in ["imageInference", "vectorize"]
                 and img.get("taskUUID") in taskUUIDs
             ]
             # logger.debug(f"Check # imagesWithSimilarTask: {imagesWithSimilarTask}")
@@ -1216,7 +1196,7 @@ class RunwareBase:
                 self._globalImages = [
                     img
                     for img in self._globalImages
-                    if img.get("taskType") == "imageInference"
+                    if img.get("taskType") in ["imageInference", "vectorize"]
                     and img.get("taskUUID") not in taskUUIDs
                 ]
                 return True
@@ -1472,7 +1452,6 @@ class RunwareBase:
         self._addVideoInputs(request_object, requestVideo)
         self._addProviderSettings(request_object, requestVideo)
         
-        print(f"\n\n {request_object}\n\n")
         return request_object
 
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:

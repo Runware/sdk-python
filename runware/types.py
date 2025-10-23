@@ -589,7 +589,7 @@ class IVectorize:
     includeCost: bool = False
     taskUUID: Optional[str] = None
     model: Optional[str] = None  
-    outputType: Optional[Union[IOutputType, List[IOutputType]]] = "URL"  
+    outputType: Optional[IOutputType] = "URL"  
     outputFormat: Optional[IOutputFormat] = "SVG"  
     webhookURL: Optional[str] = None
 
