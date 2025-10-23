@@ -1697,6 +1697,7 @@ class RunwareBase:
                 k: v for k, v in asdict(requestVideo.inputs).items() 
                 if v is not None
             }
+            
             if inputs_dict:
                 request_object["inputs"] = inputs_dict
 

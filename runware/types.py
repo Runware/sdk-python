@@ -464,7 +464,7 @@ ImageProviderSettings = IOpenAIProviderSettings | IBriaProviderSettings
 
 @dataclass
 class IVideoInputs:
-    references: Optional[List[Union[str, File]]] = field(default_factory=list)
+    references: Optional[List[Union[str, File, Dict[str, Any]]]] = field(default_factory=list)
     image: Optional[Union[str, File]] = None
     audio: Optional[str] = None
     mask: Optional[Union[str, File]] = None
