@@ -10,6 +10,8 @@ from typing import List, Optional, Union, Callable, Any, Dict
 
 from websockets.protocol import State
 
+from .logging_config import configure_logging
+
 from .async_retry import asyncRetry
 from .types import (
     Environment,
@@ -65,7 +67,7 @@ from .utils import (
 )
 
 # Configure logging
-# configure_logging(log_level=logging.CRITICAL)
+configure_logging(log_level=logging.CRITICAL)
 
 logger = logging.getLogger(__name__)
 MAX_POLLS_VIDEO_GENERATION = int(os.environ.get("RUNWARE_MAX_POLLS_VIDEO_GENERATION", 480))
@@ -77,9 +79,15 @@ class RunwareBase:
             api_key: str,
             url: str = BASE_RUNWARE_URLS[Environment.PRODUCTION],
             timeout: int = TIMEOUT_DURATION,
+            log_level=logging.CRITICAL,
     ):
         if timeout <= 0:
             raise ValueError("Timeout must be greater than 0 milliseconds")
+
+        # Configure logging
+        configure_logging(log_level)
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(log_level)
 
         self._ws: Optional[ReconnectingWebsocketProps] = None
         self._listeners: List[ListenerType] = []
@@ -96,10 +104,11 @@ class RunwareBase:
         self._images_lock = asyncio.Lock()
         self._listener_tasks = set()
 
+
     def _create_safe_async_listener(self, async_func):
         def wrapper(m):
             task = asyncio.create_task(async_func(m))
-
+            self._listener_tasks.add(task)
             def handle_task_exception(t):
                 self._listener_tasks.discard(t)
                 if not t.cancelled():
@@ -109,7 +118,6 @@ class RunwareBase:
                         logger.error(f"Unhandled exception in async listener: {e}", exc_info=True)
 
             task.add_done_callback(handle_task_exception)
-            self._listener_tasks.add(task)
             return None
 
         return wrapper
@@ -118,22 +126,17 @@ class RunwareBase:
         if not self._listener_tasks:
             return
 
-        tasks_to_cleanup = list(self._listener_tasks)
+        self.logger.info(f"Cleaning up {len(self._listener_tasks)} listener tasks")
 
-        if not tasks_to_cleanup:
-            return
+        for task in list(self._listener_tasks):
+            if not task.done():
+                task.cancel()
 
-        done, pending = await asyncio.wait(
-            tasks_to_cleanup,
-            timeout=5.0,
-            return_when=asyncio.ALL_COMPLETED
-        )
+        if self._listener_tasks:
+            await asyncio.gather(*self._listener_tasks, return_exceptions=True)
 
-        for task in pending:
-            task.cancel()
-
-        if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
+        self._listener_tasks.clear()
+        self.logger.info("All listener tasks cleaned up")
 
     def isWebsocketReadyState(self) -> bool:
         if self._ws is None:

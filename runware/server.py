@@ -3,7 +3,7 @@ import json
 import logging
 import time
 import uuid
-from asyncio import iscoroutine
+from inspect import isawaitable
 
 import websockets
 from websockets.protocol import State
@@ -23,9 +23,6 @@ from .types import (
     ListenerType,
 )
 
-from .logging_config import configure_logging
-
-
 class RunwareServer(RunwareBase):
     def __init__(
             self,
@@ -36,7 +33,7 @@ class RunwareServer(RunwareBase):
             max_retries: int = 2,
             retry_delay: int = 1,
     ):
-        super().__init__(api_key=api_key, url=url, timeout=timeout)
+        super().__init__(api_key=api_key, url=url, timeout=timeout, log_level=log_level)
         self._instantiated: bool = False
         self._reconnecting_task: Optional[asyncio.Task] = None
         self._pingTimeout: Optional[asyncio.Task] = None
@@ -51,11 +48,6 @@ class RunwareServer(RunwareBase):
         self._retry_delay: int = retry_delay
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._tasks: Dict[str, asyncio.Task] = {}
-
-        # Configure logging
-        configure_logging(log_level)
-        self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(log_level)
 
         self._reconnection_manager = ReconnectionManager(logger=self.logger)
 
@@ -217,19 +209,35 @@ class RunwareServer(RunwareBase):
             self.logger.error(f"Failed to parse JSON message:", exc_info=e)
             return
 
-        async_tasks = []
+        listeners_snapshot = list(self._listeners)
 
-        for lis in self._listeners:
+        async_tasks = []
+        early_return = False
+
+        for lis in listeners_snapshot:
+            if early_return:
+                break
+
             try:
                 result = lis.listener(m)
 
-                if iscoroutine(result) or isinstance(result, asyncio.Task):
-                    async_tasks.append(result)
+                if isawaitable(result):
+                    task = asyncio.ensure_future(result)
+                    async_tasks.append(task)
                 elif result:
-                    return
+                    early_return = True
+                    break
             except Exception as e:
                 self.logger.error(f"Error in listener {lis.key}:", exc_info=e)
                 continue
+
+        if early_return:
+            for task in async_tasks:
+                if not task.done():
+                    task.cancel()
+            if async_tasks:
+                await asyncio.gather(*async_tasks, return_exceptions=True)
+            return
 
         if async_tasks:
             results = await asyncio.gather(*async_tasks, return_exceptions=True)
