@@ -64,6 +64,14 @@ from .utils import (
     isLocalFile,
     process_image, delay,
     createAsyncTaskResponse,
+    VIDEO_INITIAL_TIMEOUT,
+    VIDEO_POLLING_DELAY,
+    WEBHOOK_TIMEOUT,
+    IMAGE_INFERENCE_TIMEOUT,
+    IMAGE_OPERATION_TIMEOUT,
+    PROMPT_ENHANCE_TIMEOUT,
+    IMAGE_UPLOAD_TIMEOUT,
+    AUDIO_INFERENCE_TIMEOUT,
 )
 
 # Configure logging
@@ -279,7 +287,7 @@ class RunwareBase:
 
                 return False
 
-            response = await getIntervalWithPromise(check, debugKey="photo-maker")
+            response = await getIntervalWithPromise(check, debugKey="photo-maker", timeOutDuration=IMAGE_INFERENCE_TIMEOUT)
 
             lis["destroy"]()
 
@@ -469,12 +477,11 @@ class RunwareBase:
             images_to_process = [requestImageToText.inputImage]
         else:
             raise ValueError("Either inputImages or inputImage must be provided")
-        
+
         # Set inputImage to inputImages[0] if not already provided
         actual_input_image = requestImageToText.inputImage
         if actual_input_image is None and images_to_process:
             actual_input_image = images_to_process[0]
-        
         # Upload all images
         uploaded_images = []
         for image in images_to_process:
@@ -490,7 +497,6 @@ class RunwareBase:
             "taskType": ETaskType.IMAGE_CAPTION.value,
             "taskUUID": taskUUID,
         }
-        
         # Add either inputImage or inputImages, but not both (API requirement)
         if len(uploaded_images) == 1:
             # Single image - use inputImage parameter
@@ -542,7 +548,7 @@ class RunwareBase:
             return False
 
         response = await getIntervalWithPromise(
-            check, debugKey="image-to-text", timeOutDuration=self._timeout
+            check, debugKey="image-to-text", timeOutDuration=IMAGE_OPERATION_TIMEOUT
         )
 
 
@@ -614,14 +620,14 @@ class RunwareBase:
                 return False
 
             response = await getIntervalWithPromise(
-                check_webhook_ack, debugKey="video-caption-webhook", timeOutDuration=30000
+                check_webhook_ack, debugKey="video-caption-webhook", timeOutDuration=WEBHOOK_TIMEOUT
             )
-            
+
             lis["destroy"]()
-            
+
             if "code" in response:
                 raise RunwareAPIError(response)
-            
+
             return [createVideoToTextFromResponse(response)] if response else []
 
         # For async without webhook, poll for results using _pollVideoResults
@@ -695,14 +701,14 @@ class RunwareBase:
                 return False
 
             response = await getIntervalWithPromise(
-                check_webhook_ack, debugKey="video-background-removal-webhook", timeOutDuration=30000
+                check_webhook_ack, debugKey="video-background-removal-webhook", timeOutDuration=WEBHOOK_TIMEOUT
             )
-            
+
             lis["destroy"]()
-            
+
             if "code" in response:
                 raise RunwareAPIError(response)
-            
+
             return [instantiateDataclass(IVideo, response)] if response else []
 
         # For async without webhook, poll for results using _pollVideoResults
@@ -789,7 +795,7 @@ class RunwareBase:
             return False
 
         response = await getIntervalWithPromise(
-            check, debugKey="remove-image-background", timeOutDuration=self._timeout
+            check, debugKey="remove-image-background", timeOutDuration=IMAGE_OPERATION_TIMEOUT
         )
 
         lis["destroy"]()
@@ -852,7 +858,7 @@ class RunwareBase:
             task_params["webhookURL"] = upscaleGanPayload.webhookURL
 
         # Send the task with all applicable parameters
-        
+
         await self.send([task_params])
 
         lis = self.globalListener(
@@ -878,7 +884,7 @@ class RunwareBase:
             return False
 
         response = await getIntervalWithPromise(
-            check, debugKey="upscale-gan", timeOutDuration=self._timeout
+            check, debugKey="upscale-gan", timeOutDuration=IMAGE_OPERATION_TIMEOUT
         )
 
         lis["destroy"]()
@@ -961,7 +967,7 @@ class RunwareBase:
             return False
 
         response = await getIntervalWithPromise(
-            check, debugKey="enhance-prompt", timeOutDuration=self._timeout
+            check, debugKey="enhance-prompt", timeOutDuration=PROMPT_ENHANCE_TIMEOUT
         )
 
         lis["destroy"]()
@@ -1035,7 +1041,7 @@ class RunwareBase:
             return False
 
         response = await getIntervalWithPromise(
-            check, debugKey="upload-image", timeOutDuration=self._timeout
+            check, debugKey="upload-image", timeOutDuration=IMAGE_UPLOAD_TIMEOUT
         )
 
         lis["destroy"]()
@@ -1255,25 +1261,21 @@ class RunwareBase:
     async def getSimililarImage(
         self,
         taskUUID: Union[str, List[str]],
-        numberOfImages: int,
+        numberOfImages: int = 1,
         shouldThrowError: bool = True,
         lis: Optional[ListenerType] = None,
-        timeout: Optional[int] = None,
-    ) -> Union[List[IImage], IError]:
+    ) -> List[IImage]:
         """
-        Retrieve similar images based on the provided task UUID(s) and desired number of images.
+        Retrieve similar images based on the provided task UUID(s).
 
-        :param taskUUID: A single task UUID or a list of task UUIDs to filter images.
-        :param numberOfImages: The desired number of images to retrieve.
-        :param shouldThrowError: A flag indicating whether to throw an error if the desired number of images is not reached.
-        :param lis: An optional listener to handle image updates.
+        :param taskUUID: A single task UUID or a list of task UUIDs.
+        :param numberOfImages: The number of images to retrieve. Defaults to 1.
+        :param shouldThrowError: Whether to raise an error on timeout. Defaults to True.
+        :param lis: Optional listener to destroy upon completion.
         :param timeout: The timeout duration for the operation.
-        :return: A list of retrieved images or an error object if the desired number of images is not reached.
+        :return: A list of IImage objects representing the images.
         """
         taskUUIDs = taskUUID if isinstance(taskUUID, list) else [taskUUID]
-
-        if timeout is None:
-            timeout = self._timeout
 
         async def check(
                 resolve: Callable[[List[IImage]], None],
@@ -1313,7 +1315,7 @@ class RunwareBase:
                 check,
                 debugKey="getting images",
                 shouldThrowError=shouldThrowError,
-                timeOutDuration=timeout,
+                timeOutDuration=IMAGE_INFERENCE_TIMEOUT,
             )
         except Exception as e:
             async with self._images_lock:
@@ -1327,7 +1329,7 @@ class RunwareBase:
                 f"TaskUUIDs: {taskUUIDs} | "
                 f"Expected: {numberOfImages} images | "
                 f"Received: {current_images} images | "
-                f"Timeout: {timeout}ms | "
+                f"Timeout: {IMAGE_INFERENCE_TIMEOUT}ms | "
                 f"Original error: {str(e)}"
             )
             raise Exception(error_msg) from e
@@ -1790,7 +1792,7 @@ class RunwareBase:
             initial_response = await getIntervalWithPromise(
                 check_initial_response,
                 debugKey="video-inference-initial",
-                timeOutDuration=30000
+                timeOutDuration=VIDEO_INITIAL_TIMEOUT
             )
         finally:
             lis["destroy"]()
@@ -1826,7 +1828,7 @@ class RunwareBase:
                 if poll_count >= MAX_POLLS_VIDEO_GENERATION - 1:
                     raise e
 
-            await delay(3)
+            await delay(VIDEO_POLLING_DELAY)
 
         # Different timeout messages based on response type
         timeout_msg = "Timed out"
@@ -1853,7 +1855,7 @@ class RunwareBase:
             return await getIntervalWithPromise(
                 check_poll_response,
                 debugKey=f"video-poll-{poll_count}",
-                timeOutDuration=30000
+                timeOutDuration=VIDEO_INITIAL_TIMEOUT
             )
         finally:
             lis["destroy"]()
@@ -1964,7 +1966,7 @@ class RunwareBase:
 
         try:
             response = await getIntervalWithPromise(
-                check, debugKey="audio-inference", timeOutDuration=self._timeout
+                check, debugKey="audio-inference", timeOutDuration=AUDIO_INFERENCE_TIMEOUT
             )
             lis["destroy"]()
 
