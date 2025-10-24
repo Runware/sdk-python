@@ -41,6 +41,7 @@ from .types import (
     IKlingAIProviderSettings,
     IFrameImage,
     IAsyncTaskResponse,
+    IVectorize,
 )
 from .types import IImage, IError, SdkType, ListenerType
 from .utils import (
@@ -713,6 +714,73 @@ class RunwareBase:
         image_list: List[IImage] = [image]
         return image_list
 
+    async def imageVectorize(self, vectorizePayload: IVectorize) -> List[IImage]:
+        try:
+            await self.ensureConnection()
+            return await asyncRetry(lambda: self._vectorize(vectorizePayload))
+        except Exception as e:
+            raise e
+
+    async def _vectorize(self, vectorizePayload: IVectorize) -> List[IImage]:
+        # Process the image from inputs
+        input_image = vectorizePayload.inputs.image
+        
+        if not input_image:
+            raise ValueError("Image is required in inputs for vectorize task")
+        
+        # Upload the image if it's a local file
+        image_uploaded = await self.uploadImage(input_image)
+        
+        if not image_uploaded or not image_uploaded.imageUUID:
+            return []
+        
+        taskUUID = getUUID()
+        
+        # Create a dictionary with mandatory parameters
+        task_params = {
+            "taskType": ETaskType.IMAGE_VECTORIZE.value,
+            "taskUUID": taskUUID,
+            "inputs": {
+                "image": image_uploaded.imageUUID
+            }
+        }
+        
+        # Add optional parameters if they are provided
+        if vectorizePayload.model is not None:
+            task_params["model"] = vectorizePayload.model
+        if vectorizePayload.outputType is not None:
+            task_params["outputType"] = vectorizePayload.outputType
+        if vectorizePayload.outputFormat is not None:
+            task_params["outputFormat"] = vectorizePayload.outputFormat
+        if vectorizePayload.includeCost:
+            task_params["includeCost"] = vectorizePayload.includeCost
+        if vectorizePayload.webhookURL:
+            task_params["webhookURL"] = vectorizePayload.webhookURL
+        
+        # Send the task with all applicable parameters
+        await self.send([task_params])
+        
+        let_lis = await self.listenToImages(
+            onPartialImages=None,
+            taskUUID=taskUUID,
+            groupKey=LISTEN_TO_IMAGES_KEY.REQUEST_IMAGES,
+        )
+        
+        images = await self.getSimililarImage(
+            taskUUID=taskUUID,
+            numberOfImages=1,
+            shouldThrowError=True,
+            lis=let_lis,
+        )
+        
+        let_lis["destroy"]()
+        
+        if "code" in images or "errors" in images:
+            # This indicates an error response
+            raise RunwareAPIError(images)
+        
+        return instantiateDataclassList(IImage, images)
+
     async def promptEnhance(
         self, promptEnhancer: IPromptEnhance
     ) -> List[IEnhancedPrompt]:
@@ -917,7 +985,7 @@ class RunwareBase:
                 images = [
                     img
                     for img in m["data"]
-                    if img.get("taskType") == "imageInference"
+                    if img.get("taskType") in ["imageInference", "vectorize"]
                     and img.get("taskUUID") == taskUUID
                 ]
 
@@ -958,9 +1026,9 @@ class RunwareBase:
 
         def listen_to_images_check(m):
             logger.debug("Images check message: %s", m)
-            # Check for successful image inference messages
+            # Check for successful image inference or vectorize messages
             image_inference_check = isinstance(m.get("data"), list) and any(
-                item.get("taskType") == "imageInference" for item in m["data"]
+                item.get("taskType") in ["imageInference", "vectorize"] for item in m["data"]
             )
             # Check for error messages with matching taskUUID
             error_check = isinstance(m.get("errors"), list) and any(
@@ -1119,7 +1187,7 @@ class RunwareBase:
             imagesWithSimilarTask = [
                 img
                 for img in self._globalImages
-                if img.get("taskType") == "imageInference"
+                if img.get("taskType") in ["imageInference", "vectorize"]
                 and img.get("taskUUID") in taskUUIDs
             ]
             # logger.debug(f"Check # imagesWithSimilarTask: {imagesWithSimilarTask}")
@@ -1139,7 +1207,7 @@ class RunwareBase:
                 self._globalImages = [
                     img
                     for img in self._globalImages
-                    if img.get("taskType") == "imageInference"
+                    if img.get("taskType") in ["imageInference", "vectorize"]
                     and img.get("taskUUID") not in taskUUIDs
                 ]
                 return True
