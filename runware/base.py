@@ -1505,9 +1505,17 @@ class RunwareBase:
 
             raise RunwareAPIError({"message": str(e)})
 
-    async def videoInference(self, requestVideo: IVideoInference) -> List[IVideo]:
+    async def videoInference(self, requestVideo: IVideoInference) -> Union[List[IVideo], IAsyncTaskResponse]:
         await self.ensureConnection()
         return await asyncRetry(lambda: self._requestVideo(requestVideo))
+
+    async def getResponse(
+        self,
+        taskUUID: str,
+        numberResults: int = 1
+    ) -> List[IVideo]:
+        await self.ensureConnection()
+        return await self._pollVideoResults(taskUUID, numberResults, IVideo)
 
     async def _requestVideo(self, requestVideo: IVideoInference) -> Union[List[IVideo], IAsyncTaskResponse]:
         await self._processVideoImages(requestVideo)
@@ -1518,7 +1526,18 @@ class RunwareBase:
             request_object["webhookURL"] = requestVideo.webhookURL
 
         await self.send([request_object])
-        return await self._handleInitialVideoResponse(requestVideo.taskUUID, requestVideo.numberResults, request_object.get("webhookURL"))
+
+        if requestVideo.skipResponse:
+            return IAsyncTaskResponse(
+                taskType=ETaskType.VIDEO_INFERENCE.value,
+                taskUUID=requestVideo.taskUUID
+            )
+
+        return await self._handleInitialVideoResponse(
+            requestVideo.taskUUID,
+            requestVideo.numberResults,
+            request_object.get("webhookURL")
+        )
 
     async def _processVideoImages(self, requestVideo: IVideoInference) -> None:
         frame_tasks = []
@@ -1802,7 +1821,7 @@ class RunwareBase:
         else:
             return instantiateDataclassList(IVideo, initial_response)
 
-    async def _pollVideoResults(self, task_uuid: str, number_results: int,response_cls: IVideo | IVideoToText = IVideo) -> Union[List[IVideo], List[IVideoToText]]:
+    async def _pollVideoResults(self, task_uuid: str, number_results: int, response_cls: IVideo | IVideoToText = IVideo) -> Union[List[IVideo], List[IVideoToText]]:
         for poll_count in range(MAX_POLLS_VIDEO_GENERATION):
             try:
                 responses = await self._sendPollRequest(task_uuid, poll_count)
