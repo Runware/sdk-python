@@ -33,6 +33,7 @@ class ETaskType(Enum):
     IMAGE_UPSCALE = "imageUpscale"
     IMAGE_BACKGROUND_REMOVAL = "imageBackgroundRemoval"
     VIDEO_BACKGROUND_REMOVAL = "removeBackground"
+    VIDEO_UPSCALE = "upscale"
     IMAGE_CAPTION = "imageCaption"
     IMAGE_CONTROL_NET_PRE_PROCESS = "imageControlNetPreProcess"
     PROMPT_ENHANCE = "promptEnhance"
@@ -961,6 +962,24 @@ class IVideoBackgroundRemoval:
     webhookURL: Optional[str] = None
     outputFormat: Optional[str] = None  # MP4, WEBM
     settings: Optional[IVideoBackgroundRemovalSettings] = None
+
+
+@dataclass
+class IVideoUpscaleInputs:
+    video: str  # Video URL or UUID
+
+
+@dataclass
+class IVideoUpscale:
+    model: str
+    inputs: IVideoUpscaleInputs
+    upscaleFactor: Optional[int] = 2  # 2 or 4
+    deliveryMethod: str = "async"
+    taskUUID: Optional[str] = None
+    includeCost: Optional[bool] = None
+    webhookURL: Optional[str] = None
+    outputType: Optional[IOutputType] = None
+    outputFormat: Optional[str] = None  # MP4, WEBM 
 
 
 @dataclass
