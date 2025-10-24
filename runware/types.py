@@ -385,6 +385,15 @@ class IAcePlusPlus:
 
 
 @dataclass
+class IPuLID:
+    inputImages: Optional[List[Union[str, File]]] = None  # Array of reference images (min: 1, max: 1)
+    idWeight: Optional[int] = None  # Min: 0, Max: 3, Default: 1
+    trueCFGScale: Optional[float] = None  # Min: 0, Max: 10
+    CFGStartStep: Optional[int] = None  # Min: 0, Max: 10
+    CFGStartStepPercentage: Optional[int] = None  # Min: 0, Max: 100
+
+
+@dataclass
 class IAcceleratorOptions:
     fbcache: Optional[bool] = None
     cacheDistance: Optional[float] = None
@@ -517,6 +526,7 @@ class IImageInference:
     ipAdapters: Optional[List[IIpAdapter]] = field(default_factory=list)
     referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
     acePlusPlus: Optional[IAcePlusPlus] = None
+    puLID: Optional[IPuLID] = None
     providerSettings: Optional[ImageProviderSettings] = None
     inputs: Optional[IInputs] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
