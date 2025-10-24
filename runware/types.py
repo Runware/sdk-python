@@ -446,6 +446,7 @@ class IBriaProviderSettings(BaseProviderSettings):
     promptContentModeration: Optional[bool] = None
     contentModeration: Optional[bool] = None
     ipSignal: Optional[bool] = None
+    preserveAlpha: Optional[bool] = None
 
     @property
     def provider_key(self) -> str:
@@ -560,6 +561,13 @@ class IImageToText:
 
 
 @dataclass
+class ISafety:
+    tolerance: Optional[bool] = None
+    checkInputs: Optional[bool] = None
+    checkContent: Optional[bool] = None
+
+
+@dataclass
 class IBackgroundRemovalSettings:
     returnOnlyMask: bool = False
     alphaMatting: bool = False
@@ -578,6 +586,8 @@ class IImageBackgroundRemoval(IImageCaption):
     model: Optional[Union[int, str]] = None
     taskUUID: Optional[str] = None
     settings: Optional[IBackgroundRemovalSettings] = None
+    providerSettings: Optional[ImageProviderSettings] = None
+    safety: Optional[ISafety] = None
 
 
 @dataclass
@@ -629,6 +639,8 @@ class IImageUpscale:
     outputFormat: Optional[IOutputFormat] = None
     includeCost: bool = False
     webhookURL: Optional[str] = None
+    providerSettings: Optional[ImageProviderSettings] = None
+    safety: Optional[ISafety] = None
 
 
 class ReconnectingWebsocketProps:
