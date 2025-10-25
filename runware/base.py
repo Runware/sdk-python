@@ -38,6 +38,8 @@ from .types import (
     IVideoBackgroundRemoval,
     IVideoBackgroundRemovalInputs,
     IVideoBackgroundRemovalSettings,
+    IVideoUpscale,
+    IVideoUpscaleInputs,
     IVideoInference,
     IVideoInputs,
     IAudio,
@@ -659,6 +661,80 @@ class RunwareBase:
 
             response = await getIntervalWithPromise(
                 check_webhook_ack, debugKey="video-background-removal-webhook", timeOutDuration=30000
+            )
+            
+            lis["destroy"]()
+            
+            if "code" in response:
+                raise RunwareAPIError(response)
+            
+            return [instantiateDataclass(IVideo, response)] if response else []
+
+        # For async without webhook, poll for results using _pollVideoResults
+        return await self._pollVideoResults(taskUUID, 1, IVideo)
+
+    async def videoUpscale(self, requestVideoUpscale: IVideoUpscale) -> List[IVideo]:
+        try:
+            await self.ensureConnection()
+            return await asyncRetry(
+                lambda: self._requestVideoUpscale(requestVideoUpscale)
+            )
+        except Exception as e:
+            raise e
+
+    async def _requestVideoUpscale(
+        self, requestVideoUpscale: IVideoUpscale
+    ) -> List[IVideo]:
+        taskUUID = requestVideoUpscale.taskUUID or getUUID()
+
+        # Create the request object
+        task_params = {
+            "taskType": ETaskType.VIDEO_UPSCALE.value,  # "upscale"
+            "taskUUID": taskUUID,
+            "model": requestVideoUpscale.model,
+            "inputs": {
+                "video": requestVideoUpscale.inputs.video
+            },
+            "upscaleFactor": requestVideoUpscale.upscaleFactor,
+            "deliveryMethod": requestVideoUpscale.deliveryMethod,
+        }
+
+        # Add optional parameters
+        if requestVideoUpscale.outputFormat:
+            task_params["outputFormat"] = requestVideoUpscale.outputFormat
+        if requestVideoUpscale.outputType:
+            task_params["outputType"] = requestVideoUpscale.outputType
+        if requestVideoUpscale.includeCost is not None:
+            task_params["includeCost"] = requestVideoUpscale.includeCost
+        if requestVideoUpscale.webhookURL:
+            task_params["webhookURL"] = requestVideoUpscale.webhookURL
+
+        await self.send([task_params])
+
+        # If webhook is specified, return immediately with task acknowledgment
+        if requestVideoUpscale.webhookURL:
+            lis = self.globalListener(taskUUID=taskUUID)
+            
+            def check_webhook_ack(resolve: callable, reject: callable, *args: Any) -> bool:
+                response = self._globalMessages.get(taskUUID)
+                if response:
+                    upscale_response = response[0]
+                else:
+                    upscale_response = response
+
+                if upscale_response and upscale_response.get("error"):
+                    reject(upscale_response)
+                    return True
+
+                if upscale_response:
+                    del self._globalMessages[taskUUID]
+                    resolve(upscale_response)
+                    return True
+
+                return False
+
+            response = await getIntervalWithPromise(
+                check_webhook_ack, debugKey="video-upscale-webhook", timeOutDuration=30000
             )
             
             lis["destroy"]()
