@@ -1410,7 +1410,6 @@ class RunwareBase:
         if requestVideo.acceleratorOptions:
             self._addAcceleratorOptions(request_object, requestVideo.acceleratorOptions)
         
-        print(f"\n\n {request_object}\n\n")
 
         return request_object
 
