@@ -391,6 +391,9 @@ class IAcceleratorOptions:
     teaCache: Optional[bool] = None
     cacheStartStep: Optional[int] = None
     cacheStopStep: Optional[int] = None
+    cacheStartStepPercentage: Optional[int] = None
+    cacheEndStepPercentage: Optional[int] = None
+    cacheMaxConsecutiveSteps: Optional[int] = None
     teaCacheDistance: Optional[float] = None
     deepCache: Optional[bool] = None
     deepCacheInterval: Optional[float] = None
@@ -407,6 +410,16 @@ class IFluxKontext:
 @dataclass
 class IAdvancedFeatures:
     fluxKontext: Optional[IFluxKontext] = None
+
+
+@dataclass
+class IVideoAdvancedFeatures:
+    videoCFGScale: Optional[float] = None  
+    audioCFGScale: Optional[float] = None  
+    fps: Optional[int] = None  
+    videoNegativePrompt: Optional[str] = None  
+    audioNegativePrompt: Optional[str] = None  
+    slgLayer: Optional[int] = None  
 
 
 class SerializableMixin:
@@ -466,6 +479,7 @@ class IVideoInputs:
     image: Optional[Union[str, File]] = None
     audio: Optional[str] = None
     mask: Optional[Union[str, File]] = None
+    frame: Optional[str] = None
 
 
 @dataclass
@@ -557,6 +571,14 @@ class IImageToText:
     taskUUID: str
     text: str
     cost: Optional[float] = None
+
+
+@dataclass
+class ISafety:
+    tolerance: Optional[bool] = None
+    checkInputs: Optional[bool] = None
+    checkContent: Optional[bool] = None
+    mode: Optional[str] = None  
 
 
 @dataclass
@@ -878,6 +900,9 @@ class IVideoInference:
     speech: Optional[IPixverseSpeechSettings] = None
     webhookURL: Optional[str] = None
     nsfw_check: Optional[Literal["none", "fast", "full"]] = None
+    safety: Optional[ISafety] = None
+    advancedFeatures: Optional[IVideoAdvancedFeatures] = None
+    acceleratorOptions: Optional[IAcceleratorOptions] = None
     inputs: Optional[IVideoInputs] = None
 
 
