@@ -627,7 +627,14 @@ class RunwareBase:
             raise e
 
     async def _upscaleGan(self, upscaleGanPayload: IImageUpscale) -> List[IImage]:
+        # Support both inputImage (legacy) and inputs.image (new format)
         inputImage = upscaleGanPayload.inputImage
+        if not inputImage and upscaleGanPayload.inputs and upscaleGanPayload.inputs.image:
+            inputImage = upscaleGanPayload.inputs.image
+        
+        if not inputImage:
+            raise ValueError("Either inputImage or inputs.image must be provided")
+        
         upscaleFactor = upscaleGanPayload.upscaleFactor
 
         image_uploaded = await self.uploadImage(inputImage)
@@ -641,9 +648,14 @@ class RunwareBase:
         task_params = {
             "taskType": ETaskType.IMAGE_UPSCALE.value,
             "taskUUID": taskUUID,
-            "inputImage": image_uploaded.imageUUID,
             "upscaleFactor": upscaleGanPayload.upscaleFactor,
         }
+        
+        # Use inputs.image format if inputs is provided, otherwise use inputImage (legacy)
+        if upscaleGanPayload.inputs and upscaleGanPayload.inputs.image:
+            task_params["inputs"] = {"image": image_uploaded.imageUUID}
+        else:
+            task_params["inputImage"] = image_uploaded.imageUUID
 
         # Add model parameter if specified
         if upscaleGanPayload.model is not None:

@@ -456,6 +456,7 @@ class IBriaProviderSettings(BaseProviderSettings):
 @dataclass
 class IInputs:
     references: Optional[List[Union[str, File]]] = field(default_factory=list)
+    image: Optional[Union[str, File]] = None
 
 
 ImageProviderSettings = IOpenAIProviderSettings | IBriaProviderSettings
@@ -631,8 +632,8 @@ class IUpscaleSettings:
 
 @dataclass
 class IImageUpscale:
-    inputImage: Union[str, File]
     upscaleFactor: float  # Changed to float to support decimal values like 1.5
+    inputImage: Optional[Union[str, File]] = None
     model: Optional[str] = None  # Model AIR ID (runware:500@1, runware:501@1, runware:502@1, runware:503@1)
     settings: Optional[IUpscaleSettings] = None  # Advanced upscaling settings
     outputType: Optional[IOutputType] = None
@@ -641,6 +642,7 @@ class IImageUpscale:
     webhookURL: Optional[str] = None
     providerSettings: Optional[ImageProviderSettings] = None
     safety: Optional[ISafety] = None
+    inputs: Optional[IInputs] = None
 
 
 class ReconnectingWebsocketProps:
