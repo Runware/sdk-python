@@ -1385,30 +1385,14 @@ class RunwareBase:
         if requestVideo.positivePrompt is not None:
             request_object["positivePrompt"] = requestVideo.positivePrompt.strip()
 
-        # Add speech settings if provided (top level)
-        if requestVideo.speech is not None:
-            speech_dict = asdict(requestVideo.speech)
-            # Remove None values
-            speech_dict = {k: v for k, v in speech_dict.items() if v is not None}
-            if speech_dict:
-                request_object["speech"] = speech_dict
-
+        self._addOptionalField(request_object, requestVideo.speech)
         self._addOptionalVideoFields(request_object, requestVideo)
         self._addVideoImages(request_object, requestVideo)
         self._addVideoInputs(request_object, requestVideo)
         self._addProviderSettings(request_object, requestVideo)
-        
-        # Add safety settings if provided
-        if requestVideo.safety:
-            self._addSafetySettings(request_object, requestVideo.safety)
-        
-        # Add advanced features if provided
-        if requestVideo.advancedFeatures:
-            self._addAdvancedFeatures(request_object, requestVideo.advancedFeatures)
-        
-        # Add accelerator options if provided
-        if requestVideo.acceleratorOptions:
-            self._addAcceleratorOptions(request_object, requestVideo.acceleratorOptions)
+        self._addOptionalField(request_object, requestVideo.safety)
+        self._addOptionalField(request_object, requestVideo.advancedFeatures)
+        self._addOptionalField(request_object, requestVideo.acceleratorOptions)
         
 
         return request_object
@@ -1442,7 +1426,7 @@ class RunwareBase:
                 for lora in requestVideo.lora
             ]
 
-    def _buildImageRequest(self, requestImage: IImageInference, prompt: str, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> Dict[str, Any]:
+    def _buildImageRequest(self, requestImage: IImageInference, prompt: str, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict]) -> Dict[str, Any]:
         request_object = {
             "taskType": ETaskType.IMAGE_INFERENCE.value,
             "model": requestImage.model,
@@ -1450,7 +1434,7 @@ class RunwareBase:
         }
         
         self._addOptionalImageFields(request_object, requestImage)
-        self._addImageSpecialFields(request_object, requestImage, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
+        self._addImageSpecialFields(request_object, requestImage, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data)
         self._addImageInputs(request_object, requestImage)
         self._addImageProviderSettings(request_object, requestImage)
         
@@ -1473,7 +1457,7 @@ class RunwareBase:
                 else:
                     request_object[field] = value
 
-    def _addImageSpecialFields(self, request_object: Dict[str, Any], requestImage: IImageInference, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> None:
+    def _addImageSpecialFields(self, request_object: Dict[str, Any], requestImage: IImageInference, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict]) -> None:
         # Add controlNet if present
         if control_net_data_dicts:
             request_object["controlNet"] = control_net_data_dicts
@@ -1529,17 +1513,12 @@ class RunwareBase:
         if ace_plus_plus_data:
             request_object["acePlusPlus"] = ace_plus_plus_data
             
-        # Add puLID if present
-        if pulid_data:
-            request_object["puLID"] = pulid_data
-            
         # Add referenceImages if present
         if requestImage.referenceImages:
             request_object["referenceImages"] = requestImage.referenceImages
             
         # Add acceleratorOptions if present
-        if requestImage.acceleratorOptions:
-            self._addAcceleratorOptions(request_object, requestImage.acceleratorOptions)
+        self._addOptionalField(request_object, requestImage.acceleratorOptions)
             
         # Add advancedFeatures if present
         if requestImage.advancedFeatures:
@@ -1571,7 +1550,6 @@ class RunwareBase:
                 k: v for k, v in asdict(requestVideo.inputs).items() 
                 if v is not None
             }
-            
             if inputs_dict:
                 request_object["inputs"] = inputs_dict
 
@@ -1589,26 +1567,12 @@ class RunwareBase:
         if provider_dict:
             request_object["providerSettings"] = provider_dict
 
-    def _addSafetySettings(self, request_object: Dict[str, Any], safety: ISafety) -> None:
-        safety_dict = asdict(safety)
-        safety_dict = {k: v for k, v in safety_dict.items() if v is not None}
-        if safety_dict:
-            request_object["safety"] = safety_dict
-
-    def _addAdvancedFeatures(self, request_object: Dict[str, Any], advancedFeatures: IVideoAdvancedFeatures) -> None:
-        features_dict = asdict(advancedFeatures)
-        features_dict = {k: v for k, v in features_dict.items() if v is not None}
-        if features_dict:
-            request_object["advancedFeatures"] = features_dict
-
-    def _addAcceleratorOptions(self, request_object: Dict[str, Any], acceleratorOptions: IAcceleratorOptions) -> None:
-        accelerator_dict = {
-            k: v
-            for k, v in vars(acceleratorOptions).items()
-            if v is not None
-        }
-        if accelerator_dict:
-            request_object["acceleratorOptions"] = accelerator_dict
+    def _addOptionalField(self, request_object: Dict[str, Any], obj: Any) -> None:
+        if not obj:
+            return
+        obj_dict = obj.to_request_dict()
+        if obj_dict:
+            request_object.update(obj_dict)
 
     async def _handleInitialVideoResponse(self, task_uuid: str, number_results: int, webhook_url: Optional[str] = None) -> Union[List[IVideo], IAsyncTaskResponse]:
         lis = self.globalListener(taskUUID=task_uuid)
@@ -1743,7 +1707,7 @@ class RunwareBase:
                 request_object["duration"] = requestAudio.duration
         
         self._addOptionalAudioFields(request_object, requestAudio)
-        self._addAudioSettings(request_object, requestAudio)
+        self._addOptionalField(request_object, requestAudio.audioSettings)
         self._addAudioProviderSettings(request_object, requestAudio)
         
         return request_object
@@ -1758,13 +1722,6 @@ class RunwareBase:
             if value is not None:
                 request_object[field] = value
 
-    def _addAudioSettings(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
-        if requestAudio.audioSettings:
-            audio_settings_dict = asdict(requestAudio.audioSettings)
-            # Remove None values
-            audio_settings_dict = {k: v for k, v in audio_settings_dict.items() if v is not None}
-            if audio_settings_dict:
-                request_object["audioSettings"] = audio_settings_dict
 
     def _addAudioProviderSettings(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
         if not requestAudio.providerSettings:
