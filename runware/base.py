@@ -1426,7 +1426,7 @@ class RunwareBase:
                 for lora in requestVideo.lora
             ]
 
-    def _buildImageRequest(self, requestImage: IImageInference, prompt: str, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict] = None) -> Dict[str, Any]:
+    def _buildImageRequest(self, requestImage: IImageInference, prompt: str, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> Dict[str, Any]:
         request_object = {
             "taskType": ETaskType.IMAGE_INFERENCE.value,
             "model": requestImage.model,
@@ -1457,7 +1457,7 @@ class RunwareBase:
                 else:
                     request_object[field] = value
 
-    def _addImageSpecialFields(self, request_object: Dict[str, Any], requestImage: IImageInference, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict] = None) -> None:
+    def _addImageSpecialFields(self, request_object: Dict[str, Any], requestImage: IImageInference, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> None:
         # Add controlNet if present
         if control_net_data_dicts:
             request_object["controlNet"] = control_net_data_dicts
