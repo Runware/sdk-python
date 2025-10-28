@@ -42,6 +42,7 @@ class ETaskType(Enum):
     AUDIO_INFERENCE = "audioInference"
     MEDIA_STORAGE = "mediaStorage"
     GET_RESPONSE = "getResponse"
+    IMAGE_VECTORIZE = "vectorize"
 
 
 class EPreProcessorGroup(Enum):
@@ -99,7 +100,7 @@ class EOpenPosePreProcessor(Enum):
 
 # Define the types using Literal
 IOutputType = Literal["base64Data", "dataURI", "URL"]
-IOutputFormat = Literal["JPG", "PNG", "WEBP"]
+IOutputFormat = Literal["JPG", "PNG", "WEBP", "SVG"]
 IAudioOutputType = Literal["base64Data", "dataURI", "URL"]
 IAudioOutputFormat = Literal["MP3"]
 
@@ -474,6 +475,7 @@ class ILightricksProviderSettings(BaseProviderSettings):
 @dataclass
 class IInputs:
     references: Optional[List[Union[str, File]]] = field(default_factory=list)
+    image: Optional[Union[str, File]] = None
 
 
 ImageProviderSettings = IOpenAIProviderSettings | IBriaProviderSettings | ILightricksProviderSettings
@@ -598,6 +600,18 @@ class IImageBackgroundRemoval(IImageCaption):
     model: Optional[Union[int, str]] = None
     taskUUID: Optional[str] = None
     settings: Optional[IBackgroundRemovalSettings] = None
+
+
+@dataclass
+class IVectorize:
+    
+    inputs: IInputs  = None
+    includeCost: bool = False
+    taskUUID: Optional[str] = None
+    model: Optional[str] = None  
+    outputType: Optional[IOutputType] = "URL"  
+    outputFormat: Optional[IOutputFormat] = "SVG"  
+    webhookURL: Optional[str] = None
 
 
 @dataclass
