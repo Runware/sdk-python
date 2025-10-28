@@ -335,7 +335,21 @@ class RunwareBase:
                         requestImage.acePlusPlus.inputMasks
                     )
 
-            request_object = self._buildImageRequest(requestImage, prompt, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data)
+            pulid_data = {}
+            if requestImage.puLID:
+                pulid_data = {
+                    "inputImages": [],
+                    "idWeight": requestImage.puLID.idWeight,
+                    "trueCFGScale": requestImage.puLID.trueCFGScale,
+                    "CFGStartStep": requestImage.puLID.CFGStartStep,
+                    "CFGStartStepPercentage": requestImage.puLID.CFGStartStepPercentage,
+                }
+                if requestImage.puLID.inputImages:
+                    pulid_data["inputImages"] = await process_image(
+                        requestImage.puLID.inputImages
+                    )
+
+            request_object = self._buildImageRequest(requestImage, prompt, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
             
             return await asyncRetry(
                 lambda: self._requestImages(
@@ -1429,7 +1443,7 @@ class RunwareBase:
                 for lora in requestVideo.lora
             ]
 
-    def _buildImageRequest(self, requestImage: IImageInference, prompt: str, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict]) -> Dict[str, Any]:
+    def _buildImageRequest(self, requestImage: IImageInference, prompt: str, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> Dict[str, Any]:
         request_object = {
             "taskType": ETaskType.IMAGE_INFERENCE.value,
             "model": requestImage.model,
@@ -1437,7 +1451,7 @@ class RunwareBase:
         }
         
         self._addOptionalImageFields(request_object, requestImage)
-        self._addImageSpecialFields(request_object, requestImage, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data)
+        self._addImageSpecialFields(request_object, requestImage, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
         self._addImageInputs(request_object, requestImage)
         self._addImageProviderSettings(request_object, requestImage)
         
@@ -1460,7 +1474,7 @@ class RunwareBase:
                 else:
                     request_object[field] = value
 
-    def _addImageSpecialFields(self, request_object: Dict[str, Any], requestImage: IImageInference, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict]) -> None:
+    def _addImageSpecialFields(self, request_object: Dict[str, Any], requestImage: IImageInference, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> None:
         # Add controlNet if present
         if control_net_data_dicts:
             request_object["controlNet"] = control_net_data_dicts
@@ -1516,6 +1530,10 @@ class RunwareBase:
         if ace_plus_plus_data:
             request_object["acePlusPlus"] = ace_plus_plus_data
             
+        # Add puLID if present
+        if pulid_data:
+            request_object["puLID"] = pulid_data
+            
         # Add referenceImages if present
         if requestImage.referenceImages:
             request_object["referenceImages"] = requestImage.referenceImages
@@ -1554,6 +1572,7 @@ class RunwareBase:
                 k: v for k, v in asdict(requestVideo.inputs).items() 
                 if v is not None
             }
+            
             if inputs_dict:
                 request_object["inputs"] = inputs_dict
 
