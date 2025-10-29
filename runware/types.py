@@ -485,6 +485,7 @@ ImageProviderSettings = IOpenAIProviderSettings | IBriaProviderSettings | ILight
 class IVideoInputs:
     references: Optional[List[Union[str, File, Dict[str, Any]]]] = field(default_factory=list)
     image: Optional[Union[str, File]] = None
+    video: Optional[str] = None
     audio: Optional[str] = None
     mask: Optional[Union[str, File]] = None
 
@@ -825,6 +826,8 @@ class IBytedanceProviderSettings(BaseProviderSettings):
 @dataclass
 class IKlingAIProviderSettings(BaseProviderSettings):
     cameraControl: Optional[IKlingCameraControl] = None
+    soundVolume: Optional[float] = None  
+    originalAudioVolume: Optional[float] = None  
 
     @property
     def provider_key(self) -> str:
@@ -836,6 +839,10 @@ class IKlingAIProviderSettings(BaseProviderSettings):
             camera_control_data = self.cameraControl.serialize()
             if camera_control_data:
                 result["cameraControl"] = camera_control_data
+        if self.soundVolume is not None:
+            result["soundVolume"] = self.soundVolume
+        if self.originalAudioVolume is not None:
+            result["originalAudioVolume"] = self.originalAudioVolume
         return result
 
 
