@@ -920,6 +920,7 @@ class IVideoInference:
     steps: Optional[int] = None
     seed: Optional[int] = None
     CFGScale: Optional[float] = None
+    acceleration: Optional[str] = None
     numberResults: Optional[int] = 1
     providerSettings: Optional[VideoProviderSettings] = None
     speech: Optional[IPixverseSpeechSettings] = None
