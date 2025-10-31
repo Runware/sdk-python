@@ -18,6 +18,7 @@ from .types import (
     IImageCaption,
     IImageToText,
     IImageBackgroundRemoval,
+    ISafety,
     IPromptEnhance,
     IEnhancedPrompt,
     IImageUpscale,
@@ -35,6 +36,8 @@ from .types import (
     IVideo,
     IVideoInference,
     IVideoInputs,
+    IVideoAdvancedFeatures,
+    IAcceleratorOptions,
     IAudio,
     IAudioInference,
     IAudioSettings,
@@ -1531,6 +1534,19 @@ class RunwareBase:
         self._addVideoInputs(request_object, requestVideo)
         self._addProviderSettings(request_object, requestVideo)
         
+        # Add safety settings if provided
+        if requestVideo.safety:
+            self._addSafetySettings(request_object, requestVideo.safety)
+        
+        # Add advanced features if provided
+        if requestVideo.advancedFeatures:
+            self._addAdvancedFeatures(request_object, requestVideo.advancedFeatures)
+        
+        # Add accelerator options if provided
+        if requestVideo.acceleratorOptions:
+            self._addAcceleratorOptions(request_object, requestVideo.acceleratorOptions)
+        
+
         return request_object
 
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
@@ -1659,12 +1675,7 @@ class RunwareBase:
             
         # Add acceleratorOptions if present
         if requestImage.acceleratorOptions:
-            pipeline_options_dict = {
-                k: v
-                for k, v in vars(requestImage.acceleratorOptions).items()
-                if v is not None
-            }
-            request_object["acceleratorOptions"] = pipeline_options_dict
+            self._addAcceleratorOptions(request_object, requestImage.acceleratorOptions)
             
         # Add advancedFeatures if present
         if requestImage.advancedFeatures:
@@ -1713,6 +1724,27 @@ class RunwareBase:
         provider_dict = requestVideo.providerSettings.to_request_dict()
         if provider_dict:
             request_object["providerSettings"] = provider_dict
+
+    def _addSafetySettings(self, request_object: Dict[str, Any], safety: ISafety) -> None:
+        safety_dict = asdict(safety)
+        safety_dict = {k: v for k, v in safety_dict.items() if v is not None}
+        if safety_dict:
+            request_object["safety"] = safety_dict
+
+    def _addAdvancedFeatures(self, request_object: Dict[str, Any], advancedFeatures: IVideoAdvancedFeatures) -> None:
+        features_dict = asdict(advancedFeatures)
+        features_dict = {k: v for k, v in features_dict.items() if v is not None}
+        if features_dict:
+            request_object["advancedFeatures"] = features_dict
+
+    def _addAcceleratorOptions(self, request_object: Dict[str, Any], acceleratorOptions: IAcceleratorOptions) -> None:
+        accelerator_dict = {
+            k: v
+            for k, v in vars(acceleratorOptions).items()
+            if v is not None
+        }
+        if accelerator_dict:
+            request_object["acceleratorOptions"] = accelerator_dict
 
     async def _handleInitialVideoResponse(self, task_uuid: str, number_results: int, webhook_url: Optional[str] = None) -> Union[List[IVideo], IAsyncTaskResponse]:
         lis = self.globalListener(taskUUID=task_uuid)
