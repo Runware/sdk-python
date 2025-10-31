@@ -13,6 +13,7 @@ from websockets.protocol import State
 from .logging_config import configure_logging
 
 from .async_retry import asyncRetry
+from .reconnection import ConnectionState, ReconnectionManager
 from .types import (
     Environment,
     IImageInference,
@@ -115,6 +116,7 @@ class RunwareBase:
         self._messages_lock = asyncio.Lock()
         self._images_lock = asyncio.Lock()
         self._listener_tasks = set()
+        self._reconnection_manager = ReconnectionManager(logger=self.logger)
 
 
     def _create_safe_async_listener(self, async_func):
@@ -1320,15 +1322,15 @@ class RunwareBase:
         :raises: An error message if the connection cannot be established due to an invalid API key or other reasons.
         """
         isConnected = self.connected() and self._ws.state is State.OPEN
-        # print(f"Is connected: {isConnected}")
 
         try:
             if self._invalidAPIkey:
-                raise ConnectionError(self._invalidAPIkey)
+                circuit_state = self._reconnection_manager.get_state()
+                if circuit_state == ConnectionState.CIRCUIT_OPEN:
+                    raise ConnectionError(self._invalidAPIkey)
 
             if not isConnected:
                 await self.connect()
-                # await asyncio.sleep(2)
 
         except Exception as e:
             raise ConnectionError(

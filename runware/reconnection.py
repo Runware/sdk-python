@@ -67,11 +67,6 @@ class ReconnectionManager:
     def on_auth_failure(self) -> bool:
         now = time.time()
 
-        if self._had_successful_auth:
-            if self._state == ConnectionState.CONNECTED:
-                self._state = ConnectionState.RECONNECTING
-            return False
-
         if self._auth_error_window_start is None:
             self._auth_error_window_start = now
             self._auth_errors_in_window = 1

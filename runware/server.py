@@ -9,7 +9,6 @@ import websockets
 from websockets.protocol import State
 from typing import Any, Dict, Optional
 
-from .reconnection import ReconnectionManager
 from .types import SdkType
 from .utils import (
     BASE_RUNWARE_URLS,
@@ -48,8 +47,6 @@ class RunwareServer(RunwareBase):
         self._retry_delay: int = retry_delay
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._tasks: Dict[str, asyncio.Task] = {}
-
-        self._reconnection_manager = ReconnectionManager(logger=self.logger)
 
     async def connect(self):
         self.logger.info("Connecting to Runware server from server")
