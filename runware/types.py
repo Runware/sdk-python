@@ -43,7 +43,9 @@ class ETaskType(Enum):
     VIDEO_INFERENCE = "videoInference"
     AUDIO_INFERENCE = "audioInference"
     CAPTION = "caption"
+    MEDIA_STORAGE = "mediaStorage"
     GET_RESPONSE = "getResponse"
+    IMAGE_VECTORIZE = "vectorize"
 
 
 class EPreProcessorGroup(Enum):
@@ -101,7 +103,7 @@ class EOpenPosePreProcessor(Enum):
 
 # Define the types using Literal
 IOutputType = Literal["base64Data", "dataURI", "URL"]
-IOutputFormat = Literal["JPG", "PNG", "WEBP"]
+IOutputFormat = Literal["JPG", "PNG", "WEBP", "SVG"]
 IAudioOutputType = Literal["base64Data", "dataURI", "URL"]
 IAudioOutputFormat = Literal["MP3"]
 
@@ -388,12 +390,24 @@ class IAcePlusPlus:
 
 
 @dataclass
+class IPuLID:
+    inputImages: Optional[List[Union[str, File]]] = None  # Array of reference images (min: 1, max: 1)
+    idWeight: Optional[int] = None  # Min: 0, Max: 3, Default: 1
+    trueCFGScale: Optional[float] = None  # Min: 0, Max: 10
+    CFGStartStep: Optional[int] = None  # Min: 0, Max: 10
+    CFGStartStepPercentage: Optional[int] = None  # Min: 0, Max: 100
+
+
+@dataclass
 class IAcceleratorOptions:
     fbcache: Optional[bool] = None
     cacheDistance: Optional[float] = None
     teaCache: Optional[bool] = None
     cacheStartStep: Optional[int] = None
     cacheStopStep: Optional[int] = None
+    cacheStartStepPercentage: Optional[int] = None
+    cacheEndStepPercentage: Optional[int] = None
+    cacheMaxConsecutiveSteps: Optional[int] = None
     teaCacheDistance: Optional[float] = None
     deepCache: Optional[bool] = None
     deepCacheInterval: Optional[float] = None
@@ -410,6 +424,16 @@ class IFluxKontext:
 @dataclass
 class IAdvancedFeatures:
     fluxKontext: Optional[IFluxKontext] = None
+
+
+@dataclass
+class IVideoAdvancedFeatures:
+    videoCFGScale: Optional[float] = None  
+    audioCFGScale: Optional[float] = None  
+    fps: Optional[int] = None  
+    videoNegativePrompt: Optional[str] = None  
+    audioNegativePrompt: Optional[str] = None  
+    slgLayer: Optional[int] = None  
 
 
 class SerializableMixin:
@@ -449,6 +473,7 @@ class IBriaProviderSettings(BaseProviderSettings):
     promptContentModeration: Optional[bool] = None
     contentModeration: Optional[bool] = None
     ipSignal: Optional[bool] = None
+    preserveAlpha: Optional[bool] = None
 
     @property
     def provider_key(self) -> str:
@@ -456,19 +481,31 @@ class IBriaProviderSettings(BaseProviderSettings):
 
 
 @dataclass
+class ILightricksProviderSettings(BaseProviderSettings):
+    generateAudio: Optional[bool] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "lightricks"
+
+
+@dataclass
 class IInputs:
     references: Optional[List[Union[str, File]]] = field(default_factory=list)
+    image: Optional[Union[str, File]] = None
 
 
-ImageProviderSettings = IOpenAIProviderSettings | IBriaProviderSettings
+ImageProviderSettings = IOpenAIProviderSettings | IBriaProviderSettings | ILightricksProviderSettings
 
 
 @dataclass
 class IVideoInputs:
     references: Optional[List[Union[str, File, Dict[str, Any]]]] = field(default_factory=list)
     image: Optional[Union[str, File]] = None
+    video: Optional[str] = None
     audio: Optional[str] = None
     mask: Optional[Union[str, File]] = None
+    frame: Optional[str] = None
 
 
 @dataclass
@@ -511,6 +548,7 @@ class IImageInference:
     ipAdapters: Optional[List[IIpAdapter]] = field(default_factory=list)
     referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
     acePlusPlus: Optional[IAcePlusPlus] = None
+    puLID: Optional[IPuLID] = None
     providerSettings: Optional[ImageProviderSettings] = None
     inputs: Optional[IInputs] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
@@ -563,6 +601,14 @@ class IImageToText:
 
 
 @dataclass
+class ISafety:
+    tolerance: Optional[bool] = None
+    checkInputs: Optional[bool] = None
+    checkContent: Optional[bool] = None
+    mode: Optional[str] = None  
+
+
+@dataclass
 class IBackgroundRemovalSettings:
     returnOnlyMask: bool = False
     alphaMatting: bool = False
@@ -581,6 +627,20 @@ class IImageBackgroundRemoval(IImageCaption):
     model: Optional[Union[int, str]] = None
     taskUUID: Optional[str] = None
     settings: Optional[IBackgroundRemovalSettings] = None
+    providerSettings: Optional[ImageProviderSettings] = None
+    safety: Optional[ISafety] = None
+
+
+@dataclass
+class IVectorize:
+    
+    inputs: IInputs  = None
+    includeCost: bool = False
+    taskUUID: Optional[str] = None
+    model: Optional[str] = None  
+    outputType: Optional[IOutputType] = "URL"  
+    outputFormat: Optional[IOutputFormat] = "SVG"  
+    webhookURL: Optional[str] = None
 
 
 @dataclass
@@ -624,14 +684,17 @@ class IUpscaleSettings:
 
 @dataclass
 class IImageUpscale:
-    inputImage: Union[str, File]
     upscaleFactor: float  # Changed to float to support decimal values like 1.5
+    inputImage: Optional[Union[str, File]] = None
     model: Optional[str] = None  # Model AIR ID (runware:500@1, runware:501@1, runware:502@1, runware:503@1)
     settings: Optional[IUpscaleSettings] = None  # Advanced upscaling settings
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IOutputFormat] = None
     includeCost: bool = False
     webhookURL: Optional[str] = None
+    providerSettings: Optional[ImageProviderSettings] = None
+    safety: Optional[ISafety] = None
+    inputs: Optional[IInputs] = None
 
 
 class ReconnectingWebsocketProps:
@@ -652,6 +715,12 @@ class ReconnectingWebsocketProps:
 class UploadImageType:
     imageUUID: str
     imageURL: str
+    taskUUID: str
+
+
+@dataclass
+class MediaStorageType:
+    mediaUUID: str
     taskUUID: str
 
 
@@ -788,6 +857,8 @@ class IBytedanceProviderSettings(BaseProviderSettings):
 @dataclass
 class IKlingAIProviderSettings(BaseProviderSettings):
     cameraControl: Optional[IKlingCameraControl] = None
+    soundVolume: Optional[float] = None  
+    originalAudioVolume: Optional[float] = None  
 
     @property
     def provider_key(self) -> str:
@@ -799,6 +870,10 @@ class IKlingAIProviderSettings(BaseProviderSettings):
             camera_control_data = self.cameraControl.serialize()
             if camera_control_data:
                 result["cameraControl"] = camera_control_data
+        if self.soundVolume is not None:
+            result["soundVolume"] = self.soundVolume
+        if self.originalAudioVolume is not None:
+            result["originalAudioVolume"] = self.originalAudioVolume
         return result
 
 
@@ -876,11 +951,15 @@ class IVideoInference:
     steps: Optional[int] = None
     seed: Optional[int] = None
     CFGScale: Optional[float] = None
+    acceleration: Optional[str] = None
     numberResults: Optional[int] = 1
     providerSettings: Optional[VideoProviderSettings] = None
     speech: Optional[IPixverseSpeechSettings] = None
     webhookURL: Optional[str] = None
     nsfw_check: Optional[Literal["none", "fast", "full"]] = None
+    safety: Optional[ISafety] = None
+    advancedFeatures: Optional[IVideoAdvancedFeatures] = None
+    acceleratorOptions: Optional[IAcceleratorOptions] = None
     inputs: Optional[IVideoInputs] = None
     skipResponse: Optional[bool] = False
 

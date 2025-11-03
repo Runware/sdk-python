@@ -21,6 +21,7 @@ from .types import (
     IImageCaption,
     IImageToText,
     IImageBackgroundRemoval,
+    ISafety,
     IPromptEnhance,
     IEnhancedPrompt,
     IImageUpscale,
@@ -28,6 +29,7 @@ from .types import (
     IUploadModelResponse,
     ReconnectingWebsocketProps,
     UploadImageType,
+    MediaStorageType,
     EPreProcessorGroup,
     File,
     ETaskType,
@@ -43,10 +45,14 @@ from .types import (
     IVideoUpscale,
     IVideoUpscaleInputs,
     IVideoInference,
+    IVideoInputs,
+    IVideoAdvancedFeatures,
+    IAcceleratorOptions,
     IAudio,
     IAudioInference,
     IFrameImage,
     IAsyncTaskResponse,
+    IVectorize,
 )
 from .types import IImage, IError, SdkType, ListenerType
 from .utils import (
@@ -390,7 +396,21 @@ class RunwareBase:
                         requestImage.acePlusPlus.inputMasks
                     )
 
-            request_object = self._buildImageRequest(requestImage, prompt, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data)
+            pulid_data = {}
+            if requestImage.puLID:
+                pulid_data = {
+                    "inputImages": [],
+                    "idWeight": requestImage.puLID.idWeight,
+                    "trueCFGScale": requestImage.puLID.trueCFGScale,
+                    "CFGStartStep": requestImage.puLID.CFGStartStep,
+                    "CFGStartStepPercentage": requestImage.puLID.CFGStartStepPercentage,
+                }
+                if requestImage.puLID.inputImages:
+                    pulid_data["inputImages"] = await process_image(
+                        requestImage.puLID.inputImages
+                    )
+
+            request_object = self._buildImageRequest(requestImage, prompt, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
             
             return await asyncRetry(
                 lambda: self._requestImages(
@@ -848,6 +868,14 @@ class RunwareBase:
                 if v is not None
             }
             task_params.update(settings_dict)
+        
+        # Add provider settings if provided
+        if removeImageBackgroundPayload.providerSettings:
+            self._addImageProviderSettings(task_params, removeImageBackgroundPayload)
+        
+        # Add safety settings if provided
+        if removeImageBackgroundPayload.safety:
+            self._addSafetySettings(task_params, removeImageBackgroundPayload.safety)
 
         # Send the task with all applicable parameters
         await self.send([task_params])
@@ -897,7 +925,14 @@ class RunwareBase:
             raise e
 
     async def _upscaleGan(self, upscaleGanPayload: IImageUpscale) -> List[IImage]:
+        # Support both inputImage (legacy) and inputs.image (new format)
         inputImage = upscaleGanPayload.inputImage
+        if not inputImage and upscaleGanPayload.inputs and upscaleGanPayload.inputs.image:
+            inputImage = upscaleGanPayload.inputs.image
+        
+        if not inputImage:
+            raise ValueError("Either inputImage or inputs.image must be provided")
+        
         upscaleFactor = upscaleGanPayload.upscaleFactor
 
         image_uploaded = await self.uploadImage(inputImage)
@@ -911,9 +946,14 @@ class RunwareBase:
         task_params = {
             "taskType": ETaskType.IMAGE_UPSCALE.value,
             "taskUUID": taskUUID,
-            "inputImage": image_uploaded.imageUUID,
             "upscaleFactor": upscaleGanPayload.upscaleFactor,
         }
+        
+        # Use inputs.image format if inputs is provided, otherwise use inputImage (legacy)
+        if upscaleGanPayload.inputs and upscaleGanPayload.inputs.image:
+            task_params["inputs"] = {"image": image_uploaded.imageUUID}
+        else:
+            task_params["inputImage"] = image_uploaded.imageUUID
 
         # Add model parameter if specified
         if upscaleGanPayload.model is not None:
@@ -936,6 +976,14 @@ class RunwareBase:
             task_params["includeCost"] = upscaleGanPayload.includeCost
         if upscaleGanPayload.webhookURL:
             task_params["webhookURL"] = upscaleGanPayload.webhookURL
+        
+        # Add provider settings if provided
+        if upscaleGanPayload.providerSettings:
+            self._addImageProviderSettings(task_params, upscaleGanPayload)
+        
+        # Add safety settings if provided
+        if upscaleGanPayload.safety:
+            self._addSafetySettings(task_params, upscaleGanPayload.safety)
 
         # Send the task with all applicable parameters
 
@@ -976,6 +1024,73 @@ class RunwareBase:
         image = createImageFromResponse(response)
         image_list: List[IImage] = [image]
         return image_list
+
+    async def imageVectorize(self, vectorizePayload: IVectorize) -> List[IImage]:
+        try:
+            await self.ensureConnection()
+            return await asyncRetry(lambda: self._vectorize(vectorizePayload))
+        except Exception as e:
+            raise e
+
+    async def _vectorize(self, vectorizePayload: IVectorize) -> List[IImage]:
+        # Process the image from inputs
+        input_image = vectorizePayload.inputs.image
+        
+        if not input_image:
+            raise ValueError("Image is required in inputs for vectorize task")
+        
+        # Upload the image if it's a local file
+        image_uploaded = await self.uploadImage(input_image)
+        
+        if not image_uploaded or not image_uploaded.imageUUID:
+            return []
+        
+        taskUUID = getUUID()
+        
+        # Create a dictionary with mandatory parameters
+        task_params = {
+            "taskType": ETaskType.IMAGE_VECTORIZE.value,
+            "taskUUID": taskUUID,
+            "inputs": {
+                "image": image_uploaded.imageUUID
+            }
+        }
+        
+        # Add optional parameters if they are provided
+        if vectorizePayload.model is not None:
+            task_params["model"] = vectorizePayload.model
+        if vectorizePayload.outputType is not None:
+            task_params["outputType"] = vectorizePayload.outputType
+        if vectorizePayload.outputFormat is not None:
+            task_params["outputFormat"] = vectorizePayload.outputFormat
+        if vectorizePayload.includeCost:
+            task_params["includeCost"] = vectorizePayload.includeCost
+        if vectorizePayload.webhookURL:
+            task_params["webhookURL"] = vectorizePayload.webhookURL
+        
+        # Send the task with all applicable parameters
+        await self.send([task_params])
+        
+        let_lis = await self.listenToImages(
+            onPartialImages=None,
+            taskUUID=taskUUID,
+            groupKey=LISTEN_TO_IMAGES_KEY.REQUEST_IMAGES,
+        )
+        
+        images = await self.getSimililarImage(
+            taskUUID=taskUUID,
+            numberOfImages=1,
+            shouldThrowError=True,
+            lis=let_lis,
+        )
+        
+        let_lis["destroy"]()
+        
+        if "code" in images or "errors" in images:
+            # This indicates an error response
+            raise RunwareAPIError(images)
+        
+        return instantiateDataclassList(IImage, images)
 
     async def promptEnhance(
         self, promptEnhancer: IPromptEnhance
@@ -1140,6 +1255,73 @@ class RunwareBase:
             image = None
         return image
 
+    async def uploadMedia(self, media_url: str) -> Optional[MediaStorageType]:
+        try:
+            await self.ensureConnection()
+            return await asyncRetry(lambda: self._uploadMedia(media_url))
+        except Exception as e:
+            raise e
+
+    async def _uploadMedia(self, media_url: str) -> Optional[MediaStorageType]:
+        task_uuid = getUUID()
+        local_file = True
+        
+        if isinstance(media_url, str):
+            if os.path.exists(media_url):
+                # Local file - convert to base64
+                media_url = await fileToBase64(media_url)
+                # Strip the data URI prefix for media storage API
+                if media_url.startswith("data:"):
+                    media_url = media_url.split(",", 1)[1]
+            # For URLs and base64 strings, send them directly to the API
+        
+        await self.send(
+            [
+                {
+                    "taskType": ETaskType.MEDIA_STORAGE.value,
+                    "taskUUID": task_uuid,
+                    "operation": "upload",
+                    "media": media_url,
+                }
+            ]
+        )
+
+        lis = self.globalListener(taskUUID=task_uuid)
+
+        def check(resolve: callable, reject: callable, *args: Any) -> bool:
+            uploaded_media_list = self._globalMessages.get(task_uuid)
+            uploaded_media = uploaded_media_list[0] if uploaded_media_list else None
+
+            if uploaded_media and uploaded_media.get("error"):
+                reject(uploaded_media)
+                return True
+
+            if uploaded_media:
+                del self._globalMessages[task_uuid]
+                resolve(uploaded_media)
+                return True
+
+            return False
+
+        response = await getIntervalWithPromise(
+            check, debugKey="upload-media", timeOutDuration=self._timeout
+        )
+
+        lis["destroy"]()
+
+        if "code" in response:
+            # This indicates an error response
+            raise RunwareAPIError(response)
+
+        if response:
+            media = MediaStorageType(
+                mediaUUID=response["mediaUUID"],
+                taskUUID=response["taskUUID"],
+            )
+        else:
+            media = None
+        return media
+
     async def uploadUnprocessedImage(
         self,
         file: Union[File, str],
@@ -1172,8 +1354,8 @@ class RunwareBase:
                 images = [
                     img
                     for img in m["data"]
-                    if img.get("taskType") == "imageInference"
-                       and img.get("taskUUID") == taskUUID
+                    if img.get("taskType") in ["imageInference", "vectorize"]
+                    and img.get("taskUUID") == taskUUID
                 ]
 
                 if images:
@@ -1213,7 +1395,7 @@ class RunwareBase:
         def listen_to_images_check(m):
             logger.debug("Images check message: %s", m)
             image_inference_check = isinstance(m.get("data"), list) and any(
-                item.get("taskType") == "imageInference" for item in m["data"]
+                item.get("taskType") in ["imageInference", "vectorize"] for item in m["data"]
             )
             error_check = isinstance(m.get("errors"), list) and any(
                 error.get("taskUUID") == taskUUID for error in m["errors"]
@@ -1367,7 +1549,7 @@ class RunwareBase:
                 imagesWithSimilarTask = [
                     img
                     for img in self._globalImages
-                    if img.get("taskType") == "imageInference"
+                    if img.get("taskType") in ["imageInference", "vectorize"]
                        and img.get("taskUUID") in taskUUIDs
                 ]
 
@@ -1382,7 +1564,7 @@ class RunwareBase:
                     self._globalImages = [
                         img
                         for img in self._globalImages
-                        if img.get("taskType") == "imageInference"
+                        if img.get("taskType") in ["imageInference", "vectorize"]
                            and img.get("taskUUID") not in taskUUIDs
                     ]
                     resolve(imagesWithSimilarTask[:numberOfImages])
@@ -1401,7 +1583,7 @@ class RunwareBase:
             async with self._images_lock:
                 current_images = len([
                     img for img in self._globalImages
-                    if img.get("taskType") == "imageInference"
+                    if img.get("taskType") in ["imageInference", "vectorize"]
                        and img.get("taskUUID") in taskUUIDs
                 ])
             error_msg = (
@@ -1677,6 +1859,20 @@ class RunwareBase:
         self._addVideoImages(request_object, requestVideo)
         self._addVideoInputs(request_object, requestVideo)
         self._addProviderSettings(request_object, requestVideo)
+        
+        # Add safety settings if provided
+        if requestVideo.safety:
+            self._addSafetySettings(request_object, requestVideo.safety)
+        
+        # Add advanced features if provided
+        if requestVideo.advancedFeatures:
+            self._addAdvancedFeatures(request_object, requestVideo.advancedFeatures)
+        
+        # Add accelerator options if provided
+        if requestVideo.acceleratorOptions:
+            self._addAcceleratorOptions(request_object, requestVideo.acceleratorOptions)
+        
+
         return request_object
 
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
@@ -1708,7 +1904,7 @@ class RunwareBase:
                 for lora in requestVideo.lora
             ]
 
-    def _buildImageRequest(self, requestImage: IImageInference, prompt: str, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict]) -> Dict[str, Any]:
+    def _buildImageRequest(self, requestImage: IImageInference, prompt: str, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> Dict[str, Any]:
         request_object = {
             "taskType": ETaskType.IMAGE_INFERENCE.value,
             "model": requestImage.model,
@@ -1716,7 +1912,7 @@ class RunwareBase:
         }
         
         self._addOptionalImageFields(request_object, requestImage)
-        self._addImageSpecialFields(request_object, requestImage, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data)
+        self._addImageSpecialFields(request_object, requestImage, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
         self._addImageInputs(request_object, requestImage)
         self._addImageProviderSettings(request_object, requestImage)
         
@@ -1739,7 +1935,7 @@ class RunwareBase:
                 else:
                     request_object[field] = value
 
-    def _addImageSpecialFields(self, request_object: Dict[str, Any], requestImage: IImageInference, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict]) -> None:
+    def _addImageSpecialFields(self, request_object: Dict[str, Any], requestImage: IImageInference, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> None:
         # Add controlNet if present
         if control_net_data_dicts:
             request_object["controlNet"] = control_net_data_dicts
@@ -1795,18 +1991,17 @@ class RunwareBase:
         if ace_plus_plus_data:
             request_object["acePlusPlus"] = ace_plus_plus_data
             
+        # Add puLID if present
+        if pulid_data:
+            request_object["puLID"] = pulid_data
+            
         # Add referenceImages if present
         if requestImage.referenceImages:
             request_object["referenceImages"] = requestImage.referenceImages
             
         # Add acceleratorOptions if present
         if requestImage.acceleratorOptions:
-            pipeline_options_dict = {
-                k: v
-                for k, v in vars(requestImage.acceleratorOptions).items()
-                if v is not None
-            }
-            request_object["acceleratorOptions"] = pipeline_options_dict
+            self._addAcceleratorOptions(request_object, requestImage.acceleratorOptions)
             
         # Add advancedFeatures if present
         if requestImage.advancedFeatures:
@@ -1842,6 +2037,12 @@ class RunwareBase:
             if inputs_dict:
                 request_object["inputs"] = inputs_dict
 
+    def _addSafetySettings(self, request_object: Dict[str, Any], safety: ISafety) -> None:
+        safety_dict = asdict(safety)
+        safety_dict = {k: v for k, v in safety_dict.items() if v is not None}
+        if safety_dict:
+            request_object["safety"] = safety_dict
+
     def _addImageProviderSettings(self, request_object: Dict[str, Any], requestImage: IImageInference) -> None:
         if not requestImage.providerSettings:
             return
@@ -1855,6 +2056,27 @@ class RunwareBase:
         provider_dict = requestVideo.providerSettings.to_request_dict()
         if provider_dict:
             request_object["providerSettings"] = provider_dict
+
+    def _addSafetySettings(self, request_object: Dict[str, Any], safety: ISafety) -> None:
+        safety_dict = asdict(safety)
+        safety_dict = {k: v for k, v in safety_dict.items() if v is not None}
+        if safety_dict:
+            request_object["safety"] = safety_dict
+
+    def _addAdvancedFeatures(self, request_object: Dict[str, Any], advancedFeatures: IVideoAdvancedFeatures) -> None:
+        features_dict = asdict(advancedFeatures)
+        features_dict = {k: v for k, v in features_dict.items() if v is not None}
+        if features_dict:
+            request_object["advancedFeatures"] = features_dict
+
+    def _addAcceleratorOptions(self, request_object: Dict[str, Any], acceleratorOptions: IAcceleratorOptions) -> None:
+        accelerator_dict = {
+            k: v
+            for k, v in vars(acceleratorOptions).items()
+            if v is not None
+        }
+        if accelerator_dict:
+            request_object["acceleratorOptions"] = accelerator_dict
 
     async def _handleInitialVideoResponse(self, task_uuid: str, number_results: int, webhook_url: Optional[str] = None) -> Union[List[IVideo], IAsyncTaskResponse]:
         lis = self.globalListener(taskUUID=task_uuid)
