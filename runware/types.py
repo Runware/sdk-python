@@ -32,6 +32,8 @@ class ETaskType(Enum):
     IMAGE_UPLOAD = "imageUpload"
     IMAGE_UPSCALE = "imageUpscale"
     IMAGE_BACKGROUND_REMOVAL = "imageBackgroundRemoval"
+    VIDEO_BACKGROUND_REMOVAL = "removeBackground"
+    VIDEO_UPSCALE = "upscale"
     IMAGE_CAPTION = "imageCaption"
     IMAGE_CONTROL_NET_PRE_PROCESS = "imageControlNetPreProcess"
     PROMPT_ENHANCE = "promptEnhance"
@@ -40,6 +42,7 @@ class ETaskType(Enum):
     MODEL_SEARCH = "modelSearch"
     VIDEO_INFERENCE = "videoInference"
     AUDIO_INFERENCE = "audioInference"
+    CAPTION = "caption"
     MEDIA_STORAGE = "mediaStorage"
     GET_RESPONSE = "getResponse"
     IMAGE_VECTORIZE = "vectorize"
@@ -842,7 +845,7 @@ class IMinimaxProviderSettings(BaseProviderSettings):
 class IBytedanceProviderSettings(BaseProviderSettings):
     cameraFixed: Optional[bool] = None
     maxSequentialImages: Optional[int] = None  # Min: 1, Max: 15 - Maximum number of sequential images to generate
-    fastMode: Optional[bool] = False  # When enabled, speeds up generation by sacrificing some effects. Default: false. RTF: 25-28 (fast) vs 35 (normal)
+    fastMode: Optional[bool] = None  # When enabled, speeds up generation by sacrificing some effects. Default: false. RTF: 25-28 (fast) vs 35 (normal)
 
     @property
     def provider_key(self) -> str:
@@ -958,6 +961,7 @@ class IVideoInference:
     advancedFeatures: Optional[IVideoAdvancedFeatures] = None
     acceleratorOptions: Optional[IAcceleratorOptions] = None
     inputs: Optional[IVideoInputs] = None
+    skipResponse: Optional[bool] = False
 
 
 @dataclass
@@ -984,6 +988,8 @@ class IVideo:
     status: Optional[str] = None
     videoUUID: Optional[str] = None
     videoURL: Optional[str] = None
+    mediaUUID: Optional[str] = None
+    mediaURL: Optional[str] = None
     cost: Optional[float] = None
     seed: Optional[int] = None
 
@@ -997,6 +1003,71 @@ class IAudio:
     audioURL: Optional[str] = None
     audioBase64Data: Optional[str] = None
     audioDataURI: Optional[str] = None
+    cost: Optional[float] = None
+
+
+@dataclass
+class IVideoCaptionInputs:
+    video: str  # Video URL or UUID
+
+
+@dataclass
+class IVideoBackgroundRemovalInputs:
+    video: str  # Video URL or UUID
+
+
+@dataclass
+class IVideoCaption:
+    model: str
+    inputs: IVideoCaptionInputs
+    deliveryMethod: str = "async"
+    taskUUID: Optional[str] = None
+    includeCost: Optional[bool] = None
+    webhookURL: Optional[str] = None
+
+
+@dataclass
+class IVideoBackgroundRemovalSettings:
+    rgba: Optional[List[int]] = None  # Background color [r, g, b, a]
+    background_color: Optional[str] = None  # Predefined colors: "Transparent", "Black", "White", etc.
+
+
+@dataclass
+class IVideoBackgroundRemoval:
+    model: str
+    inputs: IVideoBackgroundRemovalInputs
+    deliveryMethod: str = "async"
+    taskUUID: Optional[str] = None
+    includeCost: Optional[bool] = None
+    webhookURL: Optional[str] = None
+    outputFormat: Optional[str] = None  # MP4, WEBM
+    settings: Optional[IVideoBackgroundRemovalSettings] = None
+
+
+@dataclass
+class IVideoUpscaleInputs:
+    video: str  # Video URL or UUID
+
+
+@dataclass
+class IVideoUpscale:
+    model: str
+    inputs: IVideoUpscaleInputs
+    upscaleFactor: Optional[int] = 2  # 2 or 4
+    deliveryMethod: str = "async"
+    taskUUID: Optional[str] = None
+    includeCost: Optional[bool] = None
+    webhookURL: Optional[str] = None
+    outputType: Optional[IOutputType] = None
+    outputFormat: Optional[str] = None  # MP4, WEBM 
+
+
+@dataclass
+class IVideoToText:
+    taskType: str
+    taskUUID: str
+    text: Optional[str] = None
+    status: Optional[str] = None
     cost: Optional[float] = None
 
 

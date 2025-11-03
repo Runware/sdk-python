@@ -201,6 +201,44 @@ Your webhook endpoint will receive a POST request with the same format as synchr
 }
 ```
 
+### Video Inference with Skip Response
+
+For long-running video generation tasks, you can use `skipResponse` to submit the task and retrieve results later. This is useful for handling system interruptions, batch processing, or building queue-based systems.
+```python
+from runware import Runware, IVideoInference
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    # Submit video task without waiting
+    request = IVideoInference(
+            model="openai:3@2",
+            positivePrompt="A beautiful sunset over the ocean",
+            duration=4,
+            width=1280,
+            height=720,
+            skipResponse=True,
+    )
+
+    response = await runware.videoInference(requestVideo=request)
+    task_uuid = response.taskUUID
+    print(f"Task submitted: {task_uuid}")
+    
+    # Later, retrieve results
+    videos = await runware.getResponse(
+        taskUUID=task_uuid,
+        numberResults=1
+    )
+    
+    for video in videos:
+        print(f"Video URL: {video.videoURL}")
+```
+
+**Parameters:**
+- `skipResponse`: Set to `True` to return immediately with `taskUUID` instead of waiting for completion
+- Use `getResponse(taskUUID)` to retrieve results at any time
+
 ### Enhancing Prompts
 
 To enhance prompts using the Runware API, you can use the `promptEnhance` method of the `Runware` class. Here's an example:
@@ -264,6 +302,84 @@ async def main() -> None:
     )
     print(image_to_text.text)
 ```
+
+### Video Caption
+
+To generate captions for videos using the Runware API, you can use the `videoCaption` method of the `Runware` class. The SDK automatically polls for results when using async delivery. Here's an example:
+
+```python
+from runware import Runware, IVideoCaption, IVideoCaptionInputs
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    request_caption = IVideoCaption(
+        model="memories:1@1",
+        inputs=IVideoCaptionInputs(
+            video="https://example.com/video.mp4"
+        ),
+        deliveryMethod="async",
+        includeCost=True
+    )
+
+    caption_response = await runware.videoCaption(
+        requestVideoCaption=request_caption
+    )
+    print(f"Caption: {caption_response.text}")
+    if caption_response.cost:
+        print(f"Cost: {caption_response.cost}")
+```
+
+**Video Caption Parameters:**
+- `model`: Caption model identifier (e.g., "memories:1@1")
+- `inputs`: IVideoCaptionInputs containing the video URL or UUID
+- `deliveryMethod`: "async" (with automatic polling) or use webhookURL for webhook delivery
+- `includeCost`: Include cost information in the response (optional)
+- `webhookURL`: Webhook URL for async delivery without polling (optional)
+
+### Video Background Removal
+
+To remove the background from videos you can use the `videoBackgroundRemoval` method of the `Runware` class. The SDK automatically polls for results when using async delivery. Here's an example:
+
+```python
+from runware import Runware, IVideoBackgroundRemoval, IVideoBackgroundRemovalInputs, IVideoBackgroundRemovalSettings
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    request_bg_removal = IVideoBackgroundRemoval(
+        model="bria:51@1",
+        inputs=IVideoBackgroundRemovalInputs(
+            video="https://example.com/video.mp4"
+        ),
+        outputFormat="WEBM",
+        includeCost=True,
+        settings=IVideoBackgroundRemovalSettings(
+            rgba=[255, 255, 255, 0]  
+        )
+    )
+
+    processed_videos = await runware.videoBackgroundRemoval(
+        requestVideoBackgroundRemoval=request_bg_removal
+    )
+    for video in processed_videos:
+        print(f"Video URL: {video.videoURL}")
+        if video.cost:
+            print(f"Cost: {video.cost}")
+```
+
+**Video Background Removal Parameters:**
+- `model`: Background removal model identifier (e.g., "bria:51@1")
+- `inputs`: IVideoBackgroundRemovalInputs containing the video URL or UUID
+- `outputFormat`: Output video format ("WEBM", "MP4", etc.)
+- `includeCost`: Include cost information in the response (optional)
+- `settings`: IVideoBackgroundRemovalSettings for custom background configuration
+- `webhookURL`: Webhook URL for async delivery without polling (optional)
+
+**Background Removal Settings:**
+- `rgba`: Background color as [R, G, B, A] array (0-255 for RGB, 0.0-1.0 for alpha)
 
 ### Upscaling Images
 
