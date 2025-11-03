@@ -882,6 +882,7 @@ class IVideoInference:
     webhookURL: Optional[str] = None
     nsfw_check: Optional[Literal["none", "fast", "full"]] = None
     inputs: Optional[IVideoInputs] = None
+    skipResponse: Optional[bool] = False
 
 
 @dataclass
