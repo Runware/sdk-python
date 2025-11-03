@@ -49,11 +49,70 @@ RETRY_SDK_COUNTS = {
 }
 
 
-PING_TIMEOUT_DURATION = 10000  # 10 seconds
-PING_INTERVAL = 5000  # 5 seconds
+PING_TIMEOUT_DURATION = 10000
+PING_INTERVAL = 5000
 
-TIMEOUT_DURATION = 240000  # 4 Minutes
-POLLING_INTERVAL = 1000  # 1 seconds
+IMAGE_INFERENCE_TIMEOUT = int(os.environ.get(
+    "RUNWARE_IMAGE_INFERENCE_TIMEOUT",
+    300000
+))
+
+IMAGE_OPERATION_TIMEOUT = int(os.environ.get(
+    "RUNWARE_IMAGE_OPERATION_TIMEOUT",
+    120000
+))
+
+IMAGE_UPLOAD_TIMEOUT = int(os.environ.get(
+    "RUNWARE_IMAGE_UPLOAD_TIMEOUT",
+    60000
+))
+
+VIDEO_INFERENCE_TIMEOUT = int(os.environ.get(
+    "RUNWARE_VIDEO_INFERENCE_TIMEOUT",
+    600000
+))
+
+VIDEO_INITIAL_TIMEOUT = int(os.environ.get(
+    "RUNWARE_VIDEO_INITIAL_TIMEOUT",
+    30000
+))
+
+VIDEO_POLLING_DELAY = int(os.environ.get(
+    "RUNWARE_VIDEO_POLLING_DELAY",
+    3
+))
+
+VIDEO_OPERATION_TIMEOUT = int(os.environ.get(
+    "RUNWARE_VIDEO_OPERATION_TIMEOUT",
+    120000
+))
+
+AUDIO_INFERENCE_TIMEOUT = int(os.environ.get(
+    "RUNWARE_AUDIO_INFERENCE_TIMEOUT",
+    300000
+))
+
+AUDIO_OPERATION_TIMEOUT = int(os.environ.get(
+    "RUNWARE_AUDIO_OPERATION_TIMEOUT",
+    120000
+))
+
+PROMPT_ENHANCE_TIMEOUT = int(os.environ.get(
+    "RUNWARE_PROMPT_ENHANCE_TIMEOUT",
+    60000
+))
+
+WEBHOOK_TIMEOUT = int(os.environ.get(
+    "RUNWARE_WEBHOOK_TIMEOUT",
+    30000
+))
+
+POLLING_INTERVAL = int(os.environ.get("RUNWARE_POLLING_INTERVAL", 1000))
+
+TIMEOUT_DURATION = int(os.environ.get(
+    "RUNWARE_TIMEOUT_DURATION",
+    480000
+))
 
 
 class LISTEN_TO_IMAGES_KEY:
@@ -662,7 +721,13 @@ async def getIntervalWithPromise(
                 if interval_handle:
                     logger.debug(f"Interval cleared due to timeout for {debugKey}")
                 if shouldThrowError:
-                    raise Exception(f"Message could not be received for {debugKey}")
+                    error_msg = (
+                        f"Timeout error: Message could not be received for {debugKey} | "
+                        f"Operation: {debugKey} | "
+                        f"Timeout: {timeOutDuration}ms | "
+                        f"Elapsed: {elapsed_ms:.2f}ms"
+                    )
+                    raise Exception(error_msg)
                 return None
 
             iteration_resolved = False
@@ -679,14 +744,16 @@ async def getIntervalWithPromise(
                 nonlocal iteration_resolved, iteration_error
                 if not iteration_resolved:
                     iteration_resolved = True
-                    # Ensure error is a proper exception fixes TypeError: exceptions must derive from BaseException
                     if isinstance(error, BaseException):
                         iteration_error = error
                     else:
                         iteration_error = Exception(str(error))
 
             try:
-                callback_returned = callback(safe_resolve, safe_reject, interval_handle)
+                if asyncio.iscoroutinefunction(callback):
+                    callback_returned = await callback(safe_resolve, safe_reject, interval_handle)
+                else:
+                    callback_returned = callback(safe_resolve, safe_reject, interval_handle)
                 if callback_returned and iteration_resolved:
                     if iteration_error is not None:
                         raise iteration_error

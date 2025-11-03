@@ -776,7 +776,7 @@ class IMinimaxProviderSettings(BaseProviderSettings):
 class IBytedanceProviderSettings(BaseProviderSettings):
     cameraFixed: Optional[bool] = None
     maxSequentialImages: Optional[int] = None  # Min: 1, Max: 15 - Maximum number of sequential images to generate
-    fastMode: Optional[bool] = False  # When enabled, speeds up generation by sacrificing some effects. Default: false. RTF: 25-28 (fast) vs 35 (normal)
+    fastMode: Optional[bool] = None  # When enabled, speeds up generation by sacrificing some effects. Default: false. RTF: 25-28 (fast) vs 35 (normal)
 
     @property
     def provider_key(self) -> str:
@@ -882,6 +882,7 @@ class IVideoInference:
     webhookURL: Optional[str] = None
     nsfw_check: Optional[Literal["none", "fast", "full"]] = None
     inputs: Optional[IVideoInputs] = None
+    skipResponse: Optional[bool] = False
 
 
 @dataclass
