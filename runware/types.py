@@ -518,10 +518,20 @@ class IInputs:
 ImageProviderSettings = IOpenAIProviderSettings | IBriaProviderSettings | ILightricksProviderSettings
 
 
+
+
+@dataclass
+class IInputFrame:
+    image: Union[str, File]
+    frame: Optional[Union[Literal["first", "last"], int]] = None
+
+
 @dataclass
 class IVideoInputs:
     references: Optional[List[Union[str, File, Dict[str, Any]]]] = field(default_factory=list)
     image: Optional[Union[str, File]] = None
+    images: Optional[List[Union[str, File]]] = None
+    frames: Optional[List[IInputFrame]] = None
     video: Optional[str] = None
     audio: Optional[str] = None
     mask: Optional[Union[str, File]] = None
@@ -957,7 +967,29 @@ class IElevenLabsProviderSettings(BaseProviderSettings):
         return "elevenlabs"
 
 
-VideoProviderSettings = IKlingAIProviderSettings | IGoogleProviderSettings | IMinimaxProviderSettings | IBytedanceProviderSettings | IPixverseProviderSettings | IViduProviderSettings
+@dataclass
+class IRunwayContentModeration(SerializableMixin):
+    publicFigureThreshold: str = None
+
+
+@dataclass
+class IRunwayProviderSettings(BaseProviderSettings):
+    contentModeration: Optional[IRunwayContentModeration] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "runway"
+
+    def serialize(self) -> Dict[str, Any]:
+        result = {}
+        if self.contentModeration:
+            content_moderation_data = self.contentModeration.serialize()
+            if content_moderation_data:
+                result["contentModeration"] = content_moderation_data
+        return result
+
+
+VideoProviderSettings = IKlingAIProviderSettings | IGoogleProviderSettings | IMinimaxProviderSettings | IBytedanceProviderSettings | IPixverseProviderSettings | IViduProviderSettings | IRunwayProviderSettings
 AudioProviderSettings = IElevenLabsProviderSettings
 
 @dataclass
