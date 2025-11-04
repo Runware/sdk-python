@@ -710,7 +710,7 @@ class RunwareBase:
 
         # Create the request object
         task_params = {
-            "taskType": ETaskType.CAPTION.value,
+            "taskType": ETaskType.VIDEO_CAPTION.value,
             "taskUUID": taskUUID,
             "model": requestVideoCaption.model,
             "inputs": {

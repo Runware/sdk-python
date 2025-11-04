@@ -42,7 +42,7 @@ class ETaskType(Enum):
     MODEL_SEARCH = "modelSearch"
     VIDEO_INFERENCE = "videoInference"
     AUDIO_INFERENCE = "audioInference"
-    CAPTION = "caption"
+    VIDEO_CAPTION = "caption"
     MEDIA_STORAGE = "mediaStorage"
     GET_RESPONSE = "getResponse"
     IMAGE_VECTORIZE = "vectorize"
