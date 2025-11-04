@@ -104,7 +104,6 @@ class EOpenPosePreProcessor(Enum):
 # Define the types using Literal
 IOutputType = Literal["base64Data", "dataURI", "URL"]
 IOutputFormat = Literal["JPG", "PNG", "WEBP", "SVG"]
-IAudioOutputType = Literal["base64Data", "dataURI", "URL"]
 IAudioOutputFormat = Literal["MP3"]
 
 
@@ -1003,7 +1002,7 @@ class IAudioInference:
     positivePrompt: Optional[str] = None  # Optional when using composition plan
     duration: Optional[float] = None  # Min: 10, Max: 300 - Optional when using composition plan
     taskUUID: Optional[str] = None
-    outputType: Optional[IAudioOutputType] = None
+    outputType: Optional[IOutputType] = None
     outputFormat: Optional[IAudioOutputFormat] = None
     audioSettings: Optional[IAudioSettings] = None
     includeCost: Optional[bool] = None

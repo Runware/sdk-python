@@ -223,7 +223,7 @@ class RunwareBase:
         )
         self._invalidAPIkey = None
 
-    async def photoMaker(self, requestPhotoMaker: IPhotoMaker):
+    async def photoMaker(self, requestPhotoMaker: IPhotoMaker) -> Union[List[IImage], IAsyncTaskResponse]:
         retry_count = 0
 
         try:
@@ -269,6 +269,41 @@ class RunwareBase:
                 request_object["webhookURL"] = requestPhotoMaker.webhookURL
 
             await self.send([request_object])
+
+            if requestPhotoMaker.webhookURL:
+                lis = self.globalListener(taskUUID=task_uuid)
+
+                async def check_webhook_ack(resolve: callable, reject: callable, *args: Any) -> bool:
+                    async with self._messages_lock:
+                        response_list = self._globalMessages.get(task_uuid, [])
+
+                        if not response_list:
+                            return False
+
+                        response = response_list[0]
+
+                        if response.get("code"):
+                            raise RunwareAPIError(response)
+
+                        if not response.get("imageUUID") and response.get("taskType") == "photoMaker":
+                            del self._globalMessages[task_uuid]
+                            async_response = createAsyncTaskResponse(response)
+                            resolve(async_response)
+                            return True
+
+                    return False
+
+                try:
+                    response = await getIntervalWithPromise(
+                        check_webhook_ack, debugKey="photo-maker-webhook", timeOutDuration=WEBHOOK_TIMEOUT
+                    )
+                finally:
+                    lis["destroy"]()
+
+                if "code" in response:
+                    raise RunwareAPIError(response)
+
+                return response
 
             lis = self.globalListener(
                 taskUUID=task_uuid,
@@ -322,7 +357,7 @@ class RunwareBase:
 
     async def imageInference(
         self, requestImage: IImageInference
-    ) -> Union[List[IImage], None]:
+    ) -> Union[List[IImage], IAsyncTaskResponse, None]:
         let_lis: Optional[Any] = None
         request_object: Optional[Dict[str, Any]] = None
         task_uuids: List[str] = []
@@ -437,7 +472,7 @@ class RunwareBase:
         retry_count: int,
         number_of_images: int,
         on_partial_images: Optional[Callable[[List[IImage], Optional[IError]], None]],
-    ) -> List[IImage]:
+    ) -> Union[List[IImage], IAsyncTaskResponse]:
         retry_count += 1
         if let_lis:
             let_lis["destroy"]()
@@ -459,6 +494,41 @@ class RunwareBase:
         }
 
         await self.send([new_request_object])
+
+        if new_request_object.get("webhookURL"):
+            lis = self.globalListener(taskUUID=task_uuid)
+
+            async def check_webhook_ack(resolve: callable, reject: callable, *args: Any) -> bool:
+                async with self._messages_lock:
+                    response_list = self._globalMessages.get(task_uuid, [])
+
+                    if not response_list:
+                        return False
+
+                    response = response_list[0]
+
+                    if response.get("code"):
+                        raise RunwareAPIError(response)
+
+                    if not response.get("imageUUID") and response.get("taskType") == "imageInference":
+                        del self._globalMessages[task_uuid]
+                        async_response = createAsyncTaskResponse(response)
+                        resolve(async_response)
+                        return True
+
+                return False
+
+            try:
+                response = await getIntervalWithPromise(
+                    check_webhook_ack, debugKey="image-inference-webhook", timeOutDuration=WEBHOOK_TIMEOUT
+                )
+            finally:
+                lis["destroy"]()
+
+            if "code" in response:
+                raise RunwareAPIError(response)
+
+            return response
 
         let_lis = await self.listenToImages(
             onPartialImages=on_partial_images,
@@ -483,7 +553,7 @@ class RunwareBase:
 
         # return images
 
-    async def imageCaption(self, requestImageToText: IImageCaption) -> IImageToText:
+    async def imageCaption(self, requestImageToText: IImageCaption) -> Union[IImageToText, IAsyncTaskResponse]:
         try:
             await self.ensureConnection()
             return await asyncRetry(
@@ -494,7 +564,7 @@ class RunwareBase:
 
     async def _requestImageToText(
         self, requestImageToText: IImageCaption
-    ) -> IImageToText:
+    ) -> Union[IImageToText, IAsyncTaskResponse]:
         # Prepare image list - inputImages is primary, inputImage is convenience
         if requestImageToText.inputImages is not None:
             images_to_process = requestImageToText.inputImages
@@ -550,6 +620,41 @@ class RunwareBase:
             task_params["webhookURL"] = requestImageToText.webhookURL
 
         await self.send([task_params])
+
+        if requestImageToText.webhookURL:
+            lis = self.globalListener(taskUUID=taskUUID)
+
+            async def check_webhook_ack(resolve: callable, reject: callable, *args: Any) -> bool:
+                async with self._messages_lock:
+                    response_list = self._globalMessages.get(taskUUID, [])
+
+                    if not response_list:
+                        return False
+
+                    response = response_list[0]
+
+                    if response.get("code"):
+                        raise RunwareAPIError(response)
+
+                    if not response.get("text") and not response.get("caption") and response.get("taskType") == "imageCaption":
+                        del self._globalMessages[taskUUID]
+                        async_response = createAsyncTaskResponse(response)
+                        resolve(async_response)
+                        return True
+
+                return False
+
+            try:
+                response = await getIntervalWithPromise(
+                    check_webhook_ack, debugKey="image-caption-webhook", timeOutDuration=WEBHOOK_TIMEOUT
+                )
+            finally:
+                lis["destroy"]()
+
+            if "code" in response:
+                raise RunwareAPIError(response)
+
+            return response
 
         lis = self.globalListener(
             taskUUID=taskUUID,
@@ -816,7 +921,7 @@ class RunwareBase:
 
     async def imageBackgroundRemoval(
         self, removeImageBackgroundPayload: IImageBackgroundRemoval
-    ) -> List[IImage]:
+    ) -> Union[List[IImage], IAsyncTaskResponse]:
         try:
             await self.ensureConnection()
             return await asyncRetry(
@@ -827,7 +932,7 @@ class RunwareBase:
 
     async def _removeImageBackground(
         self, removeImageBackgroundPayload: IImageBackgroundRemoval
-    ) -> List[IImage]:
+    ) -> Union[List[IImage], IAsyncTaskResponse]:
         inputImage = removeImageBackgroundPayload.inputImage
 
         image_uploaded = await self.uploadImage(inputImage)
@@ -880,6 +985,41 @@ class RunwareBase:
         # Send the task with all applicable parameters
         await self.send([task_params])
 
+        if removeImageBackgroundPayload.webhookURL:
+            lis = self.globalListener(taskUUID=taskUUID)
+
+            async def check_webhook_ack(resolve: callable, reject: callable, *args: Any) -> bool:
+                async with self._messages_lock:
+                    response_list = self._globalMessages.get(taskUUID, [])
+
+                    if not response_list:
+                        return False
+
+                    response = response_list[0]
+
+                    if response.get("code"):
+                        raise RunwareAPIError(response)
+
+                    if not response.get("imageUUID") and response.get("taskType") == "imageBackgroundRemoval":
+                        del self._globalMessages[taskUUID]
+                        async_response = createAsyncTaskResponse(response)
+                        resolve(async_response)
+                        return True
+
+                return False
+
+            try:
+                response = await getIntervalWithPromise(
+                    check_webhook_ack, debugKey="image-background-removal-webhook", timeOutDuration=WEBHOOK_TIMEOUT
+                )
+            finally:
+                lis["destroy"]()
+
+            if "code" in response:
+                raise RunwareAPIError(response)
+
+            return response
+
         lis = self.globalListener(
             taskUUID=taskUUID,
         )
@@ -917,14 +1057,14 @@ class RunwareBase:
 
         return image_list
 
-    async def imageUpscale(self, upscaleGanPayload: IImageUpscale) -> List[IImage]:
+    async def imageUpscale(self, upscaleGanPayload: IImageUpscale) -> Union[List[IImage], IAsyncTaskResponse]:
         try:
             await self.ensureConnection()
             return await asyncRetry(lambda: self._upscaleGan(upscaleGanPayload))
         except Exception as e:
             raise e
 
-    async def _upscaleGan(self, upscaleGanPayload: IImageUpscale) -> List[IImage]:
+    async def _upscaleGan(self, upscaleGanPayload: IImageUpscale) -> Union[List[IImage], IAsyncTaskResponse]:
         # Support both inputImage (legacy) and inputs.image (new format)
         inputImage = upscaleGanPayload.inputImage
         if not inputImage and upscaleGanPayload.inputs and upscaleGanPayload.inputs.image:
@@ -989,6 +1129,41 @@ class RunwareBase:
 
         await self.send([task_params])
 
+        if upscaleGanPayload.webhookURL:
+            lis = self.globalListener(taskUUID=taskUUID)
+
+            async def check_webhook_ack(resolve: callable, reject: callable, *args: Any) -> bool:
+                async with self._messages_lock:
+                    response_list = self._globalMessages.get(taskUUID, [])
+
+                    if not response_list:
+                        return False
+
+                    response = response_list[0]
+
+                    if response.get("code"):
+                        raise RunwareAPIError(response)
+
+                    if not response.get("imageUUID") and response.get("taskType") == "imageUpscale":
+                        del self._globalMessages[taskUUID]
+                        async_response = createAsyncTaskResponse(response)
+                        resolve(async_response)
+                        return True
+
+                return False
+
+            try:
+                response = await getIntervalWithPromise(
+                    check_webhook_ack, debugKey="image-upscale-webhook", timeOutDuration=WEBHOOK_TIMEOUT
+                )
+            finally:
+                lis["destroy"]()
+
+            if "code" in response:
+                raise RunwareAPIError(response)
+
+            return response
+
         lis = self.globalListener(
             taskUUID=taskUUID,
         )
@@ -1025,14 +1200,14 @@ class RunwareBase:
         image_list: List[IImage] = [image]
         return image_list
 
-    async def imageVectorize(self, vectorizePayload: IVectorize) -> List[IImage]:
+    async def imageVectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
         try:
             await self.ensureConnection()
             return await asyncRetry(lambda: self._vectorize(vectorizePayload))
         except Exception as e:
             raise e
 
-    async def _vectorize(self, vectorizePayload: IVectorize) -> List[IImage]:
+    async def _vectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
         # Process the image from inputs
         input_image = vectorizePayload.inputs.image
         
@@ -1071,6 +1246,41 @@ class RunwareBase:
         # Send the task with all applicable parameters
         await self.send([task_params])
         
+        if vectorizePayload.webhookURL:
+            lis = self.globalListener(taskUUID=taskUUID)
+
+            async def check_webhook_ack(resolve: callable, reject: callable, *args: Any) -> bool:
+                async with self._messages_lock:
+                    response_list = self._globalMessages.get(taskUUID, [])
+
+                    if not response_list:
+                        return False
+
+                    response = response_list[0]
+
+                    if response.get("code"):
+                        raise RunwareAPIError(response)
+
+                    if not response.get("imageUUID") and response.get("taskType") == "vectorize":
+                        del self._globalMessages[taskUUID]
+                        async_response = createAsyncTaskResponse(response)
+                        resolve(async_response)
+                        return True
+
+                return False
+
+            try:
+                response = await getIntervalWithPromise(
+                    check_webhook_ack, debugKey="image-vectorize-webhook", timeOutDuration=WEBHOOK_TIMEOUT
+                )
+            finally:
+                lis["destroy"]()
+
+            if "code" in response:
+                raise RunwareAPIError(response)
+
+            return response
+        
         let_lis = await self.listenToImages(
             onPartialImages=None,
             taskUUID=taskUUID,
@@ -1094,7 +1304,7 @@ class RunwareBase:
 
     async def promptEnhance(
         self, promptEnhancer: IPromptEnhance
-    ) -> List[IEnhancedPrompt]:
+    ) -> Union[List[IEnhancedPrompt], IAsyncTaskResponse]:
         """
         Enhance the given prompt by generating multiple versions of it.
 
@@ -1110,7 +1320,7 @@ class RunwareBase:
 
     async def _enhancePrompt(
         self, promptEnhancer: IPromptEnhance
-    ) -> List[IEnhancedPrompt]:
+    ) -> Union[List[IEnhancedPrompt], IAsyncTaskResponse]:
         """
         Internal method to perform the actual prompt enhancement.
 
@@ -1143,6 +1353,43 @@ class RunwareBase:
 
         # Send the task with all applicable parameters
         await self.send([task_params])
+
+        if has_webhook:
+            lis = self.globalListener(taskUUID=taskUUID)
+
+            async def check_webhook_ack(resolve: callable, reject: callable, *args: Any) -> bool:
+                async with self._messages_lock:
+                    response_list = self._globalMessages.get(taskUUID, [])
+
+                    if not response_list:
+                        return False
+
+                    response = response_list[0] if isinstance(response_list, list) else response_list
+
+                    if isinstance(response, dict) and response.get("error"):
+                        reject(response)
+                        return True
+
+                    if response:
+                        if not response.get("enhancedPrompts") and not response.get("prompts") and response.get("taskType") == "promptEnhance":
+                            del self._globalMessages[taskUUID]
+                            async_response = createAsyncTaskResponse(response)
+                            resolve(async_response)
+                            return True
+
+                return False
+
+            try:
+                response = await getIntervalWithPromise(
+                    check_webhook_ack, debugKey="prompt-enhance-webhook", timeOutDuration=WEBHOOK_TIMEOUT
+                )
+            finally:
+                lis["destroy"]()
+
+            if "code" in response:
+                raise RunwareAPIError(response)
+
+            return response
 
         lis = self.globalListener(
             taskUUID=taskUUID,
