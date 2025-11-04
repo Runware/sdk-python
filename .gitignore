@@ -25,6 +25,7 @@ examples/log.txt
 .coverage
 .pytest_cache/
 htmlcov/
+test*.py
 
 # Other
 .DS_Store
