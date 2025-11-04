@@ -48,72 +48,104 @@ RETRY_SDK_COUNTS = {
     "REQUEST_IMAGES": 2,
 }
 
-
+# WebSocket connection health check timeout (milliseconds)
+# Maximum time to wait for pong response after sending ping
+# Used in: server.heartBeat() to detect connection loss
 PING_TIMEOUT_DURATION = 10000
+
+# WebSocket ping interval (milliseconds)
+# How often to send ping messages to keep connection alive
+# Used in: server.heartBeat() for periodic health checks
 PING_INTERVAL = 5000
 
+# Image generation timeout (milliseconds)
+# Maximum time to wait for image generation completion (imageInference, photoMaker)
+# Used in: photoMaker(), getSimililarImage() for waiting image generation results
 IMAGE_INFERENCE_TIMEOUT = int(os.environ.get(
     "RUNWARE_IMAGE_INFERENCE_TIMEOUT",
     300000
 ))
 
+# Image operation timeout (milliseconds)
+# Maximum time to wait for image operations (caption, background removal, upscale)
+# Used in: imageCaption(), imageBackgroundRemoval(), imageUpscale()
 IMAGE_OPERATION_TIMEOUT = int(os.environ.get(
     "RUNWARE_IMAGE_OPERATION_TIMEOUT",
     120000
 ))
 
+# Image upload timeout (milliseconds)
+# Maximum time to wait for image upload to complete
+# Used in: uploadImage() for uploading local images or base64 data
 IMAGE_UPLOAD_TIMEOUT = int(os.environ.get(
     "RUNWARE_IMAGE_UPLOAD_TIMEOUT",
     60000
 ))
 
-VIDEO_INFERENCE_TIMEOUT = int(os.environ.get(
-    "RUNWARE_VIDEO_INFERENCE_TIMEOUT",
-    600000
-))
-
+# Video initial response timeout (milliseconds)
+# Maximum time to wait for initial video generation response or polling response
+# Used in: _handleInitialVideoResponse(), _sendPollRequest()
 VIDEO_INITIAL_TIMEOUT = int(os.environ.get(
     "RUNWARE_VIDEO_INITIAL_TIMEOUT",
     30000
 ))
 
+# Video polling delay (milliseconds)
+# Delay between consecutive polling requests for video generation status
+# Used in: _pollVideoResults() for checking video generation progress
 VIDEO_POLLING_DELAY = int(os.environ.get(
     "RUNWARE_VIDEO_POLLING_DELAY",
-    3
+    3000
 ))
 
-VIDEO_OPERATION_TIMEOUT = int(os.environ.get(
-    "RUNWARE_VIDEO_OPERATION_TIMEOUT",
-    120000
-))
-
+# Audio generation timeout (milliseconds)
+# Maximum time to wait for audio generation completion
+# Used in: _waitForAudioCompletion() for single audio generation
 AUDIO_INFERENCE_TIMEOUT = int(os.environ.get(
     "RUNWARE_AUDIO_INFERENCE_TIMEOUT",
     300000
 ))
 
-AUDIO_OPERATION_TIMEOUT = int(os.environ.get(
-    "RUNWARE_AUDIO_OPERATION_TIMEOUT",
-    120000
+# Audio polling delay (milliseconds)
+# Delay between consecutive polling requests for audio generation status
+# Used in: _pollForAudioResults() for checking audio generation progress
+AUDIO_POLLING_DELAY = int(os.environ.get(
+    "RUNWARE_AUDIO_POLLING_DELAY",
+    1000
 ))
 
+# Prompt enhancement timeout (milliseconds)
+# Maximum time to wait for prompt enhancement completion
+# Used in: promptEnhance() for enhancing text prompts
 PROMPT_ENHANCE_TIMEOUT = int(os.environ.get(
     "RUNWARE_PROMPT_ENHANCE_TIMEOUT",
     60000
 ))
 
+# Webhook acknowledgment timeout (milliseconds)
+# Maximum time to wait for webhook task acknowledgment
+# Used in: videoCaption(), videoBackgroundRemoval(), videoUpscale() when webhook is provided
 WEBHOOK_TIMEOUT = int(os.environ.get(
     "RUNWARE_WEBHOOK_TIMEOUT",
     30000
 ))
 
-POLLING_INTERVAL = int(os.environ.get("RUNWARE_POLLING_INTERVAL", 1000))
-
+# Default timeout duration (milliseconds)
+# Maximum time to wait for general operations (model upload, model search, media upload)
+# Used in: RunwareBase.__init__(), uploadMedia(), modelUpload(), modelSearch()
 TIMEOUT_DURATION = int(os.environ.get(
     "RUNWARE_TIMEOUT_DURATION",
     480000
 ))
+# Maximum polling attempts for video generation
+# Number of polling iterations before timing out video generation
+# Used in: _pollVideoResults() for video generation status checks
+MAX_POLLS_VIDEO_GENERATION = int(os.environ.get("RUNWARE_MAX_POLLS_VIDEO_GENERATION", 480))
 
+# Maximum polling attempts for audio generation
+# Number of polling iterations before timing out audio generation
+# Used in: _pollAudioResults() for audio generation status checks
+MAX_POLLS_AUDIO_GENERATION = int(os.environ.get("RUNWARE_MAX_POLLS_AUDIO_GENERATION", 240))
 
 class LISTEN_TO_IMAGES_KEY:
     REQUEST_IMAGES = "REQUEST_IMAGES"
