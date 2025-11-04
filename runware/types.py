@@ -572,6 +572,7 @@ class IImageInference:
     providerSettings: Optional[ImageProviderSettings] = None
     inputs: Optional[IInputs] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
+    webhookURL: Optional[str] = None
 
 
 @dataclass

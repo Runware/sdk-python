@@ -274,7 +274,6 @@ class RunwareBase:
                 return await self._handleWebhookAcknowledgment(
                     task_uuid=task_uuid,
                     task_type="photoMaker",
-                    result_fields=["imageUUID"],
                     debug_key="photo-maker-webhook"
                 )
 
@@ -472,7 +471,6 @@ class RunwareBase:
             return await self._handleWebhookAcknowledgment(
                 task_uuid=task_uuid,
                 task_type="imageInference",
-                result_fields=["imageUUID"],
                 debug_key="image-inference-webhook"
             )
 
@@ -571,7 +569,6 @@ class RunwareBase:
             return await self._handleWebhookAcknowledgment(
                 task_uuid=taskUUID,
                 task_type="imageCaption",
-                result_fields=["text", "caption"],
                 debug_key="image-caption-webhook"
             )
 
@@ -650,7 +647,6 @@ class RunwareBase:
             return await self._handleWebhookAcknowledgment(
                 task_uuid=taskUUID,
                 task_type="caption",
-                result_fields=["text", "caption"],
                 debug_key="video-caption-webhook"
             )
 
@@ -705,7 +701,6 @@ class RunwareBase:
             return await self._handleWebhookAcknowledgment(
                 task_uuid=taskUUID,
                 task_type="removeBackground",
-                result_fields=["videoUUID", "videoURL"],
                 debug_key="video-background-removal-webhook"
             )
 
@@ -753,7 +748,6 @@ class RunwareBase:
             return await self._handleWebhookAcknowledgment(
                 task_uuid=taskUUID,
                 task_type="upscale",
-                result_fields=["videoUUID", "videoURL"],
                 debug_key="video-upscale-webhook"
             )
 
@@ -829,7 +823,6 @@ class RunwareBase:
             return await self._handleWebhookAcknowledgment(
                 task_uuid=taskUUID,
                 task_type="imageBackgroundRemoval",
-                result_fields=["imageUUID"],
                 debug_key="image-background-removal-webhook"
             )
 
@@ -946,7 +939,6 @@ class RunwareBase:
             return await self._handleWebhookAcknowledgment(
                 task_uuid=taskUUID,
                 task_type="imageUpscale",
-                result_fields=["imageUUID"],
                 debug_key="image-upscale-webhook"
             )
 
@@ -1036,7 +1028,6 @@ class RunwareBase:
             return await self._handleWebhookAcknowledgment(
                 task_uuid=taskUUID,
                 task_type="vectorize",
-                result_fields=["imageUUID"],
                 debug_key="image-vectorize-webhook"
             )
         
@@ -1117,7 +1108,6 @@ class RunwareBase:
             return await self._handleWebhookAcknowledgment(
                 task_uuid=taskUUID,
                 task_type="promptEnhance",
-                result_fields=["enhancedPrompts", "prompts"],
                 debug_key="prompt-enhance-webhook"
             )
 
@@ -2027,7 +2017,6 @@ class RunwareBase:
         self,
         task_uuid: str,
         task_type: str,
-        result_fields: List[str],
         debug_key: str,
     ) -> IAsyncTaskResponse:
         lis = self.globalListener(taskUUID=task_uuid)
@@ -2048,8 +2037,7 @@ class RunwareBase:
                     reject(response)
                     return True
 
-                result_fields_present = any(response.get(field) for field in result_fields)
-                if not result_fields_present and response.get("taskType") == task_type:
+                if response.get("taskType") == task_type:
                     del self._globalMessages[task_uuid]
                     async_response = createAsyncTaskResponse(response)
                     resolve(async_response)
@@ -2064,7 +2052,7 @@ class RunwareBase:
         finally:
             lis["destroy"]()
 
-        if "code" in response:
+        if isinstance(response, dict) and "code" in response:
             raise RunwareAPIError(response)
 
         return response
@@ -2113,6 +2101,8 @@ class RunwareBase:
         if initial_response == "POLL_NEEDED":
             return await self._pollVideoResults(task_uuid, number_results)
         else:
+            if initial_response and len(initial_response) > 0 and isinstance(initial_response[0], IAsyncTaskResponse):
+                return initial_response[0]
             return instantiateDataclassList(IVideo, initial_response)
 
     async def _pollVideoResults(self, task_uuid: str, number_results: int, response_cls: IVideo | IVideoToText = IVideo) -> Union[List[IVideo], List[IVideoToText]]:
