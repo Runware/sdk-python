@@ -357,7 +357,7 @@ class RunwareBase:
 
     async def imageInference(
         self, requestImage: IImageInference
-    ) -> Union[List[IImage], IAsyncTaskResponse, None]:
+    ) -> Union[List[IImage], IAsyncTaskResponse]:
         let_lis: Optional[Any] = None
         request_object: Optional[Dict[str, Any]] = None
         task_uuids: List[str] = []
