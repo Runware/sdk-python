@@ -40,12 +40,8 @@ from .types import (
     IVideoCaption,
     IVideoToText,
     IVideoBackgroundRemoval,
-    IVideoBackgroundRemovalInputs,
-    IVideoBackgroundRemovalSettings,
     IVideoUpscale,
-    IVideoUpscaleInputs,
     IVideoInference,
-    IVideoInputs,
     IVideoAdvancedFeatures,
     IAcceleratorOptions,
     IAudio,
@@ -73,7 +69,7 @@ from .utils import (
     removeListener,
     LISTEN_TO_IMAGES_KEY,
     isLocalFile,
-    process_image, delay,
+    process_image,
     createAsyncTaskResponse,
     VIDEO_INITIAL_TIMEOUT,
     VIDEO_POLLING_DELAY,
@@ -83,13 +79,15 @@ from .utils import (
     PROMPT_ENHANCE_TIMEOUT,
     IMAGE_UPLOAD_TIMEOUT,
     AUDIO_INFERENCE_TIMEOUT,
+    AUDIO_POLLING_DELAY,
+    MAX_POLLS_AUDIO_GENERATION,
+    MAX_POLLS_VIDEO_GENERATION,
 )
 
 # Configure logging
 configure_logging(log_level=logging.CRITICAL)
 
 logger = logging.getLogger(__name__)
-MAX_POLLS_VIDEO_GENERATION = int(os.environ.get("RUNWARE_MAX_POLLS_VIDEO_GENERATION", 480))
 
 
 class RunwareBase:
@@ -1474,12 +1472,18 @@ class RunwareBase:
 
         try:
             if self._invalidAPIkey:
+                if not self._reconnection_manager._had_successful_auth:
+                    raise ConnectionError(self._invalidAPIkey)
+
                 circuit_state = self._reconnection_manager.get_state()
                 if circuit_state == ConnectionState.CIRCUIT_OPEN:
                     raise ConnectionError(self._invalidAPIkey)
 
             if not isConnected:
                 await self.connect()
+
+                if self._invalidAPIkey and not self._reconnection_manager._had_successful_auth:
+                    raise ConnectionError(self._invalidAPIkey)
 
         except Exception as e:
             raise ConnectionError(
@@ -2131,7 +2135,7 @@ class RunwareBase:
                 if poll_count >= MAX_POLLS_VIDEO_GENERATION - 1:
                     raise e
 
-            await delay(VIDEO_POLLING_DELAY)
+            await asyncio.sleep(VIDEO_POLLING_DELAY / 1000)
 
         # Different timeout messages based on response type
         timeout_msg = "Timed out"
@@ -2236,7 +2240,7 @@ class RunwareBase:
             return [response] if response else []
         else:
             # Multiple results - use polling
-            return await self._pollForAudioResults(task_uuid, number_results)
+            return await self._pollAudioResults(task_uuid, number_results)
 
     async def _waitForAudioCompletion(self, task_uuid: str) -> Optional[IAudio]:
         lis = self.globalListener(taskUUID=task_uuid)
@@ -2274,15 +2278,16 @@ class RunwareBase:
             lis["destroy"]()
             raise e
 
-    async def _pollForAudioResults(self, task_uuid: str, number_results: int) -> List[IAudio]:
+    async def _pollAudioResults(self, task_uuid: str, number_results: int) -> List[IAudio]:
         completed_results = []
         lis = self.globalListener(taskUUID=task_uuid)
 
         try:
-            while len(completed_results) < number_results:
-                responses = self._globalMessages.get(task_uuid, [])
-                if not isinstance(responses, list):
-                    responses = [responses] if responses else []
+            for poll_count in range(MAX_POLLS_AUDIO_GENERATION):
+                async with self._messages_lock:
+                    responses = self._globalMessages.get(task_uuid, [])
+                    if not isinstance(responses, list):
+                        responses = [responses] if responses else []
 
                 processed_responses = self._processAudioPollingResponse(responses)
                 completed_results.extend(processed_responses)
@@ -2290,18 +2295,19 @@ class RunwareBase:
                 if len(completed_results) >= number_results:
                     break
 
-                await asyncio.sleep(1)  # Poll every second
+                if poll_count >= MAX_POLLS_AUDIO_GENERATION - 1:
+                    raise RunwareAPIError(
+                        {"message": f"Audio generation timeout after {MAX_POLLS_AUDIO_GENERATION} polls"})
 
-            # Clean up
-            if task_uuid in self._globalMessages:
-                del self._globalMessages[task_uuid]
+                await asyncio.sleep(AUDIO_POLLING_DELAY / 1000)
+
+        finally:
             lis["destroy"]()
+            async with self._messages_lock:
+                if task_uuid in self._globalMessages:
+                    del self._globalMessages[task_uuid]
 
-            return [self._createAudioFromResponse(response) for response in completed_results[:number_results]]
-
-        except Exception as e:
-            lis["destroy"]()
-            raise e
+        return [self._createAudioFromResponse(response) for response in completed_results[:number_results]]
 
     def _processAudioPollingResponse(self, responses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         completed_results = []
