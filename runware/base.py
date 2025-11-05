@@ -221,7 +221,7 @@ class RunwareBase:
         )
         self._invalidAPIkey = None
 
-    async def photoMaker(self, requestPhotoMaker: IPhotoMaker):
+    async def photoMaker(self, requestPhotoMaker: IPhotoMaker) -> Union[List[IImage], IAsyncTaskResponse]:
         retry_count = 0
 
         try:
@@ -267,6 +267,13 @@ class RunwareBase:
                 request_object["webhookURL"] = requestPhotoMaker.webhookURL
 
             await self.send([request_object])
+
+            if requestPhotoMaker.webhookURL:
+                return await self._handleWebhookAcknowledgment(
+                    task_uuid=task_uuid,
+                    task_type="photoMaker",
+                    debug_key="photo-maker-webhook"
+                )
 
             lis = self.globalListener(
                 taskUUID=task_uuid,
@@ -320,7 +327,7 @@ class RunwareBase:
 
     async def imageInference(
         self, requestImage: IImageInference
-    ) -> Union[List[IImage], None]:
+    ) -> Union[List[IImage], IAsyncTaskResponse]:
         let_lis: Optional[Any] = None
         request_object: Optional[Dict[str, Any]] = None
         task_uuids: List[str] = []
@@ -435,7 +442,7 @@ class RunwareBase:
         retry_count: int,
         number_of_images: int,
         on_partial_images: Optional[Callable[[List[IImage], Optional[IError]], None]],
-    ) -> List[IImage]:
+    ) -> Union[List[IImage], IAsyncTaskResponse]:
         retry_count += 1
         if let_lis:
             let_lis["destroy"]()
@@ -457,6 +464,13 @@ class RunwareBase:
         }
 
         await self.send([new_request_object])
+
+        if new_request_object.get("webhookURL"):
+            return await self._handleWebhookAcknowledgment(
+                task_uuid=task_uuid,
+                task_type="imageInference",
+                debug_key="image-inference-webhook"
+            )
 
         let_lis = await self.listenToImages(
             onPartialImages=on_partial_images,
@@ -481,7 +495,7 @@ class RunwareBase:
 
         # return images
 
-    async def imageCaption(self, requestImageToText: IImageCaption) -> IImageToText:
+    async def imageCaption(self, requestImageToText: IImageCaption) -> Union[IImageToText, IAsyncTaskResponse]:
         try:
             await self.ensureConnection()
             return await asyncRetry(
@@ -492,7 +506,7 @@ class RunwareBase:
 
     async def _requestImageToText(
         self, requestImageToText: IImageCaption
-    ) -> IImageToText:
+    ) -> Union[IImageToText, IAsyncTaskResponse]:
         # Prepare image list - inputImages is primary, inputImage is convenience
         if requestImageToText.inputImages is not None:
             images_to_process = requestImageToText.inputImages
@@ -549,6 +563,13 @@ class RunwareBase:
 
         await self.send([task_params])
 
+        if requestImageToText.webhookURL:
+            return await self._handleWebhookAcknowledgment(
+                task_uuid=taskUUID,
+                task_type="imageCaption",
+                debug_key="image-caption-webhook"
+            )
+
         lis = self.globalListener(
             taskUUID=taskUUID,
         )
@@ -587,7 +608,7 @@ class RunwareBase:
         else:
             return None
 
-    async def videoCaption(self, requestVideoCaption: IVideoCaption) -> List[IVideoToText]:
+    async def videoCaption(self, requestVideoCaption: IVideoCaption) -> Union[List[IVideoToText], IAsyncTaskResponse]:
         try:
             await self.ensureConnection()
             return await asyncRetry(
@@ -598,12 +619,12 @@ class RunwareBase:
 
     async def _requestVideoCaption(
         self, requestVideoCaption: IVideoCaption
-    ) -> IVideoToText:
+    ) -> Union[List[IVideoToText], IAsyncTaskResponse]:
         taskUUID = requestVideoCaption.taskUUID or getUUID()
 
         # Create the request object
         task_params = {
-            "taskType": ETaskType.CAPTION.value,
+            "taskType": ETaskType.VIDEO_CAPTION.value,
             "taskUUID": taskUUID,
             "model": requestVideoCaption.model,
             "inputs": {
@@ -620,44 +641,17 @@ class RunwareBase:
 
         await self.send([task_params])
 
-        # If webhook is specified, return immediately with task acknowledgment
         if requestVideoCaption.webhookURL:
-            lis = self.globalListener(taskUUID=taskUUID)
-
-            async def check_webhook_ack(resolve: callable, reject: callable, *args: Any) -> bool:
-                async with self._messages_lock:
-                    response = self._globalMessages.get(taskUUID)
-                    if response:
-                        caption_response = response[0]
-                    else:
-                        caption_response = response
-
-                    if caption_response and caption_response.get("error"):
-                        reject(caption_response)
-                        return True
-
-                    if caption_response:
-                        del self._globalMessages[taskUUID]
-                        resolve(caption_response)
-                        return True
-
-                return False
-
-            response = await getIntervalWithPromise(
-                check_webhook_ack, debugKey="video-caption-webhook", timeOutDuration=WEBHOOK_TIMEOUT
+            return await self._handleWebhookAcknowledgment(
+                task_uuid=taskUUID,
+                task_type="caption",
+                debug_key="video-caption-webhook"
             )
-
-            lis["destroy"]()
-
-            if "code" in response:
-                raise RunwareAPIError(response)
-
-            return [createVideoToTextFromResponse(response)] if response else []
 
         # For async without webhook, poll for results using _pollVideoResults
         return await self._pollVideoResults(taskUUID, 1, IVideoToText)
 
-    async def videoBackgroundRemoval(self, requestVideoBackgroundRemoval: IVideoBackgroundRemoval) -> List[IVideo]:
+    async def videoBackgroundRemoval(self, requestVideoBackgroundRemoval: IVideoBackgroundRemoval) -> Union[List[IVideo], IAsyncTaskResponse]:
 
         try:
             await self.ensureConnection()
@@ -669,7 +663,7 @@ class RunwareBase:
 
     async def _requestVideoBackgroundRemoval(
         self, requestVideoBackgroundRemoval: IVideoBackgroundRemoval
-    ) -> List[IVideo]:
+    ) -> Union[List[IVideo], IAsyncTaskResponse]:
         taskUUID = requestVideoBackgroundRemoval.taskUUID or getUUID()
 
         # Create the request object
@@ -701,44 +695,16 @@ class RunwareBase:
 
         await self.send([task_params])
 
-        # If webhook is specified, return immediately with task acknowledgment
         if requestVideoBackgroundRemoval.webhookURL:
-            lis = self.globalListener(taskUUID=taskUUID)
-
-            async def check_webhook_ack(resolve: callable, reject: callable, *args: Any) -> bool:
-                async with self._messages_lock:
-                    response = self._globalMessages.get(taskUUID)
-                    if response:
-                        bg_removal_response = response[0]
-                    else:
-                        bg_removal_response = response
-
-                    if bg_removal_response and bg_removal_response.get("error"):
-                        reject(bg_removal_response)
-                        return True
-
-                    if bg_removal_response:
-                        del self._globalMessages[taskUUID]
-                        resolve(bg_removal_response)
-                        return True
-
-                return False
-
-            response = await getIntervalWithPromise(
-                check_webhook_ack, debugKey="video-background-removal-webhook", timeOutDuration=WEBHOOK_TIMEOUT
+            return await self._handleWebhookAcknowledgment(
+                task_uuid=taskUUID,
+                task_type="removeBackground",
+                debug_key="video-background-removal-webhook"
             )
 
-            lis["destroy"]()
-
-            if "code" in response:
-                raise RunwareAPIError(response)
-
-            return [instantiateDataclass(IVideo, response)] if response else []
-
-        # For async without webhook, poll for results using _pollVideoResults
         return await self._pollVideoResults(taskUUID, 1, IVideo)
 
-    async def videoUpscale(self, requestVideoUpscale: IVideoUpscale) -> List[IVideo]:
+    async def videoUpscale(self, requestVideoUpscale: IVideoUpscale) -> Union[List[IVideo], IAsyncTaskResponse]:
         try:
             await self.ensureConnection()
             return await asyncRetry(
@@ -749,7 +715,7 @@ class RunwareBase:
 
     async def _requestVideoUpscale(
         self, requestVideoUpscale: IVideoUpscale
-    ) -> List[IVideo]:
+    ) -> Union[List[IVideo], IAsyncTaskResponse]:
         taskUUID = requestVideoUpscale.taskUUID or getUUID()
 
         # Create the request object
@@ -776,41 +742,18 @@ class RunwareBase:
 
         await self.send([task_params])
 
-        # If webhook is specified, return immediately with task acknowledgment
         if requestVideoUpscale.webhookURL:
-            lis = self.globalListener(taskUUID=taskUUID)
-            async def check_webhook_ack(resolve: callable, reject: callable, *args: Any) -> bool:
-                async with self._messages_lock:
-                    response = self._globalMessages.get(taskUUID)
-                    if response:
-                        upscale_response = response[0]
-                    else:
-                        upscale_response = response
-                    if upscale_response and upscale_response.get("error"):
-                        reject(upscale_response)
-                        return True
-                    if upscale_response:
-                        del self._globalMessages[taskUUID]
-                        resolve(upscale_response)
-                        return True
-                    return False
-            response = await getIntervalWithPromise(
-                check_webhook_ack, debugKey="video-upscale-webhook", timeOutDuration=WEBHOOK_TIMEOUT
+            return await self._handleWebhookAcknowledgment(
+                task_uuid=taskUUID,
+                task_type="upscale",
+                debug_key="video-upscale-webhook"
             )
 
-            lis["destroy"]()
-
-            if "code" in response:
-                raise RunwareAPIError(response)
-
-            return [instantiateDataclass(IVideo, response)] if response else []
-
-        # For async without webhook, poll for results using _pollVideoResults
         return await self._pollVideoResults(taskUUID, 1, IVideo)
 
     async def imageBackgroundRemoval(
         self, removeImageBackgroundPayload: IImageBackgroundRemoval
-    ) -> List[IImage]:
+    ) -> Union[List[IImage], IAsyncTaskResponse]:
         try:
             await self.ensureConnection()
             return await asyncRetry(
@@ -821,7 +764,7 @@ class RunwareBase:
 
     async def _removeImageBackground(
         self, removeImageBackgroundPayload: IImageBackgroundRemoval
-    ) -> List[IImage]:
+    ) -> Union[List[IImage], IAsyncTaskResponse]:
         inputImage = removeImageBackgroundPayload.inputImage
 
         image_uploaded = await self.uploadImage(inputImage)
@@ -874,6 +817,13 @@ class RunwareBase:
         # Send the task with all applicable parameters
         await self.send([task_params])
 
+        if removeImageBackgroundPayload.webhookURL:
+            return await self._handleWebhookAcknowledgment(
+                task_uuid=taskUUID,
+                task_type="imageBackgroundRemoval",
+                debug_key="image-background-removal-webhook"
+            )
+
         lis = self.globalListener(
             taskUUID=taskUUID,
         )
@@ -911,14 +861,14 @@ class RunwareBase:
 
         return image_list
 
-    async def imageUpscale(self, upscaleGanPayload: IImageUpscale) -> List[IImage]:
+    async def imageUpscale(self, upscaleGanPayload: IImageUpscale) -> Union[List[IImage], IAsyncTaskResponse]:
         try:
             await self.ensureConnection()
             return await asyncRetry(lambda: self._upscaleGan(upscaleGanPayload))
         except Exception as e:
             raise e
 
-    async def _upscaleGan(self, upscaleGanPayload: IImageUpscale) -> List[IImage]:
+    async def _upscaleGan(self, upscaleGanPayload: IImageUpscale) -> Union[List[IImage], IAsyncTaskResponse]:
         # Support both inputImage (legacy) and inputs.image (new format)
         inputImage = upscaleGanPayload.inputImage
         if not inputImage and upscaleGanPayload.inputs and upscaleGanPayload.inputs.image:
@@ -983,6 +933,13 @@ class RunwareBase:
 
         await self.send([task_params])
 
+        if upscaleGanPayload.webhookURL:
+            return await self._handleWebhookAcknowledgment(
+                task_uuid=taskUUID,
+                task_type="imageUpscale",
+                debug_key="image-upscale-webhook"
+            )
+
         lis = self.globalListener(
             taskUUID=taskUUID,
         )
@@ -1019,14 +976,14 @@ class RunwareBase:
         image_list: List[IImage] = [image]
         return image_list
 
-    async def imageVectorize(self, vectorizePayload: IVectorize) -> List[IImage]:
+    async def imageVectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
         try:
             await self.ensureConnection()
             return await asyncRetry(lambda: self._vectorize(vectorizePayload))
         except Exception as e:
             raise e
 
-    async def _vectorize(self, vectorizePayload: IVectorize) -> List[IImage]:
+    async def _vectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
         # Process the image from inputs
         input_image = vectorizePayload.inputs.image
         
@@ -1065,6 +1022,13 @@ class RunwareBase:
         # Send the task with all applicable parameters
         await self.send([task_params])
         
+        if vectorizePayload.webhookURL:
+            return await self._handleWebhookAcknowledgment(
+                task_uuid=taskUUID,
+                task_type="vectorize",
+                debug_key="image-vectorize-webhook"
+            )
+        
         let_lis = await self.listenToImages(
             onPartialImages=None,
             taskUUID=taskUUID,
@@ -1088,7 +1052,7 @@ class RunwareBase:
 
     async def promptEnhance(
         self, promptEnhancer: IPromptEnhance
-    ) -> List[IEnhancedPrompt]:
+    ) -> Union[List[IEnhancedPrompt], IAsyncTaskResponse]:
         """
         Enhance the given prompt by generating multiple versions of it.
 
@@ -1104,7 +1068,7 @@ class RunwareBase:
 
     async def _enhancePrompt(
         self, promptEnhancer: IPromptEnhance
-    ) -> List[IEnhancedPrompt]:
+    ) -> Union[List[IEnhancedPrompt], IAsyncTaskResponse]:
         """
         Internal method to perform the actual prompt enhancement.
 
@@ -1137,6 +1101,13 @@ class RunwareBase:
 
         # Send the task with all applicable parameters
         await self.send([task_params])
+
+        if has_webhook:
+            return await self._handleWebhookAcknowledgment(
+                task_uuid=taskUUID,
+                task_type="promptEnhance",
+                debug_key="prompt-enhance-webhook"
+            )
 
         lis = self.globalListener(
             taskUUID=taskUUID,
@@ -1847,30 +1818,14 @@ class RunwareBase:
         if requestVideo.positivePrompt is not None:
             request_object["positivePrompt"] = requestVideo.positivePrompt.strip()
 
-        # Add speech settings if provided (top level)
-        if requestVideo.speech is not None:
-            speech_dict = asdict(requestVideo.speech)
-            # Remove None values
-            speech_dict = {k: v for k, v in speech_dict.items() if v is not None}
-            if speech_dict:
-                request_object["speech"] = speech_dict
-
+        self._addOptionalField(request_object, requestVideo.speech)
         self._addOptionalVideoFields(request_object, requestVideo)
         self._addVideoImages(request_object, requestVideo)
         self._addVideoInputs(request_object, requestVideo)
         self._addProviderSettings(request_object, requestVideo)
-        
-        # Add safety settings if provided
-        if requestVideo.safety:
-            self._addSafetySettings(request_object, requestVideo.safety)
-        
-        # Add advanced features if provided
-        if requestVideo.advancedFeatures:
-            self._addAdvancedFeatures(request_object, requestVideo.advancedFeatures)
-        
-        # Add accelerator options if provided
-        if requestVideo.acceleratorOptions:
-            self._addAcceleratorOptions(request_object, requestVideo.acceleratorOptions)
+        self._addOptionalField(request_object, requestVideo.safety)
+        self._addOptionalField(request_object, requestVideo.advancedFeatures)
+        self._addOptionalField(request_object, requestVideo.acceleratorOptions)
         
 
         return request_object
@@ -2000,8 +1955,7 @@ class RunwareBase:
             request_object["referenceImages"] = requestImage.referenceImages
             
         # Add acceleratorOptions if present
-        if requestImage.acceleratorOptions:
-            self._addAcceleratorOptions(request_object, requestImage.acceleratorOptions)
+        self._addOptionalField(request_object, requestImage.acceleratorOptions)
             
         # Add advancedFeatures if present
         if requestImage.advancedFeatures:
@@ -2033,7 +1987,6 @@ class RunwareBase:
                 k: v for k, v in asdict(requestVideo.inputs).items() 
                 if v is not None
             }
-            
             if inputs_dict:
                 request_object["inputs"] = inputs_dict
 
@@ -2057,26 +2010,56 @@ class RunwareBase:
         if provider_dict:
             request_object["providerSettings"] = provider_dict
 
-    def _addSafetySettings(self, request_object: Dict[str, Any], safety: ISafety) -> None:
-        safety_dict = asdict(safety)
-        safety_dict = {k: v for k, v in safety_dict.items() if v is not None}
-        if safety_dict:
-            request_object["safety"] = safety_dict
+    def _addOptionalField(self, request_object: Dict[str, Any], obj: Any) -> None:
+        if not obj:
+            return
+        obj_dict = obj.to_request_dict()
+        if obj_dict:
+            request_object.update(obj_dict)
 
-    def _addAdvancedFeatures(self, request_object: Dict[str, Any], advancedFeatures: IVideoAdvancedFeatures) -> None:
-        features_dict = asdict(advancedFeatures)
-        features_dict = {k: v for k, v in features_dict.items() if v is not None}
-        if features_dict:
-            request_object["advancedFeatures"] = features_dict
+    async def _handleWebhookAcknowledgment(
+        self,
+        task_uuid: str,
+        task_type: str,
+        debug_key: str,
+    ) -> IAsyncTaskResponse:
+        lis = self.globalListener(taskUUID=task_uuid)
 
-    def _addAcceleratorOptions(self, request_object: Dict[str, Any], acceleratorOptions: IAcceleratorOptions) -> None:
-        accelerator_dict = {
-            k: v
-            for k, v in vars(acceleratorOptions).items()
-            if v is not None
-        }
-        if accelerator_dict:
-            request_object["acceleratorOptions"] = accelerator_dict
+        async def check_webhook_ack(resolve: callable, reject: callable, *args: Any) -> bool:
+            async with self._messages_lock:
+                response_list = self._globalMessages.get(task_uuid, [])
+
+                if not response_list:
+                    return False
+
+                response = response_list[0] if isinstance(response_list, list) else response_list
+
+                if response.get("code"):
+                    raise RunwareAPIError(response)
+
+                if isinstance(response, dict) and response.get("error"):
+                    reject(response)
+                    return True
+
+                if response.get("taskType") == task_type:
+                    del self._globalMessages[task_uuid]
+                    async_response = createAsyncTaskResponse(response)
+                    resolve(async_response)
+                    return True
+
+            return False
+
+        try:
+            response = await getIntervalWithPromise(
+                check_webhook_ack, debugKey=debug_key, timeOutDuration=WEBHOOK_TIMEOUT
+            )
+        finally:
+            lis["destroy"]()
+
+        if isinstance(response, dict) and "code" in response:
+            raise RunwareAPIError(response)
+
+        return response
 
     async def _handleInitialVideoResponse(self, task_uuid: str, number_results: int, webhook_url: Optional[str] = None) -> Union[List[IVideo], IAsyncTaskResponse]:
         lis = self.globalListener(taskUUID=task_uuid)
@@ -2122,6 +2105,8 @@ class RunwareBase:
         if initial_response == "POLL_NEEDED":
             return await self._pollVideoResults(task_uuid, number_results)
         else:
+            if initial_response and len(initial_response) > 0 and isinstance(initial_response[0], IAsyncTaskResponse):
+                return initial_response[0]
             return instantiateDataclassList(IVideo, initial_response)
 
     async def _pollVideoResults(self, task_uuid: str, number_results: int, response_cls: IVideo | IVideoToText = IVideo) -> Union[List[IVideo], List[IVideoToText]]:
@@ -2225,7 +2210,7 @@ class RunwareBase:
                 request_object["duration"] = requestAudio.duration
         
         self._addOptionalAudioFields(request_object, requestAudio)
-        self._addAudioSettings(request_object, requestAudio)
+        self._addOptionalField(request_object, requestAudio.audioSettings)
         self._addAudioProviderSettings(request_object, requestAudio)
         
         return request_object
@@ -2240,13 +2225,6 @@ class RunwareBase:
             if value is not None:
                 request_object[field] = value
 
-    def _addAudioSettings(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
-        if requestAudio.audioSettings:
-            audio_settings_dict = asdict(requestAudio.audioSettings)
-            # Remove None values
-            audio_settings_dict = {k: v for k, v in audio_settings_dict.items() if v is not None}
-            if audio_settings_dict:
-                request_object["audioSettings"] = audio_settings_dict
 
     def _addAudioProviderSettings(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
         if not requestAudio.providerSettings:

@@ -42,7 +42,7 @@ class ETaskType(Enum):
     MODEL_SEARCH = "modelSearch"
     VIDEO_INFERENCE = "videoInference"
     AUDIO_INFERENCE = "audioInference"
-    CAPTION = "caption"
+    VIDEO_CAPTION = "caption"
     MEDIA_STORAGE = "mediaStorage"
     GET_RESPONSE = "getResponse"
     IMAGE_VECTORIZE = "vectorize"
@@ -104,7 +104,6 @@ class EOpenPosePreProcessor(Enum):
 # Define the types using Literal
 IOutputType = Literal["base64Data", "dataURI", "URL"]
 IOutputFormat = Literal["JPG", "PNG", "WEBP", "SVG"]
-IAudioOutputType = Literal["base64Data", "dataURI", "URL"]
 IAudioOutputFormat = Literal["MP3"]
 
 
@@ -342,6 +341,24 @@ class IPhotoMaker:
             )
 
 
+class SerializableMixin:
+    def serialize(self) -> Dict[str, Any]:
+        return {k: v for k, v in asdict(self).items()
+                if v is not None and not k.startswith('_')}
+
+@dataclass
+class BaseRequestField(SerializableMixin, ABC):
+    @property
+    @abstractmethod
+    def request_key(self) -> str:
+        pass
+
+    def to_request_dict(self) -> Dict[str, Any]:
+        data = self.serialize()
+        if data:
+            return {self.request_key: data}
+        return {}
+
 @dataclass
 class IOutpaint:
     top: Optional[int] = None
@@ -399,7 +416,7 @@ class IPuLID:
 
 
 @dataclass
-class IAcceleratorOptions:
+class IAcceleratorOptions(BaseRequestField):
     fbcache: Optional[bool] = None
     cacheDistance: Optional[float] = None
     teaCache: Optional[bool] = None
@@ -414,6 +431,10 @@ class IAcceleratorOptions:
     deepCacheBranchId: Optional[int] = None
     deepCacheSkipMode: Optional[str] = None
 
+    @property
+    def request_key(self) -> str:
+        return "acceleratorOptions"
+
 
 @dataclass
 class IFluxKontext:
@@ -427,19 +448,18 @@ class IAdvancedFeatures:
 
 
 @dataclass
-class IVideoAdvancedFeatures:
+class IVideoAdvancedFeatures(BaseRequestField):
     videoCFGScale: Optional[float] = None  
     audioCFGScale: Optional[float] = None  
     fps: Optional[int] = None  
     videoNegativePrompt: Optional[str] = None  
     audioNegativePrompt: Optional[str] = None  
-    slgLayer: Optional[int] = None  
+    slgLayer: Optional[int] = None
 
+    @property
+    def request_key(self) -> str:
+        return "advancedFeatures"
 
-class SerializableMixin:
-    def serialize(self) -> Dict[str, Any]:
-        return {k: v for k, v in asdict(self).items()
-                if v is not None and not k.startswith('_')}
 
 @dataclass
 class BaseProviderSettings(SerializableMixin, ABC):
@@ -498,10 +518,20 @@ class IInputs:
 ImageProviderSettings = IOpenAIProviderSettings | IBriaProviderSettings | ILightricksProviderSettings
 
 
+
+
+@dataclass
+class IInputFrame:
+    image: Union[str, File]
+    frame: Optional[Union[Literal["first", "last"], int]] = None
+
+
 @dataclass
 class IVideoInputs:
     references: Optional[List[Union[str, File, Dict[str, Any]]]] = field(default_factory=list)
     image: Optional[Union[str, File]] = None
+    images: Optional[List[Union[str, File]]] = None
+    frames: Optional[List[IInputFrame]] = None
     video: Optional[str] = None
     audio: Optional[str] = None
     mask: Optional[Union[str, File]] = None
@@ -552,6 +582,7 @@ class IImageInference:
     providerSettings: Optional[ImageProviderSettings] = None
     inputs: Optional[IInputs] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
+    webhookURL: Optional[str] = None
 
 
 @dataclass
@@ -566,9 +597,13 @@ class IImageCaption:
 
 
 @dataclass
-class IAudioSettings:
+class IAudioSettings(BaseRequestField):
     sampleRate: Optional[int] = None  # Min: 8000, Max: 48000, Default: 44100
     bitrate: Optional[int] = None  # Min: 32, Max: 320, Default: 128
+
+    @property
+    def request_key(self) -> str:
+        return "audioSettings"
 
 
 @dataclass
@@ -601,11 +636,15 @@ class IImageToText:
 
 
 @dataclass
-class ISafety:
+class ISafety(BaseRequestField):
     tolerance: Optional[bool] = None
     checkInputs: Optional[bool] = None
     checkContent: Optional[bool] = None
-    mode: Optional[str] = None  
+    mode: Optional[str] = None
+
+    @property
+    def request_key(self) -> str:
+        return "safety"  
 
 
 @dataclass
@@ -878,9 +917,13 @@ class IKlingAIProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class IPixverseSpeechSettings:
+class IPixverseSpeechSettings(BaseRequestField):
     voice: Optional[str] = None  # Speaker voice from the available TTS speaker list
     text: Optional[str] = None  # Text script to be converted to speech (~200 characters, not UTF-8 Encoding)
+
+    @property
+    def request_key(self) -> str:
+        return "speech"
 
 
 @dataclass
@@ -924,7 +967,29 @@ class IElevenLabsProviderSettings(BaseProviderSettings):
         return "elevenlabs"
 
 
-VideoProviderSettings = IKlingAIProviderSettings | IGoogleProviderSettings | IMinimaxProviderSettings | IBytedanceProviderSettings | IPixverseProviderSettings | IViduProviderSettings
+@dataclass
+class IRunwayContentModeration(SerializableMixin):
+    publicFigureThreshold: str = None
+
+
+@dataclass
+class IRunwayProviderSettings(BaseProviderSettings):
+    contentModeration: Optional[IRunwayContentModeration] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "runway"
+
+    def serialize(self) -> Dict[str, Any]:
+        result = {}
+        if self.contentModeration:
+            content_moderation_data = self.contentModeration.serialize()
+            if content_moderation_data:
+                result["contentModeration"] = content_moderation_data
+        return result
+
+
+VideoProviderSettings = IKlingAIProviderSettings | IGoogleProviderSettings | IMinimaxProviderSettings | IBytedanceProviderSettings | IPixverseProviderSettings | IViduProviderSettings | IRunwayProviderSettings
 AudioProviderSettings = IElevenLabsProviderSettings
 
 @dataclass
@@ -970,7 +1035,7 @@ class IAudioInference:
     positivePrompt: Optional[str] = None  # Optional when using composition plan
     duration: Optional[float] = None  # Min: 10, Max: 300 - Optional when using composition plan
     taskUUID: Optional[str] = None
-    outputType: Optional[IAudioOutputType] = None
+    outputType: Optional[IOutputType] = None
     outputFormat: Optional[IAudioOutputFormat] = None
     audioSettings: Optional[IAudioSettings] = None
     includeCost: Optional[bool] = None
