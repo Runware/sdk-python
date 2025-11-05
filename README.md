@@ -1031,3 +1031,52 @@ asyncio.run(main())
 ```
 
 For more detailed usage and additional examples, please refer to the examples directory.
+
+## Configuring Timeouts
+
+The Runware SDK provides configurable timeout settings for different operations through environment variables. All timeout values are in milliseconds.
+
+### Timeout Configuration
+
+Set environment variables to customize timeout behavior:
+
+```bash
+# Image Operations (milliseconds)
+RUNWARE_IMAGE_INFERENCE_TIMEOUT=300000      # Image generation (default: 5 min)
+RUNWARE_IMAGE_OPERATION_TIMEOUT=120000      # Caption, upscale, background removal (default: 2 min)
+RUNWARE_IMAGE_UPLOAD_TIMEOUT=60000          # Image upload (default: 1 min)
+
+# Video Operations (milliseconds)
+RUNWARE_VIDEO_INITIAL_TIMEOUT=30000         # Initial response wait (default: 30 sec)
+RUNWARE_VIDEO_POLLING_DELAY=3000            # Delay between status checks (default: 3 sec)
+RUNWARE_MAX_POLLS_VIDEO_GENERATION=480      # Max polling attempts (default: 480, ~24 min total)
+
+# Audio Operations (milliseconds)
+RUNWARE_AUDIO_INFERENCE_TIMEOUT=300000      # Audio generation (default: 5 min)
+RUNWARE_AUDIO_POLLING_DELAY=1000            # Delay between status checks (default: 1 sec)
+RUNWARE_MAX_POLLS_AUDIO_GENERATION=240      # Max polling attempts (default: 240, ~4 min total)
+
+# Other Operations (milliseconds)
+RUNWARE_PROMPT_ENHANCE_TIMEOUT=60000        # Prompt enhancement (default: 1 min)
+RUNWARE_WEBHOOK_TIMEOUT=30000               # Webhook acknowledgment (default: 30 sec)
+RUNWARE_TIMEOUT_DURATION=480000             # General operations (default: 8 min)
+```
+
+### Usage Example
+
+```python
+import os
+
+# Configure before importing Runware
+os.environ["RUNWARE_VIDEO_POLLING_DELAY"] = "5000"  # 5 seconds between checks
+os.environ["RUNWARE_MAX_POLLS_VIDEO_GENERATION"] = "600"  # Allow up to 50 minutes
+
+from runware import Runware
+
+async def main():
+    runware = Runware(api_key=os.getenv("RUNWARE_API_KEY"))
+    await runware.connect()
+    # Your code here
+```
+
+**Note:** For long-running video operations, consider using webhooks or `skipResponse=True` to avoid timeout issues with extended generation times.
