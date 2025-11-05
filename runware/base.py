@@ -1507,12 +1507,18 @@ class RunwareBase:
 
         try:
             if self._invalidAPIkey:
+                if not self._reconnection_manager._had_successful_auth:
+                    raise ConnectionError(self._invalidAPIkey)
+
                 circuit_state = self._reconnection_manager.get_state()
                 if circuit_state == ConnectionState.CIRCUIT_OPEN:
                     raise ConnectionError(self._invalidAPIkey)
 
             if not isConnected:
                 await self.connect()
+
+                if self._invalidAPIkey and not self._reconnection_manager._had_successful_auth:
+                    raise ConnectionError(self._invalidAPIkey)
 
         except Exception as e:
             raise ConnectionError(
