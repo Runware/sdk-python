@@ -2109,6 +2109,14 @@ class RunwareBase:
                 timeOutDuration=TIMEOUT_DURATION if delivery_method == "sync" else VIDEO_INITIAL_TIMEOUT
             )
         except Exception as e:
+            if delivery_method == "sync":
+                error_msg = (
+                    f"Timeout waiting for video generation | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Timeout: {TIMEOUT_DURATION}ms | "
+                    f"Original error: {str(e)}"
+                )
+                raise Exception(error_msg)
             initial_response = None
         finally:
             lis["destroy"]()
