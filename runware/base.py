@@ -2130,10 +2130,12 @@ class RunwareBase:
             try:
                 responses = await self._sendPollRequest(task_uuid, poll_count)
 
+                # Check if there are any error code, if so, raise RunwareAPIError
                 for response in responses:
                     if response.get("code"):
                         raise RunwareAPIError(response)
 
+                # Process responses using the unified method
                 completed_results = self._processVideoPollingResponse(responses)
 
                 if len(completed_results) >= number_results:
@@ -2145,11 +2147,13 @@ class RunwareBase:
             except RunwareAPIError:
                 raise
             except Exception as e:
+                # For other exceptions, only raise on last poll
                 if poll_count >= MAX_POLLS_VIDEO_GENERATION - 1:
                     raise e
 
             await asyncio.sleep(VIDEO_POLLING_DELAY / 1000)
 
+        # Different timeout messages based on response type
         timeout_msg = "Timed out"
         raise RunwareAPIError({"message": timeout_msg})
 
