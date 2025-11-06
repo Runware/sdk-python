@@ -2089,19 +2089,12 @@ class RunwareBase:
                 if response.get("code"):
                     raise RunwareAPIError(response)
 
-                
                 if response.get("status") == "success" or response.get("videoUUID") is not None or response.get("mediaUUID") is not None:
                     del self._globalMessages[task_uuid]
                     resolve([response])
                     return True
 
-                if webhook_url:
-                    del self._globalMessages[task_uuid]
-                    async_response = createAsyncTaskResponse(response)
-                    resolve([async_response])
-                    return True
-
-                if delivery_method == "async":
+                if webhook_url or delivery_method == "async":
                     del self._globalMessages[task_uuid]
                     async_response = createAsyncTaskResponse(response)
                     resolve([async_response])
