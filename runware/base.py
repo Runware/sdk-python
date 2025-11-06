@@ -2105,11 +2105,10 @@ class RunwareBase:
             return False
 
         try:
-            timeout_duration = TIMEOUT_DURATION if delivery_method == "sync" else VIDEO_INITIAL_TIMEOUT
             initial_response = await getIntervalWithPromise(
                 check_initial_response,
                 debugKey=debug_key,
-                timeOutDuration=timeout_duration,
+                timeOutDuration=VIDEO_INITIAL_TIMEOUT,
                 shouldThrowError=False
             )
         except Exception as e:
