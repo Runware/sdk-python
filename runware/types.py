@@ -897,7 +897,10 @@ class IBytedanceProviderSettings(BaseProviderSettings):
 class IKlingAIProviderSettings(BaseProviderSettings):
     cameraControl: Optional[IKlingCameraControl] = None
     soundVolume: Optional[float] = None  
-    originalAudioVolume: Optional[float] = None  
+    originalAudioVolume: Optional[float] = None
+    soundEffectPrompt: Optional[str] = None  
+    bgmPrompt: Optional[str] = None  
+    asmrMode: Optional[bool] = None  
 
     @property
     def provider_key(self) -> str:
@@ -913,6 +916,12 @@ class IKlingAIProviderSettings(BaseProviderSettings):
             result["soundVolume"] = self.soundVolume
         if self.originalAudioVolume is not None:
             result["originalAudioVolume"] = self.originalAudioVolume
+        if self.soundEffectPrompt is not None:
+            result["soundEffectPrompt"] = self.soundEffectPrompt
+        if self.bgmPrompt is not None:
+            result["bgmPrompt"] = self.bgmPrompt
+        if self.asmrMode is not None:
+            result["asmrMode"] = self.asmrMode
         return result
 
 
@@ -990,7 +999,7 @@ class IRunwayProviderSettings(BaseProviderSettings):
 
 
 VideoProviderSettings = IKlingAIProviderSettings | IGoogleProviderSettings | IMinimaxProviderSettings | IBytedanceProviderSettings | IPixverseProviderSettings | IViduProviderSettings | IRunwayProviderSettings
-AudioProviderSettings = IElevenLabsProviderSettings
+AudioProviderSettings = IElevenLabsProviderSettings | IKlingAIProviderSettings
 
 @dataclass
 class IVideoInference:
@@ -1030,6 +1039,11 @@ class IVideoInference:
 
 
 @dataclass
+class IAudioInputs:
+    video: Optional[str] = None
+
+
+@dataclass
 class IAudioInference:
     model: str
     positivePrompt: Optional[str] = None  # Optional when using composition plan
@@ -1043,7 +1057,8 @@ class IAudioInference:
     deliveryMethod: str = "sync"  # "sync" | "async"
     uploadEndpoint: Optional[str] = None
     webhookURL: Optional[str] = None
-    providerSettings: Optional[AudioProviderSettings] = None  # ElevenLabs provider settings
+    providerSettings: Optional[AudioProviderSettings] = None  
+    inputs: Optional[IAudioInputs] = None
 
 
 @dataclass

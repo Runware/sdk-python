@@ -2212,6 +2212,7 @@ class RunwareBase:
         self._addOptionalAudioFields(request_object, requestAudio)
         self._addOptionalField(request_object, requestAudio.audioSettings)
         self._addAudioProviderSettings(request_object, requestAudio)
+        self._addAudioInputs(request_object, requestAudio)
         
         return request_object
 
@@ -2232,6 +2233,16 @@ class RunwareBase:
         provider_dict = requestAudio.providerSettings.to_request_dict()
         if provider_dict:
             request_object["providerSettings"] = provider_dict
+
+    def _addAudioInputs(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
+        
+        if requestAudio.inputs:
+            inputs_dict = {
+                k: v for k, v in asdict(requestAudio.inputs).items() 
+                if v is not None
+            }
+            if inputs_dict:
+                request_object["inputs"] = inputs_dict
 
     async def _handleInitialAudioResponse(self, task_uuid: str, number_results: int) -> List[IAudio]:
         if number_results == 1:
