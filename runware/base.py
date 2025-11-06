@@ -2102,8 +2102,6 @@ class RunwareBase:
 
                 return False
 
-            return False
-
         try:
             initial_response = await getIntervalWithPromise(
                 check_initial_response,
