@@ -1769,6 +1769,7 @@ class RunwareBase:
         return await self._handleInitialVideoResponse(
             requestVideo.taskUUID,
             requestVideo.numberResults,
+            requestVideo.deliveryMethod,
             request_object.get("webhookURL")
         )
 
@@ -1827,7 +1828,6 @@ class RunwareBase:
         self._addOptionalField(request_object, requestVideo.advancedFeatures)
         self._addOptionalField(request_object, requestVideo.acceleratorOptions)
         
-
         return request_object
 
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
@@ -2061,7 +2061,7 @@ class RunwareBase:
 
         return response
 
-    async def _handleInitialVideoResponse(self, task_uuid: str, number_results: int, webhook_url: Optional[str] = None) -> Union[List[IVideo], IAsyncTaskResponse]:
+    async def _handleInitialVideoResponse(self, task_uuid: str, number_results: int, delivery_method: str = "async", webhook_url: Optional[str] = None) -> Union[List[IVideo], IAsyncTaskResponse]:
         lis = self.globalListener(taskUUID=task_uuid)
 
         async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
@@ -2076,38 +2076,66 @@ class RunwareBase:
                 if response.get("code"):
                     raise RunwareAPIError(response)
 
-                if response.get("status") == "success":
+                # Check if video is complete: status == "success" OR videoUUID exists
+                is_complete = response.get("status") == "success" or response.get("videoUUID") is not None
+                
+                if is_complete:
                     del self._globalMessages[task_uuid]
                     resolve([response])
                     return True
 
-                if not response.get("imageUUID") and webhook_url:
+                if webhook_url:
                     del self._globalMessages[task_uuid]
                     async_response = createAsyncTaskResponse(response)
                     resolve([async_response])
                     return True
 
-                del self._globalMessages[task_uuid]
-                resolve("POLL_NEEDED")
-                return True
+                # For async mode: return IAsyncTaskResponse immediately (user polls via getResponse)
+                if delivery_method == "async":
+                    del self._globalMessages[task_uuid]
+                    async_response = createAsyncTaskResponse(response)
+                    resolve([async_response])
+                    return True
+
+                # For sync mode: wait for complete results (status == "success" OR videoUUID exists)
+                # If we get here, it means no complete results yet, but we'll wait for timeout
+                return False
 
             return False
 
         try:
+            # Use longer timeout for sync mode (8 minutes), shorter for async (30 seconds)
+            timeout_duration = TIMEOUT_DURATION if delivery_method == "sync" else VIDEO_INITIAL_TIMEOUT
             initial_response = await getIntervalWithPromise(
                 check_initial_response,
                 debugKey="video-inference-initial",
-                timeOutDuration=VIDEO_INITIAL_TIMEOUT
+                timeOutDuration=timeout_duration,
+                shouldThrowError=False
             )
+        except Exception as e:
+            initial_response = None
         finally:
             lis["destroy"]()
 
-        if initial_response == "POLL_NEEDED":
-            return await self._pollVideoResults(task_uuid, number_results)
-        else:
-            if initial_response and len(initial_response) > 0 and isinstance(initial_response[0], IAsyncTaskResponse):
+        # Handle sync mode timeout: return IAsyncTaskResponse (task continues in background)
+        if initial_response is None and delivery_method == "sync":
+            return IAsyncTaskResponse(
+                taskType=ETaskType.VIDEO_INFERENCE.value,
+                taskUUID=task_uuid
+            )
+
+        # Handle responses
+        if initial_response and len(initial_response) > 0:
+            if isinstance(initial_response[0], IAsyncTaskResponse):
                 return initial_response[0]
+            # Complete results for sync mode
             return instantiateDataclassList(IVideo, initial_response)
+        
+        # Fallback: return IAsyncTaskResponse
+        return IAsyncTaskResponse(
+            taskType=ETaskType.VIDEO_INFERENCE.value,
+            taskUUID=task_uuid
+        )
 
     async def _pollVideoResults(self, task_uuid: str, number_results: int, response_cls: IVideo | IVideoToText = IVideo) -> Union[List[IVideo], List[IVideoToText]]:
         for poll_count in range(MAX_POLLS_VIDEO_GENERATION):
