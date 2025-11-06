@@ -1841,6 +1841,7 @@ class RunwareBase:
         self._addOptionalField(request_object, requestVideo.advancedFeatures)
         self._addOptionalField(request_object, requestVideo.acceleratorOptions)
         
+        
         return request_object
 
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
@@ -2121,15 +2122,10 @@ class RunwareBase:
         finally:
             lis["destroy"]()
 
-        if initial_response:
-            if isinstance(initial_response[0], IAsyncTaskResponse):
-                return initial_response[0]
-            return instantiateDataclassList(IVideo, initial_response)
+        if initial_response and isinstance(initial_response[0], IAsyncTaskResponse):
+            return initial_response[0]
         
-        return IAsyncTaskResponse(
-            taskType=ETaskType.VIDEO_INFERENCE.value,
-            taskUUID=task_uuid
-        )
+        return instantiateDataclassList(IVideo, initial_response)
 
     async def _pollVideoResults(self, task_uuid: str, number_results: int, response_cls: IVideo | IVideoToText = IVideo) -> Union[List[IVideo], List[IVideoToText]]:
         for poll_count in range(MAX_POLLS_VIDEO_GENERATION):
