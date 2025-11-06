@@ -702,7 +702,13 @@ class RunwareBase:
                 debug_key="video-background-removal-webhook"
             )
 
-        return await self._pollVideoResults(taskUUID, 1, IVideo)
+        return await self._handleInitialVideoResponse(
+            taskUUID,
+            1,
+            requestVideoBackgroundRemoval.deliveryMethod,
+            task_params.get("webhookURL"),
+            "video-background-removal-initial"
+        )
 
     async def videoUpscale(self, requestVideoUpscale: IVideoUpscale) -> Union[List[IVideo], IAsyncTaskResponse]:
         try:
@@ -749,7 +755,13 @@ class RunwareBase:
                 debug_key="video-upscale-webhook"
             )
 
-        return await self._pollVideoResults(taskUUID, 1, IVideo)
+        return await self._handleInitialVideoResponse(
+            taskUUID,
+            1,
+            requestVideoUpscale.deliveryMethod,
+            task_params.get("webhookURL"),
+            "video-upscale-initial"
+        )
 
     async def imageBackgroundRemoval(
         self, removeImageBackgroundPayload: IImageBackgroundRemoval
@@ -1770,7 +1782,8 @@ class RunwareBase:
             requestVideo.taskUUID,
             requestVideo.numberResults,
             requestVideo.deliveryMethod,
-            request_object.get("webhookURL")
+            request_object.get("webhookURL"),
+            "video-inference-initial"
         )
 
     async def _processVideoImages(self, requestVideo: IVideoInference) -> None:
@@ -2061,7 +2074,7 @@ class RunwareBase:
 
         return response
 
-    async def _handleInitialVideoResponse(self, task_uuid: str, number_results: int, delivery_method: str = "async", webhook_url: Optional[str] = None) -> Union[List[IVideo], IAsyncTaskResponse]:
+    async def _handleInitialVideoResponse(self, task_uuid: str, number_results: int, delivery_method: str = "async", webhook_url: Optional[str] = None, debug_key: str = "video-inference-initial") -> Union[List[IVideo], IAsyncTaskResponse]:
         lis = self.globalListener(taskUUID=task_uuid)
 
         async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
@@ -2076,10 +2089,8 @@ class RunwareBase:
                 if response.get("code"):
                     raise RunwareAPIError(response)
 
-                # Check if video is complete: status == "success" OR videoUUID exists
-                is_complete = response.get("status") == "success" or response.get("videoUUID") is not None
                 
-                if is_complete:
+                if response.get("status") == "success" or response.get("videoUUID") is not None or response.get("mediaUUID") is not None:
                     del self._globalMessages[task_uuid]
                     resolve([response])
                     return True
@@ -2090,25 +2101,21 @@ class RunwareBase:
                     resolve([async_response])
                     return True
 
-                # For async mode: return IAsyncTaskResponse immediately (user polls via getResponse)
                 if delivery_method == "async":
                     del self._globalMessages[task_uuid]
                     async_response = createAsyncTaskResponse(response)
                     resolve([async_response])
                     return True
 
-                # For sync mode: wait for complete results (status == "success" OR videoUUID exists)
-                # If we get here, it means no complete results yet, but we'll wait for timeout
                 return False
 
             return False
 
         try:
-            # Use longer timeout for sync mode (8 minutes), shorter for async (30 seconds)
             timeout_duration = TIMEOUT_DURATION if delivery_method == "sync" else VIDEO_INITIAL_TIMEOUT
             initial_response = await getIntervalWithPromise(
                 check_initial_response,
-                debugKey="video-inference-initial",
+                debugKey=debug_key,
                 timeOutDuration=timeout_duration,
                 shouldThrowError=False
             )
@@ -2117,21 +2124,17 @@ class RunwareBase:
         finally:
             lis["destroy"]()
 
-        # Handle sync mode timeout: return IAsyncTaskResponse (task continues in background)
         if initial_response is None and delivery_method == "sync":
             return IAsyncTaskResponse(
                 taskType=ETaskType.VIDEO_INFERENCE.value,
                 taskUUID=task_uuid
             )
 
-        # Handle responses
         if initial_response and len(initial_response) > 0:
             if isinstance(initial_response[0], IAsyncTaskResponse):
                 return initial_response[0]
-            # Complete results for sync mode
             return instantiateDataclassList(IVideo, initial_response)
         
-        # Fallback: return IAsyncTaskResponse
         return IAsyncTaskResponse(
             taskType=ETaskType.VIDEO_INFERENCE.value,
             taskUUID=task_uuid
@@ -2142,12 +2145,10 @@ class RunwareBase:
             try:
                 responses = await self._sendPollRequest(task_uuid, poll_count)
 
-                # Check if there are any error code, if so, raise RunwareAPIError
                 for response in responses:
                     if response.get("code"):
                         raise RunwareAPIError(response)
 
-                # Process responses using the unified method
                 completed_results = self._processVideoPollingResponse(responses)
 
                 if len(completed_results) >= number_results:
@@ -2159,13 +2160,11 @@ class RunwareBase:
             except RunwareAPIError:
                 raise
             except Exception as e:
-                # For other exceptions, only raise on last poll
                 if poll_count >= MAX_POLLS_VIDEO_GENERATION - 1:
                     raise e
 
             await asyncio.sleep(VIDEO_POLLING_DELAY / 1000)
 
-        # Different timeout messages based on response type
         timeout_msg = "Timed out"
         raise RunwareAPIError({"message": timeout_msg})
 
