@@ -2108,21 +2108,14 @@ class RunwareBase:
             initial_response = await getIntervalWithPromise(
                 check_initial_response,
                 debugKey=debug_key,
-                timeOutDuration=VIDEO_INITIAL_TIMEOUT,
-                shouldThrowError=False
+                timeOutDuration=TIMEOUT_DURATION if delivery_method == "sync" else VIDEO_INITIAL_TIMEOUT
             )
         except Exception as e:
             initial_response = None
         finally:
             lis["destroy"]()
 
-        if initial_response is None and delivery_method == "sync":
-            return IAsyncTaskResponse(
-                taskType=ETaskType.VIDEO_INFERENCE.value,
-                taskUUID=task_uuid
-            )
-
-        if initial_response and len(initial_response) > 0:
+        if initial_response:
             if isinstance(initial_response[0], IAsyncTaskResponse):
                 return initial_response[0]
             return instantiateDataclassList(IVideo, initial_response)
