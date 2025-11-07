@@ -2377,16 +2377,24 @@ class RunwareBase:
 
         try:
             for poll_count in range(MAX_POLLS_AUDIO_GENERATION):
-                async with self._messages_lock:
-                    responses = self._globalMessages.get(task_uuid, [])
-                    if not isinstance(responses, list):
-                        responses = [responses] if responses else []
+                try:
+                    responses = await self._sendPollRequest(task_uuid, poll_count)
 
-                processed_responses = self._processAudioPollingResponse(responses)
-                completed_results.extend(processed_responses)
+                    for response in responses:
+                        if response.get("code"):
+                            raise RunwareAPIError(response)
 
-                if len(completed_results) >= number_results:
-                    break
+                    processed_responses = self._processAudioPollingResponse(responses)
+                    completed_results.extend(processed_responses)
+
+                    if len(completed_results) >= number_results:
+                        break
+
+                except RunwareAPIError:
+                    raise
+                except Exception as e:
+                    if poll_count >= MAX_POLLS_AUDIO_GENERATION - 1:
+                        raise e
 
                 if poll_count >= MAX_POLLS_AUDIO_GENERATION - 1:
                     raise RunwareAPIError(
