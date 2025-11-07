@@ -100,6 +100,10 @@ class EOpenPosePreProcessor(Enum):
     openpose_full = "openpose_full"
     openpose_hand = "openpose_hand"
 
+class EDeliveryMethod(Enum):
+    SYNC = "sync"
+    ASYNC = "async"
+
 
 # Define the types using Literal
 IOutputType = Literal["base64Data", "dataURI", "URL"]
@@ -510,9 +514,13 @@ class ILightricksProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class IInputs:
+class IInputs(BaseRequestField):
     references: Optional[List[Union[str, File]]] = field(default_factory=list)
     image: Optional[Union[str, File]] = None
+
+    @property
+    def request_key(self) -> str:
+        return "inputs"
 
 
 ImageProviderSettings = IOpenAIProviderSettings | IBriaProviderSettings | ILightricksProviderSettings
@@ -527,7 +535,7 @@ class IInputFrame:
 
 
 @dataclass
-class IVideoInputs:
+class IVideoInputs(BaseRequestField):
     references: Optional[List[Union[str, File, Dict[str, Any]]]] = field(default_factory=list)
     image: Optional[Union[str, File]] = None
     images: Optional[List[Union[str, File]]] = None
@@ -536,6 +544,10 @@ class IVideoInputs:
     audio: Optional[str] = None
     mask: Optional[Union[str, File]] = None
     frame: Optional[str] = None
+
+    @property
+    def request_key(self) -> str:
+        return "inputs"
 
 
 @dataclass
@@ -1039,8 +1051,12 @@ class IVideoInference:
 
 
 @dataclass
-class IAudioInputs:
+class IAudioInputs(BaseRequestField):
     video: Optional[str] = None
+
+    @property
+    def request_key(self) -> str:
+        return "inputs"
 
 
 @dataclass
