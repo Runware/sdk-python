@@ -1994,26 +1994,6 @@ class RunwareBase:
         if hasattr(requestImage, "extraArgs") and isinstance(requestImage.extraArgs, dict):
             request_object.update(requestImage.extraArgs)
 
-    def _addImageInputs(self, request_object: Dict[str, Any], requestImage: IImageInference) -> None:
-        # Add inputs if present
-        if requestImage.inputs:
-            inputs_dict = {
-                k: v for k, v in asdict(requestImage.inputs).items() 
-                if v is not None
-            }
-            if inputs_dict:
-                request_object["inputs"] = inputs_dict
-
-    def _addVideoInputs(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
-        # Add inputs if present
-        if requestVideo.inputs:
-            inputs_dict = {
-                k: v for k, v in asdict(requestVideo.inputs).items() 
-                if v is not None
-            }
-            if inputs_dict:
-                request_object["inputs"] = inputs_dict
-
     def _addSafetySettings(self, request_object: Dict[str, Any], safety: ISafety) -> None:
         safety_dict = asdict(safety)
         safety_dict = {k: v for k, v in safety_dict.items() if v is not None}
@@ -2256,16 +2236,6 @@ class RunwareBase:
         provider_dict = requestAudio.providerSettings.to_request_dict()
         if provider_dict:
             request_object["providerSettings"] = provider_dict
-
-    def _addAudioInputs(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
-        
-        if requestAudio.inputs:
-            inputs_dict = {
-                k: v for k, v in asdict(requestAudio.inputs).items() 
-                if v is not None
-            }
-            if inputs_dict:
-                request_object["inputs"] = inputs_dict
 
     async def _handleInitialAudioResponse(
         self,
