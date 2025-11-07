@@ -78,6 +78,7 @@ from .utils import (
     IMAGE_OPERATION_TIMEOUT,
     PROMPT_ENHANCE_TIMEOUT,
     IMAGE_UPLOAD_TIMEOUT,
+    AUDIO_INITIAL_TIMEOUT,
     AUDIO_INFERENCE_TIMEOUT,
     AUDIO_POLLING_DELAY,
     MAX_POLLS_AUDIO_GENERATION,
@@ -1757,10 +1758,15 @@ class RunwareBase:
     async def getResponse(
         self,
         taskUUID: str,
-        numberResults: int = 1
-    ) -> List[IVideo]:
+        numberResults: int = 1,
+        response_cls: IVideo | IAudio = IVideo,
+    ) -> List[Any]:
         await self.ensureConnection()
-        return await self._pollVideoResults(taskUUID, numberResults, IVideo)
+
+        if response_cls is IAudio:
+            return await self._pollAudioResults(taskUUID, numberResults)
+
+        return await self._pollVideoResults(taskUUID, numberResults, response_cls)
 
     async def _requestVideo(self, requestVideo: IVideoInference) -> Union[List[IVideo], IAsyncTaskResponse]:
         await self._processVideoImages(requestVideo)
@@ -2200,15 +2206,21 @@ class RunwareBase:
     def _hasPendingVideos(self, responses: List[Dict[str, Any]]) -> bool:
         return any(response.get("status") == "processing" for response in responses)
 
-    async def audioInference(self, requestAudio: IAudioInference) -> List[IAudio]:
+    async def audioInference(self, requestAudio: IAudioInference) -> Union[List[IAudio], IAsyncTaskResponse]:
         await self.ensureConnection()
         return await asyncRetry(lambda: self._requestAudio(requestAudio))
 
-    async def _requestAudio(self, requestAudio: IAudioInference) -> List[IAudio]:
+    async def _requestAudio(self, requestAudio: IAudioInference) -> Union[List[IAudio], IAsyncTaskResponse]:
         requestAudio.taskUUID = requestAudio.taskUUID or getUUID()
         request_object = self._buildAudioRequest(requestAudio)
         await self.send([request_object])
-        return await self._handleInitialAudioResponse(requestAudio.taskUUID, requestAudio.numberResults)
+        return await self._handleInitialAudioResponse(
+            requestAudio.taskUUID,
+            requestAudio.numberResults,
+            requestAudio.deliveryMethod,
+            request_object.get("webhookURL"),
+            "audio-inference-initial"
+        )
 
     def _buildAudioRequest(self, requestAudio: IAudioInference) -> Dict[str, Any]:
         request_object = {
@@ -2251,14 +2263,66 @@ class RunwareBase:
         if provider_dict:
             request_object["providerSettings"] = provider_dict
 
-    async def _handleInitialAudioResponse(self, task_uuid: str, number_results: int) -> List[IAudio]:
-        if number_results == 1:
-            # Single result - wait for completion
-            response = await self._waitForAudioCompletion(task_uuid)
-            return [response] if response else []
-        else:
-            # Multiple results - use polling
-            return await self._pollAudioResults(task_uuid, number_results)
+    async def _handleInitialAudioResponse(
+        self,
+        task_uuid: str,
+        number_results: int,
+        delivery_method: str = "sync",
+        webhook_url: Optional[str] = None,
+        debug_key: str = "audio-inference-initial"
+    ) -> Union[List[IAudio], IAsyncTaskResponse]:
+        lis = self.globalListener(taskUUID=task_uuid)
+
+        async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
+            async with self._messages_lock:
+                response_list = self._globalMessages.get(task_uuid, [])
+
+                if not response_list:
+                    return False
+
+                response = response_list[0]
+
+                if response.get("code"):
+                    raise RunwareAPIError(response)
+
+                if response.get("status") == "success" or response.get("audioUUID") is not None:
+                
+                    del self._globalMessages[task_uuid]
+                    resolve([response])
+                    return True
+
+                if webhook_url or delivery_method == "async":
+                    del self._globalMessages[task_uuid]
+                    async_response = createAsyncTaskResponse(response)
+                    resolve([async_response])
+                    return True
+
+                return False
+
+        try:
+            initial_response = await getIntervalWithPromise(
+                check_initial_response,
+                debugKey=debug_key,
+                timeOutDuration=TIMEOUT_DURATION if delivery_method == "sync" else AUDIO_INITIAL_TIMEOUT
+            )
+        except Exception as e:
+            if delivery_method == "sync":
+                lis["destroy"]()
+                error_msg = (
+                    f"Timeout waiting for audio generation | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Timeout: {TIMEOUT_DURATION}ms | "
+                    f"Original error: {str(e)}"
+                )
+                raise Exception(error_msg)
+            initial_response = None
+        finally:
+            lis["destroy"]()
+
+        if initial_response and isinstance(initial_response[0], IAsyncTaskResponse):
+            return initial_response[0]
+
+        return instantiateDataclassList(IAudio, initial_response)
 
     async def _waitForAudioCompletion(self, task_uuid: str) -> Optional[IAudio]:
         lis = self.globalListener(taskUUID=task_uuid)
