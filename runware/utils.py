@@ -38,7 +38,7 @@ if not mimetypes.guess_type("test.webp")[0]:
     mimetypes.add_type("image/webp", ".webp")
 
 BASE_RUNWARE_URLS = {
-    Environment.PRODUCTION: "wss://ws-api.runware.dev/v1",
+    Environment.PRODUCTION: "wss://ws-api.runware.ai/v1",
     Environment.TEST: "ws://localhost:8080",
 }
 
