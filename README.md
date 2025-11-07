@@ -239,6 +239,46 @@ async def main() -> None:
 - `skipResponse`: Set to `True` to return immediately with `taskUUID` instead of waiting for completion
 - Use `getResponse(taskUUID)` to retrieve results at any time
 
+### Video Inference with Async Delivery Method
+
+For long-running video generation tasks, you can use `deliveryMethod="async"` to submit the task and retrieve results later. This is useful for handling system interruptions, batch processing, or building queue-based systems.
+
+```python
+from runware import Runware, IVideoInference
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    # Submit video task with async delivery method
+    request = IVideoInference(
+            model="openai:3@2",
+            positivePrompt="A beautiful sunset over the ocean",
+            duration=4,
+            width=1280,
+            height=720,
+            deliveryMethod="async",
+    )
+
+    response = await runware.videoInference(requestVideo=request)
+    task_uuid = response.taskUUID
+    print(f"Task submitted: {task_uuid}")
+    
+    # Later, retrieve results
+    videos = await runware.getResponse(
+        taskUUID=task_uuid,
+        numberResults=1
+    )
+    
+    for video in videos:
+        print(f"Video URL: {video.videoURL}")
+```
+
+**Parameters:**
+- `deliveryMethod`: Set to `"async"` to return immediately with `IAsyncTaskResponse` containing `taskUUID` instead of waiting for completion
+- Use `getResponse(taskUUID)` to retrieve results at any time
+- `deliveryMethod="sync"` waits for complete results (may timeout for long-running tasks)
+
 ### Enhancing Prompts
 
 To enhance prompts using the Runware API, you can use the `promptEnhance` method of the `Runware` class. Here's an example:

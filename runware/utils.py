@@ -98,6 +98,14 @@ VIDEO_POLLING_DELAY = int(os.environ.get(
     3000
 ))
 
+# Audio initial response timeout (milliseconds)
+# Maximum time to wait for the initial audio response before falling back to async handling
+# Used in: _handleInitialAudioResponse() for async delivery method
+AUDIO_INITIAL_TIMEOUT = int(os.environ.get(
+    "RUNWARE_AUDIO_INITIAL_TIMEOUT",
+    30000
+))
+
 # Audio generation timeout (milliseconds)
 # Maximum time to wait for audio generation completion
 # Used in: _waitForAudioCompletion() for single audio generation
