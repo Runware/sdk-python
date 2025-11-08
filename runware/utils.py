@@ -155,6 +155,9 @@ MAX_POLLS_VIDEO_GENERATION = int(os.environ.get("RUNWARE_MAX_POLLS_VIDEO_GENERAT
 # Used in: _pollAudioResults() for audio generation status checks
 MAX_POLLS_AUDIO_GENERATION = int(os.environ.get("RUNWARE_MAX_POLLS_AUDIO_GENERATION", 240))
 
+
+MAX_POLLS = int(os.environ.get("RUNWARE_MAX_POLLS", 480))
+
 class LISTEN_TO_IMAGES_KEY:
     REQUEST_IMAGES = "REQUEST_IMAGES"
 

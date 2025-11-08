@@ -82,8 +82,9 @@ from .utils import (
     AUDIO_INITIAL_TIMEOUT,
     AUDIO_INFERENCE_TIMEOUT,
     AUDIO_POLLING_DELAY,
-    MAX_POLLS_AUDIO_GENERATION,
+    MAX_POLLS,
     MAX_POLLS_VIDEO_GENERATION,
+    MAX_POLLS_AUDIO_GENERATION,
 )
 
 # Configure logging
@@ -650,8 +651,10 @@ class RunwareBase:
                 debug_key="video-caption-webhook"
             )
 
-        # For async without webhook, poll for results using _pollVideoResults
-        return await self._pollVideoResults(taskUUID, 1, IVideoToText)
+        return await self._pollResults(
+            task_uuid=taskUUID,
+            number_results=1,
+        )
 
     async def videoBackgroundRemoval(self, requestVideoBackgroundRemoval: IVideoBackgroundRemoval) -> Union[List[IVideo], IAsyncTaskResponse]:
 
@@ -1760,17 +1763,13 @@ class RunwareBase:
         self,
         taskUUID: str,
         numberResults: int = 1,
-        response_cls: IVideo | IAudio = IVideo,
-    ) -> List[Any]:
+    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText]]:
         await self.ensureConnection()
 
-        match response_cls:
-            case cls if cls is IAudio:
-                return await self._pollAudioResults(taskUUID, numberResults)
-            case cls if cls in (IVideo, IVideoToText):
-                return await self._pollVideoResults(taskUUID, numberResults, response_cls)
-            case _:
-                raise ValueError(f"Unsupported response class for polling: {response_cls}")
+        return await self._pollResults(
+            task_uuid=taskUUID,
+            number_results=numberResults,
+        )
 
     async def _requestVideo(self, requestVideo: IVideoInference) -> Union[List[IVideo], IAsyncTaskResponse]:
         await self._processVideoImages(requestVideo)
@@ -2118,38 +2117,6 @@ class RunwareBase:
         
         return instantiateDataclassList(IVideo, initial_response)
 
-    async def _pollVideoResults(self, task_uuid: str, number_results: int, response_cls: IVideo | IVideoToText = IVideo) -> Union[List[IVideo], List[IVideoToText]]:
-        for poll_count in range(MAX_POLLS_VIDEO_GENERATION):
-            try:
-                responses = await self._sendPollRequest(task_uuid, poll_count)
-
-                # Check if there are any error code, if so, raise RunwareAPIError
-                for response in responses:
-                    if response.get("code"):
-                        raise RunwareAPIError(response)
-
-                # Process responses using the unified method
-                completed_results = self._processPollingResponse(responses)
-
-                if len(completed_results) >= number_results:
-                    return instantiateDataclassList(response_cls, completed_results[:number_results])
-
-                if not self._hasPendingVideos(responses) and not completed_results:
-                    raise RunwareAPIError({"message": f"Unexpected polling response at poll {poll_count}"})
-
-            except RunwareAPIError:
-                raise
-            except Exception as e:
-                # For other exceptions, only raise on last poll
-                if poll_count >= MAX_POLLS_VIDEO_GENERATION - 1:
-                    raise e
-
-            await asyncio.sleep(VIDEO_POLLING_DELAY / 1000)
-
-        # Different timeout messages based on response type
-        timeout_msg = "Timed out"
-        raise RunwareAPIError({"message": timeout_msg})
-
     async def _sendPollRequest(self, task_uuid: str, poll_count: int) -> List[Dict[str, Any]]:
         lis = self.globalListener(taskUUID=task_uuid)
 
@@ -2170,13 +2137,13 @@ class RunwareBase:
 
             return await getIntervalWithPromise(
                 check_poll_response,
-                debugKey=f"video-poll-{poll_count}",
+                debugKey=f"poll-{poll_count}",
                 timeOutDuration=VIDEO_INITIAL_TIMEOUT
             )
         finally:
             lis["destroy"]()
 
-    def _hasPendingVideos(self, responses: List[Dict[str, Any]]) -> bool:
+    def _hasPendingResults(self, responses: List[Dict[str, Any]]) -> bool:
         return any(response.get("status") == "processing" for response in responses)
 
     async def audioInference(self, requestAudio: IAudioInference) -> Union[List[IAudio], IAsyncTaskResponse]:
@@ -2335,45 +2302,6 @@ class RunwareBase:
             lis["destroy"]()
             raise e
 
-    async def _pollAudioResults(self, task_uuid: str, number_results: int) -> List[IAudio]:
-        completed_results = []
-        lis = self.globalListener(taskUUID=task_uuid)
-
-        try:
-            for poll_count in range(MAX_POLLS_AUDIO_GENERATION):
-                try:
-                    responses = await self._sendPollRequest(task_uuid, poll_count)
-
-                    for response in responses:
-                        if response.get("code"):
-                            raise RunwareAPIError(response)
-
-                    processed_responses = self._processPollingResponse(responses)
-                    completed_results.extend(processed_responses)
-
-                    if len(completed_results) >= number_results:
-                        break
-
-                except RunwareAPIError:
-                    raise
-                except Exception as e:
-                    if poll_count >= MAX_POLLS_AUDIO_GENERATION - 1:
-                        raise e
-
-                if poll_count >= MAX_POLLS_AUDIO_GENERATION - 1:
-                    raise RunwareAPIError(
-                        {"message": f"Audio generation timeout after {MAX_POLLS_AUDIO_GENERATION} polls"})
-
-                await asyncio.sleep(AUDIO_POLLING_DELAY / 1000)
-
-        finally:
-            lis["destroy"]()
-            async with self._messages_lock:
-                if task_uuid in self._globalMessages:
-                    del self._globalMessages[task_uuid]
-
-        return [self._createAudioFromResponse(response) for response in completed_results[:number_results]]
-
     def _processPollingResponse(self, responses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         completed_results: List[Dict[str, Any]] = []
 
@@ -2385,6 +2313,93 @@ class RunwareBase:
                 completed_results.append(response)
 
         return completed_results
+
+    async def _pollResults(
+        self,
+        task_uuid: str,
+        number_results: int,
+    ) -> Union[List[IVideo], List[IVideoToText], List[IAudio]]:
+        completed_results: List[Dict[str, Any]] = []
+        lis = self.globalListener(taskUUID=task_uuid)
+
+        task_type = None
+        response_cls: Optional[Union[IVideo, IVideoToText, IAudio]] = None
+        max_polls: int = MAX_POLLS
+        polling_delay: int = VIDEO_POLLING_DELAY
+        timeout_message: str = f"Polling timeout after {MAX_POLLS} polls"
+
+        def configure_from_task_type(task_type: Optional[str]) -> None:
+            nonlocal response_cls, max_polls, polling_delay, timeout_message
+            if not task_type or response_cls is not None:
+                return
+
+            match task_type:
+                case ETaskType.AUDIO_INFERENCE.value:
+                    response_cls = IAudio
+                    max_polls = MAX_POLLS
+                    polling_delay = AUDIO_POLLING_DELAY
+                    timeout_message = f"Audio generation timeout after {MAX_POLLS} polls"
+                case ETaskType.VIDEO_CAPTION.value:
+                    response_cls = IVideoToText
+                    max_polls = MAX_POLLS
+                    polling_delay = VIDEO_POLLING_DELAY
+                    timeout_message = f"Video caption generation timeout after {MAX_POLLS} polls"
+                case (
+                    ETaskType.VIDEO_INFERENCE.value
+                    | ETaskType.VIDEO_BACKGROUND_REMOVAL.value
+                    | ETaskType.VIDEO_UPSCALE.value
+                ):
+                    response_cls = IVideo
+                    max_polls = MAX_POLLS
+                    polling_delay = VIDEO_POLLING_DELAY
+                    timeout_message = f"Video generation timeout after {MAX_POLLS} polls"
+                case _:
+                    raise ValueError(f"Unsupported task type for polling: {task_type}")
+
+        try:
+            for poll_count in range(MAX_POLLS):
+                try:
+                    responses = await self._sendPollRequest(task_uuid, poll_count)
+
+                    for response in responses:
+                        if response.get("code"):
+                            raise RunwareAPIError(response)
+
+                    if task_type is None:
+                        for resp in responses:
+                            task_type = resp.get("taskType")
+                            if task_type:
+                                configure_from_task_type(task_type)
+                                break
+
+                    processed_responses = self._processPollingResponse(responses)
+                    completed_results.extend(processed_responses)
+
+                    if len(completed_results) >= number_results:
+                        return instantiateDataclassList(
+                            response_cls,
+                            completed_results[:number_results]
+                        )
+
+                    if not processed_responses and not self._hasPendingResults(responses):
+                        raise RunwareAPIError({"message": f"Unexpected polling response at poll {poll_count}"})
+
+                except RunwareAPIError:
+                    raise
+                except Exception as e:
+                    if poll_count >= max_polls - 1:
+                        raise e
+
+                if poll_count >= max_polls - 1:
+                    raise RunwareAPIError({"message": timeout_message})
+
+                await asyncio.sleep(polling_delay / 1000)
+
+        finally:
+            lis["destroy"]()
+            async with self._messages_lock:
+                if task_uuid in self._globalMessages:
+                    del self._globalMessages[task_uuid]
 
     def _createAudioFromResponse(self, response: Dict[str, Any]) -> IAudio:
         return IAudio(
