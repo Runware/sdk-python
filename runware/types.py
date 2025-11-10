@@ -531,7 +531,7 @@ class IVideoInputs:
     references: Optional[List[Union[str, File, Dict[str, Any]]]] = field(default_factory=list)
     image: Optional[Union[str, File]] = None
     images: Optional[List[Union[str, File]]] = None
-    frames: Optional[List[IInputFrame]] = None
+    frameImages: Optional[List[IInputFrame]] = None
     video: Optional[str] = None
     audio: Optional[str] = None
     mask: Optional[Union[str, File]] = None
@@ -917,6 +917,21 @@ class IKlingAIProviderSettings(BaseProviderSettings):
 
 
 @dataclass
+class ILumaConcept(SerializableMixin):
+    key: Optional[str] = None
+
+
+@dataclass
+class ILumaProviderSettings(BaseProviderSettings):
+    loop: Optional[bool] = None
+    concepts: Optional[List[ILumaConcept]] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "lumaai"
+
+
+@dataclass
 class IPixverseSpeechSettings(BaseRequestField):
     voice: Optional[str] = None  # Speaker voice from the available TTS speaker list
     text: Optional[str] = None  # Text script to be converted to speech (~200 characters, not UTF-8 Encoding)
@@ -989,7 +1004,16 @@ class IRunwayProviderSettings(BaseProviderSettings):
         return result
 
 
-VideoProviderSettings = IKlingAIProviderSettings | IGoogleProviderSettings | IMinimaxProviderSettings | IBytedanceProviderSettings | IPixverseProviderSettings | IViduProviderSettings | IRunwayProviderSettings
+VideoProviderSettings = (
+    IKlingAIProviderSettings
+    | IGoogleProviderSettings
+    | IMinimaxProviderSettings
+    | IBytedanceProviderSettings
+    | IPixverseProviderSettings
+    | IViduProviderSettings
+    | IRunwayProviderSettings
+    | ILumaProviderSettings
+)
 AudioProviderSettings = IElevenLabsProviderSettings
 
 @dataclass

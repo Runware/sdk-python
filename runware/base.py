@@ -1827,7 +1827,6 @@ class RunwareBase:
         self._addOptionalField(request_object, requestVideo.advancedFeatures)
         self._addOptionalField(request_object, requestVideo.acceleratorOptions)
         
-
         return request_object
 
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
