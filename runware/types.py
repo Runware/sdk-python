@@ -2,6 +2,7 @@ from abc import abstractmethod, ABC
 from enum import Enum
 from dataclasses import dataclass, field, asdict
 from typing import List, Union, Optional, Callable, Any, Dict, TypeVar, Literal
+import warnings
 
 
 class Environment(Enum):
@@ -510,20 +511,35 @@ class ILightricksProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class IInputs:
-    references: Optional[List[Union[str, File]]] = field(default_factory=list)
-    image: Optional[Union[str, File]] = None
-
-
-ImageProviderSettings = IOpenAIProviderSettings | IBriaProviderSettings | ILightricksProviderSettings
-
-
-
-
-@dataclass
 class IInputFrame:
     image: Union[str, File]
     frame: Optional[Union[Literal["first", "last"], int]] = None
+
+
+@dataclass
+class IInputReference:
+    image: Union[str, File]
+    tag: Optional[str] = None
+
+
+@dataclass
+class IInputs:
+    references: Optional[List[Union[str, File]]] = field(default_factory=list)
+    referenceImages: Optional[List[IInputReference]] = None
+    image: Optional[Union[str, File]] = None
+    
+    def __post_init__(self):
+        if self.references:
+            warnings.warn(
+                "The 'references' parameter is deprecated and will be removed in a future release. Use 'referenceImages' instead.",
+                DeprecationWarning,
+                stacklevel=3
+            )
+            if self.referenceImages is None:
+                self.referenceImages = [IInputReference(image=ref) if isinstance(ref, (str, File)) else IInputReference(**ref) for ref in self.references]
+
+
+ImageProviderSettings = IOpenAIProviderSettings | IBriaProviderSettings | ILightricksProviderSettings
 
 
 @dataclass
@@ -531,11 +547,32 @@ class IVideoInputs:
     references: Optional[List[Union[str, File, Dict[str, Any]]]] = field(default_factory=list)
     image: Optional[Union[str, File]] = None
     images: Optional[List[Union[str, File]]] = None
+    frames: Optional[List[IInputFrame]] = None
     frameImages: Optional[List[IInputFrame]] = None
+    referenceImages: Optional[List[IInputReference]] = None
     video: Optional[str] = None
     audio: Optional[str] = None
     mask: Optional[Union[str, File]] = None
     frame: Optional[str] = None
+    
+    def __post_init__(self):
+        if self.frames is not None:
+            warnings.warn(
+                "The 'frames' parameter is deprecated and will be removed in a future release. Use 'frameImages' instead.",
+                DeprecationWarning,
+                stacklevel=3
+            )
+            if self.frameImages is None:
+                self.frameImages = self.frames
+        
+        if self.references:
+            warnings.warn(
+                "The 'references' parameter is deprecated and will be removed in a future release. Use 'referenceImages' instead.",
+                DeprecationWarning,
+                stacklevel=3
+            )
+            if self.referenceImages is None:
+                self.referenceImages = [IInputReference(image=ref) if isinstance(ref, (str, File)) else IInputReference(**ref) for ref in self.references]
 
 
 @dataclass
