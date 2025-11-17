@@ -335,6 +335,7 @@ class RunwareBase:
         try:
             await self.ensureConnection()
             control_net_data: List[IControlNet] = []
+            requestImage.taskUUID = requestImage.taskUUID or getUUID()
             requestImage.maskImage = await process_image(requestImage.maskImage)
             requestImage.seedImage = await process_image(requestImage.seedImage)
             if requestImage.referenceImages:
