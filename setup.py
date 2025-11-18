@@ -20,7 +20,7 @@ setup(
         "Code": "https://github.com/runware/sdk-python",
         "Issue tracker": "https://github.com/runware/sdk-python/issues",
     },
-    packages=find_packages(),
+    packages=find_packages(exclude=("tests",)),
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
