@@ -495,6 +495,11 @@ class IBriaProviderSettings(BaseProviderSettings):
     contentModeration: Optional[bool] = None
     ipSignal: Optional[bool] = None
     preserveAlpha: Optional[bool] = None
+    mode: Optional[Literal["base", "high_control", "fast"]] = None
+    enhanceReferenceImages: Optional[bool] = None
+    refinePrompt: Optional[bool] = None
+    originalQuality: Optional[bool] = None
+    forceBackgroundDetection: Optional[bool] = None
 
     @property
     def provider_key(self) -> str:
@@ -508,6 +513,17 @@ class ILightricksProviderSettings(BaseProviderSettings):
     @property
     def provider_key(self) -> str:
         return "lightricks"
+
+@dataclass
+class ISafety(BaseRequestField):
+    tolerance: Optional[bool] = None
+    checkInputs: Optional[bool] = None
+    checkContent: Optional[bool] = None
+    mode: Optional[str] = None
+
+    @property
+    def request_key(self) -> str:
+        return "safety"  
 
 
 @dataclass
@@ -617,6 +633,7 @@ class IImageInference:
     acePlusPlus: Optional[IAcePlusPlus] = None
     puLID: Optional[IPuLID] = None
     providerSettings: Optional[ImageProviderSettings] = None
+    safety: Optional[ISafety] = None
     inputs: Optional[IInputs] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
     webhookURL: Optional[str] = None
@@ -670,18 +687,6 @@ class IImageToText:
     taskUUID: str
     text: str
     cost: Optional[float] = None
-
-
-@dataclass
-class ISafety(BaseRequestField):
-    tolerance: Optional[bool] = None
-    checkInputs: Optional[bool] = None
-    checkContent: Optional[bool] = None
-    mode: Optional[str] = None
-
-    @property
-    def request_key(self) -> str:
-        return "safety"  
 
 
 @dataclass

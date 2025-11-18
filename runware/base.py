@@ -1869,6 +1869,7 @@ class RunwareBase:
         self._addImageSpecialFields(request_object, requestImage, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
         self._addImageInputs(request_object, requestImage)
         self._addImageProviderSettings(request_object, requestImage)
+        self._addOptionalField(request_object, requestImage.safety)
         
         return request_object
 
