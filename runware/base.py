@@ -335,6 +335,7 @@ class RunwareBase:
         try:
             await self.ensureConnection()
             control_net_data: List[IControlNet] = []
+            requestImage.taskUUID = requestImage.taskUUID or getUUID()
             requestImage.maskImage = await process_image(requestImage.maskImage)
             requestImage.seedImage = await process_image(requestImage.seedImage)
             if requestImage.referenceImages:
@@ -1862,6 +1863,7 @@ class RunwareBase:
     def _buildImageRequest(self, requestImage: IImageInference, prompt: str, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> Dict[str, Any]:
         request_object = {
             "taskType": ETaskType.IMAGE_INFERENCE.value,
+            "taskUUID": requestImage.taskUUID,
             "model": requestImage.model,
             "positivePrompt": prompt,
         }
