@@ -2328,31 +2328,36 @@ class RunwareBase:
         polling_delay: int = VIDEO_POLLING_DELAY
         timeout_message: str = f"Polling timeout after {MAX_POLLS} polls"
 
-        def configure_from_task_type(task_type: Optional[str]) -> None:
-            nonlocal response_cls, max_polls, polling_delay, timeout_message
-            if not task_type or response_cls is not None:
-                return
+        def configure_from_task_type(task_type: Optional[str]) -> Optional[tuple]:
+            if not task_type:
+                return None
 
             match task_type:
                 case ETaskType.AUDIO_INFERENCE.value:
-                    response_cls = IAudio
-                    max_polls = MAX_POLLS
-                    polling_delay = AUDIO_POLLING_DELAY
-                    timeout_message = f"Audio generation timeout after {MAX_POLLS} polls"
+                    return (
+                        IAudio,
+                        MAX_POLLS,
+                        AUDIO_POLLING_DELAY,
+                        f"Audio generation timeout after {MAX_POLLS} polls"
+                    )
                 case ETaskType.VIDEO_CAPTION.value:
-                    response_cls = IVideoToText
-                    max_polls = MAX_POLLS
-                    polling_delay = VIDEO_POLLING_DELAY
-                    timeout_message = f"Video caption generation timeout after {MAX_POLLS} polls"
+                    return (
+                        IVideoToText,
+                        MAX_POLLS,
+                        VIDEO_POLLING_DELAY,
+                        f"Video caption generation timeout after {MAX_POLLS} polls"
+                    )
                 case (
                     ETaskType.VIDEO_INFERENCE.value
                     | ETaskType.VIDEO_BACKGROUND_REMOVAL.value
                     | ETaskType.VIDEO_UPSCALE.value
                 ):
-                    response_cls = IVideo
-                    max_polls = MAX_POLLS
-                    polling_delay = VIDEO_POLLING_DELAY
-                    timeout_message = f"Video generation timeout after {MAX_POLLS} polls"
+                    return (
+                        IVideo,
+                        MAX_POLLS,
+                        VIDEO_POLLING_DELAY,
+                        f"Video generation timeout after {MAX_POLLS} polls"
+                    )
                 case _:
                     raise ValueError(f"Unsupported task type for polling: {task_type}")
 
@@ -2369,7 +2374,9 @@ class RunwareBase:
                         for resp in responses:
                             task_type = resp.get("taskType")
                             if task_type:
-                                configure_from_task_type(task_type)
+                                response_config = configure_from_task_type(task_type)
+                                if response_config:
+                                    response_cls, max_polls, polling_delay, timeout_message = response_config
                                 break
 
                     processed_responses = self._processPollingResponse(responses)
