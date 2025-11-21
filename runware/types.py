@@ -2,6 +2,7 @@ from abc import abstractmethod, ABC
 from enum import Enum
 from dataclasses import dataclass, field, asdict
 from typing import List, Union, Optional, Callable, Any, Dict, TypeVar, Literal
+import warnings
 
 
 class Environment(Enum):
@@ -494,6 +495,11 @@ class IBriaProviderSettings(BaseProviderSettings):
     contentModeration: Optional[bool] = None
     ipSignal: Optional[bool] = None
     preserveAlpha: Optional[bool] = None
+    mode: Optional[Literal["base", "high_control", "fast"]] = None
+    enhanceReferenceImages: Optional[bool] = None
+    refinePrompt: Optional[bool] = None
+    originalQuality: Optional[bool] = None
+    forceBackgroundDetection: Optional[bool] = None
 
     @property
     def provider_key(self) -> str:
@@ -507,7 +513,6 @@ class ILightricksProviderSettings(BaseProviderSettings):
     @property
     def provider_key(self) -> str:
         return "lightricks"
-
 
 @dataclass
 class IMidjourneyProviderSettings(BaseProviderSettings):
@@ -535,7 +540,15 @@ ImageProviderSettings = (
     | IMidjourneyProviderSettings
 )
 
+class ISafety(BaseRequestField):
+    tolerance: Optional[bool] = None
+    checkInputs: Optional[bool] = None
+    checkContent: Optional[bool] = None
+    mode: Optional[str] = None
 
+    @property
+    def request_key(self) -> str:
+        return "safety"  
 
 
 @dataclass
@@ -545,15 +558,62 @@ class IInputFrame:
 
 
 @dataclass
+class IInputReference:
+    image: Union[str, File]
+    tag: Optional[str] = None
+
+
+@dataclass
+class IInputs:
+    references: Optional[List[Union[str, File]]] = field(default_factory=list)
+    referenceImages: Optional[List[IInputReference]] = None
+    image: Optional[Union[str, File]] = None
+    
+    def __post_init__(self):
+        if self.references:
+            warnings.warn(
+                "The 'references' parameter is deprecated and will be removed in a future release. Use 'referenceImages' instead.",
+                DeprecationWarning,
+                stacklevel=3
+            )
+            if self.referenceImages is None:
+                self.referenceImages = [IInputReference(image=ref) if isinstance(ref, (str, File)) else IInputReference(**ref) for ref in self.references]
+
+
+ImageProviderSettings = IOpenAIProviderSettings | IBriaProviderSettings | ILightricksProviderSettings
+
+
+@dataclass
 class IVideoInputs:
     references: Optional[List[Union[str, File, Dict[str, Any]]]] = field(default_factory=list)
     image: Optional[Union[str, File]] = None
     images: Optional[List[Union[str, File]]] = None
     frames: Optional[List[IInputFrame]] = None
+    frameImages: Optional[List[IInputFrame]] = None
+    referenceImages: Optional[List[IInputReference]] = None
     video: Optional[str] = None
     audio: Optional[str] = None
     mask: Optional[Union[str, File]] = None
     frame: Optional[str] = None
+    
+    def __post_init__(self):
+        if self.frames is not None:
+            warnings.warn(
+                "The 'frames' parameter is deprecated and will be removed in a future release. Use 'frameImages' instead.",
+                DeprecationWarning,
+                stacklevel=3
+            )
+            if self.frameImages is None:
+                self.frameImages = self.frames
+        
+        if self.references:
+            warnings.warn(
+                "The 'references' parameter is deprecated and will be removed in a future release. Use 'referenceImages' instead.",
+                DeprecationWarning,
+                stacklevel=3
+            )
+            if self.referenceImages is None:
+                self.referenceImages = [IInputReference(image=ref) if isinstance(ref, (str, File)) else IInputReference(**ref) for ref in self.references]
 
 
 @dataclass
@@ -598,6 +658,7 @@ class IImageInference:
     acePlusPlus: Optional[IAcePlusPlus] = None
     puLID: Optional[IPuLID] = None
     providerSettings: Optional[ImageProviderSettings] = None
+    safety: Optional[ISafety] = None
     inputs: Optional[IInputs] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
     webhookURL: Optional[str] = None
@@ -651,18 +712,6 @@ class IImageToText:
     taskUUID: str
     text: str
     cost: Optional[float] = None
-
-
-@dataclass
-class ISafety(BaseRequestField):
-    tolerance: Optional[bool] = None
-    checkInputs: Optional[bool] = None
-    checkContent: Optional[bool] = None
-    mode: Optional[str] = None
-
-    @property
-    def request_key(self) -> str:
-        return "safety"  
 
 
 @dataclass
@@ -935,6 +984,21 @@ class IKlingAIProviderSettings(BaseProviderSettings):
 
 
 @dataclass
+class ILumaConcept(SerializableMixin):
+    key: Optional[str] = None
+
+
+@dataclass
+class ILumaProviderSettings(BaseProviderSettings):
+    loop: Optional[bool] = None
+    concepts: Optional[List[ILumaConcept]] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "lumaai"
+
+
+@dataclass
 class IPixverseSpeechSettings(BaseRequestField):
     voice: Optional[str] = None  # Speaker voice from the available TTS speaker list
     text: Optional[str] = None  # Text script to be converted to speech (~200 characters, not UTF-8 Encoding)
@@ -1007,7 +1071,16 @@ class IRunwayProviderSettings(BaseProviderSettings):
         return result
 
 
-VideoProviderSettings = IKlingAIProviderSettings | IGoogleProviderSettings | IMinimaxProviderSettings | IBytedanceProviderSettings | IPixverseProviderSettings | IViduProviderSettings | IRunwayProviderSettings
+VideoProviderSettings = (
+    IKlingAIProviderSettings
+    | IGoogleProviderSettings
+    | IMinimaxProviderSettings
+    | IBytedanceProviderSettings
+    | IPixverseProviderSettings
+    | IViduProviderSettings
+    | IRunwayProviderSettings
+    | ILumaProviderSettings
+)
 AudioProviderSettings = IElevenLabsProviderSettings
 
 @dataclass
