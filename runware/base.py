@@ -738,11 +738,12 @@ class RunwareBase:
             "inputs": {
                 "video": requestVideoUpscale.inputs.video
             },
-            "upscaleFactor": requestVideoUpscale.upscaleFactor,
             "deliveryMethod": requestVideoUpscale.deliveryMethod,
         }
 
         # Add optional parameters
+        if requestVideoUpscale.upscaleFactor is not None:
+            task_params["upscaleFactor"] = requestVideoUpscale.upscaleFactor
         if requestVideoUpscale.outputFormat:
             task_params["outputFormat"] = requestVideoUpscale.outputFormat
         if requestVideoUpscale.outputType:

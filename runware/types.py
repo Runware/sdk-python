@@ -1233,7 +1233,7 @@ class IVideoUpscaleInputs:
 class IVideoUpscale:
     model: str
     inputs: IVideoUpscaleInputs
-    upscaleFactor: Optional[int] = 2  # 2 or 4
+    upscaleFactor: Optional[int] = None  # 2 or 4 (optional, not supported by all models)
     deliveryMethod: str = "async"
     taskUUID: Optional[str] = None
     includeCost: Optional[bool] = None
@@ -1247,6 +1247,7 @@ class IVideoToText:
     taskType: str
     taskUUID: str
     text: Optional[str] = None
+    structuredData: Optional[Dict[str, Any]] = None
     status: Optional[str] = None
     cost: Optional[float] = None
 
