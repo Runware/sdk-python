@@ -335,6 +335,7 @@ class RunwareBase:
         try:
             await self.ensureConnection()
             control_net_data: List[IControlNet] = []
+            requestImage.taskUUID = requestImage.taskUUID or getUUID()
             requestImage.maskImage = await process_image(requestImage.maskImage)
             requestImage.seedImage = await process_image(requestImage.seedImage)
             if requestImage.referenceImages:
@@ -350,7 +351,7 @@ class RunwareBase:
                         control_data.preprocessor = control_data.preprocessor.value
                     control_data.guideImage = image_uploaded.imageUUID
                     control_net_data.append(control_data)
-            prompt = f"{requestImage.positivePrompt}".strip()
+            prompt = requestImage.positivePrompt.strip() if requestImage.positivePrompt else None
 
             control_net_data_dicts = [asdict(item) for item in control_net_data]
 
@@ -1841,7 +1842,6 @@ class RunwareBase:
         self._addOptionalField(request_object, requestVideo.advancedFeatures)
         self._addOptionalField(request_object, requestVideo.acceleratorOptions)
         
-        
         return request_object
 
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
@@ -1873,17 +1873,20 @@ class RunwareBase:
                 for lora in requestVideo.lora
             ]
 
-    def _buildImageRequest(self, requestImage: IImageInference, prompt: str, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> Dict[str, Any]:
+    def _buildImageRequest(self, requestImage: IImageInference, prompt: Optional[str], control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> Dict[str, Any]:
         request_object = {
             "taskType": ETaskType.IMAGE_INFERENCE.value,
+            "taskUUID": requestImage.taskUUID,
             "model": requestImage.model,
-            "positivePrompt": prompt,
         }
+        if prompt:
+            request_object["positivePrompt"] = prompt
         
         self._addOptionalImageFields(request_object, requestImage)
         self._addImageSpecialFields(request_object, requestImage, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
         self._addImageInputs(request_object, requestImage)
         self._addImageProviderSettings(request_object, requestImage)
+        self._addOptionalField(request_object, requestImage.safety)
         
         return request_object
 
