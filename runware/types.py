@@ -515,6 +515,31 @@ class ILightricksProviderSettings(BaseProviderSettings):
         return "lightricks"
 
 @dataclass
+class IMidjourneyProviderSettings(BaseProviderSettings):
+    quality: Optional[float] = None
+    stylize: Optional[int] = None
+    chaos: Optional[int] = None
+    weird: Optional[int] = None
+    niji: Optional[str] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "midjourney"
+
+
+@dataclass
+class IInputs:
+    references: Optional[List[Union[str, File]]] = field(default_factory=list)
+    image: Optional[Union[str, File]] = None
+
+
+ImageProviderSettings = (
+    IOpenAIProviderSettings
+    | IBriaProviderSettings
+    | ILightricksProviderSettings
+    | IMidjourneyProviderSettings
+)
+
 class ISafety(BaseRequestField):
     tolerance: Optional[bool] = None
     checkInputs: Optional[bool] = None
