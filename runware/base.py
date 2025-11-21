@@ -1904,7 +1904,8 @@ class RunwareBase:
             "outputType", "outputFormat", "outputQuality", "uploadEndpoint",
             "includeCost", "checkNsfw", "negativePrompt", "seedImage", "maskImage",
             "strength", "height", "width", "steps", "scheduler", "seed", "CFGScale",
-            "clipSkip", "promptWeighting", "maskMargin", "vae", "webhookURL", "acceleration"
+            "clipSkip", "promptWeighting", "maskMargin", "vae", "webhookURL", "acceleration",
+            "useCache"
         ]
         
         for field in optional_fields:

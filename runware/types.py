@@ -531,16 +531,6 @@ class IMidjourneyProviderSettings(BaseProviderSettings):
         return "midjourney"
 
 
-@dataclass
-class IInputs(BaseRequestField):
-    references: Optional[List[Union[str, File]]] = field(default_factory=list)
-    image: Optional[Union[str, File]] = None
-
-    @property
-    def request_key(self) -> str:
-        return "inputs"
-
-
 ImageProviderSettings = (
     IOpenAIProviderSettings
     | IBriaProviderSettings
@@ -548,6 +538,7 @@ ImageProviderSettings = (
     | IMidjourneyProviderSettings
 )
 
+@dataclass
 class ISafety(BaseRequestField):
     tolerance: Optional[bool] = None
     checkInputs: Optional[bool] = None
@@ -572,10 +563,14 @@ class IInputReference:
 
 
 @dataclass
-class IInputs:
+class IInputs(BaseRequestField):
     references: Optional[List[Union[str, File]]] = field(default_factory=list)
     referenceImages: Optional[List[IInputReference]] = None
     image: Optional[Union[str, File]] = None
+    
+    @property
+    def request_key(self) -> str:
+        return "inputs"
     
     def __post_init__(self):
         if self.references:
@@ -586,9 +581,6 @@ class IInputs:
             )
             if self.referenceImages is None:
                 self.referenceImages = [IInputReference(image=ref) if isinstance(ref, (str, File)) else IInputReference(**ref) for ref in self.references]
-
-
-ImageProviderSettings = IOpenAIProviderSettings | IBriaProviderSettings | ILightricksProviderSettings
 
 
 @dataclass
@@ -672,6 +664,7 @@ class IImageInference:
     providerSettings: Optional[ImageProviderSettings] = None
     safety: Optional[ISafety] = None
     inputs: Optional[IInputs] = None
+    useCache: Optional[bool] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
     webhookURL: Optional[str] = None
 
