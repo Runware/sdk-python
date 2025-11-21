@@ -703,7 +703,13 @@ class RunwareBase:
                 debug_key="video-background-removal-webhook"
             )
 
-        return await self._pollVideoResults(taskUUID, 1, IVideo)
+        return await self._handleInitialVideoResponse(
+            taskUUID,
+            1,
+            requestVideoBackgroundRemoval.deliveryMethod,
+            task_params.get("webhookURL"),
+            "video-background-removal-initial"
+        )
 
     async def videoUpscale(self, requestVideoUpscale: IVideoUpscale) -> Union[List[IVideo], IAsyncTaskResponse]:
         try:
@@ -750,7 +756,13 @@ class RunwareBase:
                 debug_key="video-upscale-webhook"
             )
 
-        return await self._pollVideoResults(taskUUID, 1, IVideo)
+        return await self._handleInitialVideoResponse(
+            taskUUID,
+            1,
+            requestVideoUpscale.deliveryMethod,
+            task_params.get("webhookURL"),
+            "video-upscale-initial"
+        )
 
     async def imageBackgroundRemoval(
         self, removeImageBackgroundPayload: IImageBackgroundRemoval
@@ -1770,7 +1782,9 @@ class RunwareBase:
         return await self._handleInitialVideoResponse(
             requestVideo.taskUUID,
             requestVideo.numberResults,
-            request_object.get("webhookURL")
+            requestVideo.deliveryMethod,
+            request_object.get("webhookURL"),
+            "video-inference-initial"
         )
 
     async def _processVideoImages(self, requestVideo: IVideoInference) -> None:
@@ -2064,7 +2078,7 @@ class RunwareBase:
 
         return response
 
-    async def _handleInitialVideoResponse(self, task_uuid: str, number_results: int, webhook_url: Optional[str] = None) -> Union[List[IVideo], IAsyncTaskResponse]:
+    async def _handleInitialVideoResponse(self, task_uuid: str, number_results: int, delivery_method: str = "async", webhook_url: Optional[str] = None, debug_key: str = "video-inference-initial") -> Union[List[IVideo], IAsyncTaskResponse]:
         lis = self.globalListener(taskUUID=task_uuid)
 
         async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
@@ -2079,38 +2093,42 @@ class RunwareBase:
                 if response.get("code"):
                     raise RunwareAPIError(response)
 
-                if response.get("status") == "success":
+                if response.get("status") == "success" or response.get("videoUUID") is not None or response.get("mediaUUID") is not None:
                     del self._globalMessages[task_uuid]
                     resolve([response])
                     return True
 
-                if not response.get("imageUUID") and webhook_url:
+                if webhook_url or delivery_method == "async":
                     del self._globalMessages[task_uuid]
                     async_response = createAsyncTaskResponse(response)
                     resolve([async_response])
                     return True
 
-                del self._globalMessages[task_uuid]
-                resolve("POLL_NEEDED")
-                return True
-
-            return False
+                return False
 
         try:
             initial_response = await getIntervalWithPromise(
                 check_initial_response,
-                debugKey="video-inference-initial",
-                timeOutDuration=VIDEO_INITIAL_TIMEOUT
+                debugKey=debug_key,
+                timeOutDuration=TIMEOUT_DURATION if delivery_method == "sync" else VIDEO_INITIAL_TIMEOUT
             )
+        except Exception as e:
+            if delivery_method == "sync":
+                error_msg = (
+                    f"Timeout waiting for video generation | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Timeout: {TIMEOUT_DURATION}ms | "
+                    f"Original error: {str(e)}"
+                )
+                raise Exception(error_msg)
+            initial_response = None
         finally:
             lis["destroy"]()
 
-        if initial_response == "POLL_NEEDED":
-            return await self._pollVideoResults(task_uuid, number_results)
-        else:
-            if initial_response and len(initial_response) > 0 and isinstance(initial_response[0], IAsyncTaskResponse):
-                return initial_response[0]
-            return instantiateDataclassList(IVideo, initial_response)
+        if initial_response and isinstance(initial_response[0], IAsyncTaskResponse):
+            return initial_response[0]
+        
+        return instantiateDataclassList(IVideo, initial_response)
 
     async def _pollVideoResults(self, task_uuid: str, number_results: int, response_cls: IVideo | IVideoToText = IVideo) -> Union[List[IVideo], List[IVideoToText]]:
         for poll_count in range(MAX_POLLS_VIDEO_GENERATION):
