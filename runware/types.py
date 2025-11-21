@@ -101,6 +101,10 @@ class EOpenPosePreProcessor(Enum):
     openpose_full = "openpose_full"
     openpose_hand = "openpose_hand"
 
+class EDeliveryMethod(Enum):
+    SYNC = "sync"
+    ASYNC = "async"
+
 
 # Define the types using Literal
 IOutputType = Literal["base64Data", "dataURI", "URL"]
@@ -528,9 +532,13 @@ class IMidjourneyProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class IInputs:
+class IInputs(BaseRequestField):
     references: Optional[List[Union[str, File]]] = field(default_factory=list)
     image: Optional[Union[str, File]] = None
+
+    @property
+    def request_key(self) -> str:
+        return "inputs"
 
 
 ImageProviderSettings = (
@@ -584,7 +592,7 @@ ImageProviderSettings = IOpenAIProviderSettings | IBriaProviderSettings | ILight
 
 
 @dataclass
-class IVideoInputs:
+class IVideoInputs(BaseRequestField):
     references: Optional[List[Union[str, File, Dict[str, Any]]]] = field(default_factory=list)
     image: Optional[Union[str, File]] = None
     images: Optional[List[Union[str, File]]] = None
@@ -614,6 +622,10 @@ class IVideoInputs:
             )
             if self.referenceImages is None:
                 self.referenceImages = [IInputReference(image=ref) if isinstance(ref, (str, File)) else IInputReference(**ref) for ref in self.references]
+
+    @property
+    def request_key(self) -> str:
+        return "inputs"
 
 
 @dataclass
@@ -964,7 +976,10 @@ class IBytedanceProviderSettings(BaseProviderSettings):
 class IKlingAIProviderSettings(BaseProviderSettings):
     cameraControl: Optional[IKlingCameraControl] = None
     soundVolume: Optional[float] = None  
-    originalAudioVolume: Optional[float] = None  
+    originalAudioVolume: Optional[float] = None
+    soundEffectPrompt: Optional[str] = None  
+    bgmPrompt: Optional[str] = None  
+    asmrMode: Optional[bool] = None  
 
     @property
     def provider_key(self) -> str:
@@ -980,6 +995,12 @@ class IKlingAIProviderSettings(BaseProviderSettings):
             result["soundVolume"] = self.soundVolume
         if self.originalAudioVolume is not None:
             result["originalAudioVolume"] = self.originalAudioVolume
+        if self.soundEffectPrompt is not None:
+            result["soundEffectPrompt"] = self.soundEffectPrompt
+        if self.bgmPrompt is not None:
+            result["bgmPrompt"] = self.bgmPrompt
+        if self.asmrMode is not None:
+            result["asmrMode"] = self.asmrMode
         return result
 
 
@@ -1071,6 +1092,7 @@ class IRunwayProviderSettings(BaseProviderSettings):
         return result
 
 
+AudioProviderSettings = IElevenLabsProviderSettings | IKlingAIProviderSettings
 VideoProviderSettings = (
     IKlingAIProviderSettings
     | IGoogleProviderSettings
@@ -1081,7 +1103,6 @@ VideoProviderSettings = (
     | IRunwayProviderSettings
     | ILumaProviderSettings
 )
-AudioProviderSettings = IElevenLabsProviderSettings
 
 @dataclass
 class IVideoInference:
@@ -1121,6 +1142,15 @@ class IVideoInference:
 
 
 @dataclass
+class IAudioInputs(BaseRequestField):
+    video: Optional[str] = None
+
+    @property
+    def request_key(self) -> str:
+        return "inputs"
+
+
+@dataclass
 class IAudioInference:
     model: str
     positivePrompt: Optional[str] = None  # Optional when using composition plan
@@ -1134,7 +1164,8 @@ class IAudioInference:
     deliveryMethod: str = "sync"  # "sync" | "async"
     uploadEndpoint: Optional[str] = None
     webhookURL: Optional[str] = None
-    providerSettings: Optional[AudioProviderSettings] = None  # ElevenLabs provider settings
+    providerSettings: Optional[AudioProviderSettings] = None  
+    inputs: Optional[IAudioInputs] = None
 
 
 @dataclass
