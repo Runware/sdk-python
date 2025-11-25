@@ -79,6 +79,8 @@ from .utils import (
     IMAGE_OPERATION_TIMEOUT,
     PROMPT_ENHANCE_TIMEOUT,
     IMAGE_UPLOAD_TIMEOUT,
+    IMAGE_INITIAL_TIMEOUT,
+    IMAGE_POLLING_DELAY,
     AUDIO_INITIAL_TIMEOUT,
     AUDIO_INFERENCE_TIMEOUT,
     AUDIO_POLLING_DELAY,
@@ -420,6 +422,22 @@ class RunwareBase:
                     )
 
             request_object = self._buildImageRequest(requestImage, prompt, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
+            
+            delivery_method_enum = EDeliveryMethod(requestImage.deliveryMethod) if isinstance(requestImage.deliveryMethod, str) else requestImage.deliveryMethod
+            
+            if delivery_method_enum is EDeliveryMethod.ASYNC:
+                if requestImage.webhookURL:
+                    request_object["webhookURL"] = requestImage.webhookURL
+                
+                await self.send([request_object])
+                
+                return await self._handleInitialImageResponse(
+                    requestImage.taskUUID,
+                    requestImage.numberResults,
+                    requestImage.deliveryMethod,
+                    request_object.get("webhookURL"),
+                    "image-inference-initial"
+                )
             
             return await asyncRetry(
                 lambda: self._requestImages(
@@ -1764,7 +1782,7 @@ class RunwareBase:
         self,
         taskUUID: str,
         numberResults: int = 1,
-    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText]]:
+    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage]]:
         await self.ensureConnection()
 
         return await self._pollResults(
@@ -1887,6 +1905,7 @@ class RunwareBase:
             "taskType": ETaskType.IMAGE_INFERENCE.value,
             "taskUUID": requestImage.taskUUID,
             "model": requestImage.model,
+            "deliveryMethod": requestImage.deliveryMethod,
         }
         if prompt:
             request_object["positivePrompt"] = prompt
@@ -2121,6 +2140,66 @@ class RunwareBase:
         
         return instantiateDataclassList(IVideo, initial_response)
 
+    async def _handleInitialImageResponse(
+        self,
+        task_uuid: str,
+        number_results: int,
+        delivery_method: Union[str, EDeliveryMethod] = EDeliveryMethod.ASYNC,
+        webhook_url: Optional[str] = None,
+        debug_key: str = "image-inference-initial"
+    ) -> Union[List[IImage], IAsyncTaskResponse]:
+        lis = self.globalListener(taskUUID=task_uuid)
+        delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(delivery_method)
+
+        async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
+            async with self._messages_lock:
+                response_list = self._globalMessages.get(task_uuid, [])
+
+                if not response_list:
+                    return False
+
+                response = response_list[0]
+
+                if response.get("code"):
+                    raise RunwareAPIError(response)
+
+                if response.get("status") == "success" or response.get("imageUUID") is not None:
+                    del self._globalMessages[task_uuid]
+                    resolve([response])
+                    return True
+
+                if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
+                    del self._globalMessages[task_uuid]
+                    async_response = createAsyncTaskResponse(response)
+                    resolve([async_response])
+                    return True
+
+                return False
+
+        try:
+            initial_response = await getIntervalWithPromise(
+                check_initial_response,
+                debugKey=debug_key,
+                timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else IMAGE_INITIAL_TIMEOUT
+            )
+        except Exception as e:
+            if delivery_method_enum is EDeliveryMethod.SYNC:
+                error_msg = (
+                    f"Timeout waiting for image generation | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Timeout: {TIMEOUT_DURATION}ms | "
+                    f"Original error: {str(e)}"
+                )
+                raise Exception(error_msg)
+            initial_response = None
+        finally:
+            lis["destroy"]()
+
+        if initial_response and isinstance(initial_response[0], IAsyncTaskResponse):
+            return initial_response[0]
+        
+        return instantiateDataclassList(IImage, initial_response)
+
     async def _sendPollRequest(self, task_uuid: str, poll_count: int) -> List[Dict[str, Any]]:
         lis = self.globalListener(taskUUID=task_uuid)
 
@@ -2322,12 +2401,12 @@ class RunwareBase:
         self,
         task_uuid: str,
         number_results: int,
-    ) -> Union[List[IVideo], List[IVideoToText], List[IAudio]]:
+    ) -> Union[List[IVideo], List[IVideoToText], List[IAudio], List[IImage]]:
         completed_results: List[Dict[str, Any]] = []
         lis = self.globalListener(taskUUID=task_uuid)
 
         task_type = None
-        response_cls: Optional[Union[IVideo, IVideoToText, IAudio]] = None
+        response_cls: Optional[Union[IVideo, IVideoToText, IAudio, IImage]] = None
         max_polls: int = MAX_POLLS
         polling_delay: int = VIDEO_POLLING_DELAY
         timeout_message: str = f"Polling timeout after {MAX_POLLS} polls"
@@ -2350,6 +2429,13 @@ class RunwareBase:
                         MAX_POLLS,
                         VIDEO_POLLING_DELAY,
                         f"Video caption generation timeout after {MAX_POLLS} polls"
+                    )
+                case ETaskType.IMAGE_INFERENCE.value:
+                    return (
+                        IImage,
+                        MAX_POLLS,
+                        IMAGE_POLLING_DELAY,
+                        f"Image generation timeout after {MAX_POLLS} polls"
                     )
                 case (
                     ETaskType.VIDEO_INFERENCE.value
