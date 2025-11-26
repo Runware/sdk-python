@@ -122,6 +122,22 @@ AUDIO_POLLING_DELAY = int(os.environ.get(
     1000
 ))
 
+# Image initial response timeout (milliseconds)
+# Maximum time to wait for the initial image response before falling back to async handling
+# Used in: _handleInitialImageResponse() for async delivery method
+IMAGE_INITIAL_TIMEOUT = int(os.environ.get(
+    "RUNWARE_IMAGE_INITIAL_TIMEOUT",
+    30000
+))
+
+# Image polling delay (milliseconds)
+# Delay between consecutive polling requests for image generation status
+# Used in: _pollResults() for checking image generation progress
+IMAGE_POLLING_DELAY = int(os.environ.get(
+    "RUNWARE_IMAGE_POLLING_DELAY",
+    1000
+))
+
 # Prompt enhancement timeout (milliseconds)
 # Maximum time to wait for prompt enhancement completion
 # Used in: promptEnhance() for enhancing text prompts

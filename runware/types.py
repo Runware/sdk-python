@@ -625,6 +625,7 @@ class IImageInference:
     model: Union[int, str]
     positivePrompt: Optional[str] = None
     taskUUID: Optional[str] = None
+    deliveryMethod: str = "sync"  
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IOutputFormat] = None
     uploadEndpoint: Optional[str] = None
