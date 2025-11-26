@@ -514,6 +514,10 @@ class IBriaProviderSettings(BaseProviderSettings):
 class ILightricksProviderSettings(BaseProviderSettings):
     generateAudio: Optional[bool] = None
 
+    startTime: Optional[int] = None
+    duration: Optional[int] = None
+    mode: Optional[Literal["replace_audio", "replace_video", "replace_audio_and_video"]] = None
+
     @property
     def provider_key(self) -> str:
         return "lightricks"
@@ -1095,6 +1099,7 @@ VideoProviderSettings = (
     | IPixverseProviderSettings
     | IViduProviderSettings
     | IRunwayProviderSettings
+    | ILightricksProviderSettings
     | ILumaProviderSettings
 )
 
