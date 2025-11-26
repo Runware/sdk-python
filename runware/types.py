@@ -1247,6 +1247,7 @@ class IVideoToText:
     taskType: str
     taskUUID: str
     text: Optional[str] = None
+    structuredData: Optional[Dict[str, Any]] = None
     status: Optional[str] = None
     cost: Optional[float] = None
 
