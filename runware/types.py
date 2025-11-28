@@ -670,6 +670,7 @@ class IImageInference:
     safety: Optional[ISafety] = None
     inputs: Optional[IInputs] = None
     useCache: Optional[bool] = None
+    resolution: Optional[str] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
     webhookURL: Optional[str] = None
 
