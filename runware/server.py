@@ -21,6 +21,7 @@ from .types import (
     Environment,
     ListenerType,
 )
+from .version import __version__
 
 class RunwareServer(RunwareBase):
     def __init__(
@@ -47,13 +48,17 @@ class RunwareServer(RunwareBase):
         self._retry_delay: int = retry_delay
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._tasks: Dict[str, asyncio.Task] = {}
+        self._additional_headers: Dict[str, str] = {
+            "X-SDK-Type": "python",
+            "X-SDK-Version": __version__
+        }
 
     async def connect(self):
         self.logger.info("Connecting to Runware server from server")
         self._last_pong_time = time.perf_counter()
 
         try:
-            self._ws = await websockets.connect(self._url)
+            self._ws = await websockets.connect(self._url, additional_headers=self._additional_headers)
             self._ws.close_timeout = 1
             self._ws.max_size = None
             self.logger.info(f"Connected to WebSocket URL: {self._url}")
