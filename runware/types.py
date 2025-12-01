@@ -1139,6 +1139,15 @@ class IVideoInference:
     inputs: Optional[IVideoInputs] = None
     skipResponse: Optional[bool] = False
 
+    def __post_init__(self):
+        if self.skipResponse:
+            warnings.warn(
+                "The 'skipResponse' parameter is deprecated and will be removed in a future release. "
+                "Use 'getResponse(taskUUID=taskUUID)' instead to retrieve results asynchronously.",
+                DeprecationWarning,
+                stacklevel=3
+            )
+
 
 @dataclass
 class IAudioInputs(BaseRequestField):
