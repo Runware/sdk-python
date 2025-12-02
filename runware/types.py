@@ -672,6 +672,7 @@ class IImageInference:
     useCache: Optional[bool] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
     webhookURL: Optional[str] = None
+    ttl: Optional[int] = None  # time-to-live (TTL) in seconds, only applies when outputType is "URL"
 
 
 @dataclass
