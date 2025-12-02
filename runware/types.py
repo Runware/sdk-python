@@ -1035,6 +1035,9 @@ class IPixverseProviderSettings(BaseProviderSettings):
     motionMode: Optional[str] = None
     soundEffectSwitch: Optional[bool] = None
     soundEffectContent: Optional[str] = None
+    audio: Optional[bool] = None  
+    multiClip: Optional[bool] = None  
+    thinking: Optional[str] = None  
 
     @property
     def provider_key(self) -> str:
