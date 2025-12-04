@@ -670,6 +670,7 @@ class IImageInference:
     safety: Optional[ISafety] = None
     inputs: Optional[IInputs] = None
     useCache: Optional[bool] = None
+    resolution: Optional[str] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
     webhookURL: Optional[str] = None
     ttl: Optional[int] = None  # time-to-live (TTL) in seconds, only applies when outputType is "URL"
@@ -1108,9 +1109,9 @@ VideoProviderSettings = (
 class IVideoInference:
     model: str
     positivePrompt: Optional[str] = None
-    duration: float | None = None
-    width: int | None = None
-    height: int | None = None
+    duration: Optional[float] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
     deliveryMethod: str = "async"
     taskUUID: Optional[str] = None
     outputType: Optional[IOutputType] = None
@@ -1139,6 +1140,7 @@ class IVideoInference:
     acceleratorOptions: Optional[IAcceleratorOptions] = None
     inputs: Optional[IVideoInputs] = None
     skipResponse: Optional[bool] = False
+    resolution: Optional[str] = None
 
 
 @dataclass
