@@ -594,7 +594,8 @@ class IVideoInputs(BaseRequestField):
     images: Optional[List[Union[str, File]]] = None
     frames: Optional[List[IInputFrame]] = None
     frameImages: Optional[List[IInputFrame]] = None
-    referenceImages: Optional[List[IInputReference]] = None
+    referenceImages: Optional[List[Union[str, File]]] = None
+    referenceVideos: Optional[List[Union[str, int]]] = None
     video: Optional[str] = None
     audio: Optional[str] = None
     mask: Optional[Union[str, File]] = None
@@ -617,7 +618,17 @@ class IVideoInputs(BaseRequestField):
                 stacklevel=3
             )
             if self.referenceImages is None:
-                self.referenceImages = [IInputReference(image=ref) if isinstance(ref, (str, File)) else IInputReference(**ref) for ref in self.references]
+                self.referenceImages = [ref for ref in self.references]
+        
+        if self.referenceImages:
+            # Check if IInputReference objects are used and convert them to strings
+            if any(isinstance(ref, IInputReference) for ref in self.referenceImages):
+                warnings.warn(
+                    "Using 'IInputReference' objects in 'IVideoInputs.referenceImages' is deprecated. Use strings or File objects directly instead.",
+                    DeprecationWarning,
+                    stacklevel=3
+                )
+                self.referenceImages = [ref.image if isinstance(ref, IInputReference) else ref for ref in self.referenceImages]
 
     @property
     def request_key(self) -> str:
@@ -977,7 +988,8 @@ class IKlingAIProviderSettings(BaseProviderSettings):
     originalAudioVolume: Optional[float] = None
     soundEffectPrompt: Optional[str] = None  
     bgmPrompt: Optional[str] = None  
-    asmrMode: Optional[bool] = None  
+    asmrMode: Optional[bool] = None
+    keepOriginalSound: Optional[bool] = None  
 
     @property
     def provider_key(self) -> str:
@@ -999,6 +1011,8 @@ class IKlingAIProviderSettings(BaseProviderSettings):
             result["bgmPrompt"] = self.bgmPrompt
         if self.asmrMode is not None:
             result["asmrMode"] = self.asmrMode
+        if self.keepOriginalSound is not None:
+            result["keepOriginalSound"] = self.keepOriginalSound
         return result
 
 
