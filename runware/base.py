@@ -1925,7 +1925,7 @@ class RunwareBase:
             "includeCost", "checkNsfw", "negativePrompt", "seedImage", "maskImage",
             "strength", "height", "width", "steps", "scheduler", "seed", "CFGScale",
             "clipSkip", "promptWeighting", "maskMargin", "vae", "webhookURL", "acceleration",
-            "useCache", "resolution"
+            "useCache", "ttl", "resolution"
         ]
         
         for field in optional_fields:
