@@ -4,6 +4,6 @@ from .utils import *
 from .base import *
 from .logging_config import *
 from .async_retry import *
+from .version import __version__
 
 __all__ = ["Runware"]
-__version__ = "0.4.33"
