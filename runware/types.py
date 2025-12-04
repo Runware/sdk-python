@@ -595,7 +595,7 @@ class IVideoInputs(BaseRequestField):
     frames: Optional[List[IInputFrame]] = None
     frameImages: Optional[List[IInputFrame]] = None
     referenceImages: Optional[List[Union[str, File]]] = None
-    referenceVideos: Optional[List[Union[str, int]]] = None
+    referenceVideos: Optional[List[str]] = None
     video: Optional[str] = None
     audio: Optional[str] = None
     mask: Optional[Union[str, File]] = None
