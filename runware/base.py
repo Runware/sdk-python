@@ -1795,8 +1795,6 @@ class RunwareBase:
         await self._processVideoImages(requestVideo)
         requestVideo.taskUUID = requestVideo.taskUUID or getUUID()
         request_object = self._buildVideoRequest(requestVideo)
-        import json
-        print(f"request_object: {json.dumps(request_object, indent=4)}")
 
         if requestVideo.webhookURL:
             request_object["webhookURL"] = requestVideo.webhookURL
