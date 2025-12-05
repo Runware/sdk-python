@@ -535,11 +535,21 @@ class IMidjourneyProviderSettings(BaseProviderSettings):
         return "midjourney"
 
 
+@dataclass
+class IAlibabaProviderSettings(BaseProviderSettings):
+    promptEnhancer: Optional[bool] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "alibaba"
+
+
 ImageProviderSettings = (
     IOpenAIProviderSettings
     | IBriaProviderSettings
     | ILightricksProviderSettings
     | IMidjourneyProviderSettings
+    | IAlibabaProviderSettings
 )
 
 @dataclass
