@@ -1034,13 +1034,24 @@ class ILumaProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class IPixverseSpeechSettings(BaseRequestField):
+class IVideoSpeechSettings(BaseRequestField):
     voice: Optional[str] = None  # Speaker voice from the available TTS speaker list
     text: Optional[str] = None  # Text script to be converted to speech (~200 characters, not UTF-8 Encoding)
 
     @property
     def request_key(self) -> str:
         return "speech"
+
+
+@dataclass
+class IPixverseSpeechSettings(IVideoSpeechSettings):
+    
+    def __post_init__(self):
+        warnings.warn(
+            "IPixverseSpeechSettings is deprecated and will be removed in a future release. Use IVideoSpeechSettings instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
 
 
 @dataclass
@@ -1149,7 +1160,7 @@ class IVideoInference:
     acceleration: Optional[str] = None
     numberResults: Optional[int] = 1
     providerSettings: Optional[VideoProviderSettings] = None
-    speech: Optional[IPixverseSpeechSettings] = None
+    speech: Optional[IVideoSpeechSettings] = None
     webhookURL: Optional[str] = None
     nsfw_check: Optional[Literal["none", "fast", "full"]] = None
     safety: Optional[ISafety] = None
