@@ -113,6 +113,7 @@ class RunwareBase:
 
         self._ws: Optional[ReconnectingWebsocketProps] = None
         self._listeners: List[ListenerType] = []
+        self._listeners_by_taskuuid: Dict[str, List[ListenerType]] = {}
         self._apiKey: str = api_key
         self._url: Optional[str] = url
         self._timeout: int = timeout
@@ -123,6 +124,7 @@ class RunwareBase:
         self._invalidAPIkey: Optional[str] = None
         self._sdkType: SdkType = SdkType.SERVER
         self._messages_lock = asyncio.Lock()
+        self._message_locks: Dict[str, asyncio.Lock] = {}
         self._images_lock = asyncio.Lock()
         self._listener_tasks = set()
         self._reconnection_manager = ReconnectionManager(logger=self.logger)
@@ -174,6 +176,7 @@ class RunwareBase:
         lis: Callable[[Any], Any],
         check: Callable[[Any], Any],
         groupKey: Optional[str] = None,
+        taskUUID: Optional[str] = None,
     ) -> Dict[str, Callable[[], None]]:
         # Get the current frame
         current_frame = inspect.currentframe()
@@ -208,9 +211,21 @@ class RunwareBase:
             debug_message=debug_message,
         )
         self._listeners.append(groupListener)
+        
+        if taskUUID:
+            if taskUUID not in self._listeners_by_taskuuid:
+                self._listeners_by_taskuuid[taskUUID] = []
+            self._listeners_by_taskuuid[taskUUID].append(groupListener)
 
         def destroy() -> None:
             self._listeners = removeListener(self._listeners, groupListener)
+            if taskUUID and taskUUID in self._listeners_by_taskuuid:
+                self._listeners_by_taskuuid[taskUUID] = [
+                    l for l in self._listeners_by_taskuuid[taskUUID] 
+                    if l.key != groupListener.key
+                ]
+                if not self._listeners_by_taskuuid[taskUUID]:
+                    del self._listeners_by_taskuuid[taskUUID]
 
         return {"destroy": destroy}
 
@@ -1435,12 +1450,15 @@ class RunwareBase:
         :return: A dictionary containing a 'destroy' function to remove the listener.
         """
         logger.debug("Setting up global listener for taskUUID: %s", taskUUID)
+        
+        if taskUUID not in self._message_locks:
+            self._message_locks[taskUUID] = asyncio.Lock()
 
         async def global_lis(m: Dict[str, Any]) -> None:
             logger.debug("Global listener message: %s", m)
             logger.debug("Global listener taskUUID: %s", taskUUID)
 
-            async with self._messages_lock:
+            async with self._message_locks[taskUUID]:
                 if m.get("error"):
                     self._globalMessages[taskUUID] = m
                     return
@@ -1468,8 +1486,20 @@ class RunwareBase:
 
         logger.debug("Global Listener taskUUID: %s", taskUUID)
 
-        temp_listener = self.addListener(check=global_check, lis=self._create_safe_async_listener(global_lis))
+        temp_listener = self.addListener(
+            check=global_check, 
+            lis=self._create_safe_async_listener(global_lis),
+            taskUUID=taskUUID
+        )
         logger.debug("globalListener :: Temp listener: %s", temp_listener)
+        
+        original_destroy = temp_listener["destroy"]
+        def destroy_with_lock_cleanup():
+            original_destroy()
+            if taskUUID in self._message_locks and taskUUID not in self._listeners_by_taskuuid:
+                del self._message_locks[taskUUID]
+        
+        temp_listener["destroy"] = destroy_with_lock_cleanup
 
         return temp_listener
 

@@ -206,12 +206,38 @@ class RunwareServer(RunwareBase):
             self.logger.error(f"Failed to parse JSON message:", exc_info=e)
             return
 
-        listeners_snapshot = list(self._listeners)
+        task_uuids = set()
+        if isinstance(m.get("data"), list):
+            for item in m["data"]:
+                if isinstance(item, dict) and item.get("taskUUID"):
+                    task_uuids.add(item.get("taskUUID"))
+        elif isinstance(m.get("data"), dict) and m["data"].get("taskUUID"):
+            task_uuids.add(m["data"]["taskUUID"])
+        
+        if isinstance(m.get("errors"), list):
+            for error in m["errors"]:
+                if isinstance(error, dict) and error.get("taskUUID"):
+                    task_uuids.add(error.get("taskUUID"))
+
+        relevant_listeners = []
+        
+        for task_uuid in task_uuids:
+            if task_uuid in self._listeners_by_taskuuid:
+                relevant_listeners.extend(self._listeners_by_taskuuid[task_uuid])
+        
+        for lis in self._listeners:
+            if not any(lis.key == rel.key for rel in relevant_listeners):
+                is_taskuuid_listener = any(
+                    lis.key in [l.key for l in listeners]
+                    for listeners in self._listeners_by_taskuuid.values()
+                )
+                if not is_taskuuid_listener:
+                    relevant_listeners.append(lis)
 
         async_tasks = []
         early_return = False
 
-        for lis in listeners_snapshot:
+        for lis in relevant_listeners:
             if early_return:
                 break
 
