@@ -588,6 +588,20 @@ class IInputs(BaseRequestField):
 
 
 @dataclass
+class IAudioInput:
+    id: Optional[str] = None
+    url: Optional[str] = None
+
+
+@dataclass
+class ISpeechInput:
+    id: Optional[str] = None
+    provider: Optional[str] = None
+    voiceId: Optional[str] = None
+    text: Optional[str] = None
+
+
+@dataclass
 class IVideoInputs(BaseRequestField):
     references: Optional[List[Union[str, File, Dict[str, Any]]]] = field(default_factory=list)
     image: Optional[Union[str, File]] = None
@@ -597,7 +611,8 @@ class IVideoInputs(BaseRequestField):
     referenceImages: Optional[List[Union[str, File]]] = None
     referenceVideos: Optional[List[str]] = None
     video: Optional[str] = None
-    audio: Optional[str] = None
+    audio: Optional[Union[str, List[IAudioInput]]] = None
+    speech: Optional[List[ISpeechInput]] = None
     mask: Optional[Union[str, File]] = None
     frame: Optional[str] = None
     
@@ -1120,6 +1135,30 @@ class IRunwayProviderSettings(BaseProviderSettings):
         return result
 
 
+@dataclass
+class ISyncSegment:
+    startTime: float
+    endTime: float
+    ref: str
+    audioStartTime: Optional[float] = None
+    audioEndTime: Optional[float] = None
+
+
+@dataclass
+class ISyncProviderSettings(BaseProviderSettings):
+    syncMode: Optional[str] = None
+    editRegion: Optional[str] = None
+    emotionPrompt: Optional[str] = None
+    temperature: Optional[float] = None
+    activeSpeakerDetection: Optional[bool] = None
+    occlusionDetectionEnabled: Optional[bool] = None
+    segments: Optional[List[ISyncSegment]] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "sync"
+
+
 AudioProviderSettings = IElevenLabsProviderSettings | IKlingAIProviderSettings
 VideoProviderSettings = (
     IKlingAIProviderSettings
@@ -1131,6 +1170,7 @@ VideoProviderSettings = (
     | IRunwayProviderSettings
     | ILightricksProviderSettings
     | ILumaProviderSettings
+    | ISyncProviderSettings
 )
 
 @dataclass
@@ -1158,7 +1198,7 @@ class IVideoInference:
     seed: Optional[int] = None
     CFGScale: Optional[float] = None
     acceleration: Optional[str] = None
-    numberResults: Optional[int] = 1
+    numberResults: Optional[int] = None
     providerSettings: Optional[VideoProviderSettings] = None
     speech: Optional[IVideoSpeechSettings] = None
     webhookURL: Optional[str] = None
