@@ -589,11 +589,13 @@ class IInputs(BaseRequestField):
 
 @dataclass
 class IAudioInput:
+    id: Optional[str] = None
     source: Optional[str] = None
 
 
 @dataclass
 class ISpeechInput:
+    id: Optional[str] = None
     provider: Optional[str] = None
     voiceId: Optional[str] = None
     text: Optional[str] = None
@@ -1134,6 +1136,15 @@ class IRunwayProviderSettings(BaseProviderSettings):
 
 
 @dataclass
+class ISyncSegment:
+    startTime: float
+    endTime: float
+    ref: str
+    audioStartTime: Optional[float] = None
+    audioEndTime: Optional[float] = None
+
+
+@dataclass
 class ISyncProviderSettings(BaseProviderSettings):
     syncMode: Optional[str] = None
     editRegion: Optional[str] = None
@@ -1141,10 +1152,41 @@ class ISyncProviderSettings(BaseProviderSettings):
     temperature: Optional[float] = None
     activeSpeakerDetection: Optional[bool] = None
     occlusionDetectionEnabled: Optional[bool] = None
+    segments: Optional[List[ISyncSegment]] = None
 
     @property
     def provider_key(self) -> str:
         return "sync"
+
+    def serialize(self) -> Dict[str, Any]:
+        result = {}
+        if self.syncMode is not None:
+            result["syncMode"] = self.syncMode
+        if self.editRegion is not None:
+            result["editRegion"] = self.editRegion
+        if self.emotionPrompt is not None:
+            result["emotionPrompt"] = self.emotionPrompt
+        if self.temperature is not None:
+            result["temperature"] = self.temperature
+        if self.activeSpeakerDetection is not None:
+            result["activeSpeakerDetection"] = self.activeSpeakerDetection
+        if self.occlusionDetectionEnabled is not None:
+            result["occlusionDetectionEnabled"] = self.occlusionDetectionEnabled
+        if self.segments is not None:
+            segments_list = []
+            for segment in self.segments:
+                segment_dict = {
+                    "startTime": segment.startTime,
+                    "endTime": segment.endTime,
+                    "ref": segment.ref
+                }
+                if segment.audioStartTime is not None:
+                    segment_dict["audioStartTime"] = segment.audioStartTime
+                if segment.audioEndTime is not None:
+                    segment_dict["audioEndTime"] = segment.audioEndTime
+                segments_list.append(segment_dict)
+            result["segments"] = segments_list
+        return result
 
 
 AudioProviderSettings = IElevenLabsProviderSettings | IKlingAIProviderSettings
