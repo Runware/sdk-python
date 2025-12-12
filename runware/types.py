@@ -1134,15 +1134,6 @@ class IRunwayProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class ISyncSegment:
-    startTime: float
-    endTime: float
-    ref: str
-    audioStartTime: Optional[float] = None
-    audioEndTime: Optional[float] = None
-
-
-@dataclass
 class ISyncProviderSettings(BaseProviderSettings):
     syncMode: Optional[str] = None
     editRegion: Optional[str] = None
