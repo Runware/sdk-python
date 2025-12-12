@@ -589,13 +589,11 @@ class IInputs(BaseRequestField):
 
 @dataclass
 class IAudioInput:
-    id: Optional[str] = None
-    url: Optional[str] = None
+    source: Optional[str] = None
 
 
 @dataclass
 class ISpeechInput:
-    id: Optional[str] = None
     provider: Optional[str] = None
     voiceId: Optional[str] = None
     text: Optional[str] = None
@@ -1152,7 +1150,6 @@ class ISyncProviderSettings(BaseProviderSettings):
     temperature: Optional[float] = None
     activeSpeakerDetection: Optional[bool] = None
     occlusionDetectionEnabled: Optional[bool] = None
-    segments: Optional[List[ISyncSegment]] = None
 
     @property
     def provider_key(self) -> str:
