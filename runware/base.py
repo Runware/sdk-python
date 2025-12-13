@@ -1854,8 +1854,11 @@ class RunwareBase:
             "taskType": ETaskType.VIDEO_INFERENCE.value,
             "taskUUID": requestVideo.taskUUID,
             "model": requestVideo.model,
-            "numberResults": requestVideo.numberResults,
         }
+        
+        # Only add numberResults if it's not None
+        if requestVideo.numberResults is not None:
+            request_object["numberResults"] = requestVideo.numberResults
         
         # Only add positivePrompt if it's not None
         if requestVideo.positivePrompt is not None:

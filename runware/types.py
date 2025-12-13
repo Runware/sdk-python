@@ -598,6 +598,20 @@ class IInputs(BaseRequestField):
 
 
 @dataclass
+class IAudioInput:
+    id: Optional[str] = None
+    source: Optional[str] = None
+
+
+@dataclass
+class ISpeechInput:
+    id: Optional[str] = None
+    provider: Optional[str] = None
+    voiceId: Optional[str] = None
+    text: Optional[str] = None
+
+
+@dataclass
 class IVideoInputs(BaseRequestField):
     references: Optional[List[Union[str, File, Dict[str, Any]]]] = field(default_factory=list)
     image: Optional[Union[str, File]] = None
@@ -607,7 +621,8 @@ class IVideoInputs(BaseRequestField):
     referenceImages: Optional[List[Union[str, File]]] = None
     referenceVideos: Optional[List[str]] = None
     video: Optional[str] = None
-    audio: Optional[str] = None
+    audio: Optional[Union[str, List[IAudioInput]]] = None
+    speech: Optional[List[ISpeechInput]] = None
     mask: Optional[Union[str, File]] = None
     frame: Optional[str] = None
     
@@ -1047,13 +1062,24 @@ class ILumaProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class IPixverseSpeechSettings(BaseRequestField):
+class IVideoSpeechSettings(BaseRequestField):
     voice: Optional[str] = None  # Speaker voice from the available TTS speaker list
     text: Optional[str] = None  # Text script to be converted to speech (~200 characters, not UTF-8 Encoding)
 
     @property
     def request_key(self) -> str:
         return "speech"
+
+
+@dataclass
+class IPixverseSpeechSettings(IVideoSpeechSettings):
+    
+    def __post_init__(self):
+        warnings.warn(
+            "IPixverseSpeechSettings is deprecated and will be removed in a future release. Use IVideoSpeechSettings instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
 
 
 @dataclass
@@ -1122,6 +1148,60 @@ class IRunwayProviderSettings(BaseProviderSettings):
         return result
 
 
+@dataclass
+class ISyncSegment:
+    startTime: float
+    endTime: float
+    ref: str
+    audioStartTime: Optional[float] = None
+    audioEndTime: Optional[float] = None
+
+
+@dataclass
+class ISyncProviderSettings(BaseProviderSettings):
+    syncMode: Optional[str] = None
+    editRegion: Optional[str] = None
+    emotionPrompt: Optional[str] = None
+    temperature: Optional[float] = None
+    activeSpeakerDetection: Optional[bool] = None
+    occlusionDetectionEnabled: Optional[bool] = None
+    segments: Optional[List[ISyncSegment]] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "sync"
+
+    def serialize(self) -> Dict[str, Any]:
+        result = {}
+        if self.syncMode is not None:
+            result["syncMode"] = self.syncMode
+        if self.editRegion is not None:
+            result["editRegion"] = self.editRegion
+        if self.emotionPrompt is not None:
+            result["emotionPrompt"] = self.emotionPrompt
+        if self.temperature is not None:
+            result["temperature"] = self.temperature
+        if self.activeSpeakerDetection is not None:
+            result["activeSpeakerDetection"] = self.activeSpeakerDetection
+        if self.occlusionDetectionEnabled is not None:
+            result["occlusionDetectionEnabled"] = self.occlusionDetectionEnabled
+        if self.segments is not None:
+            segments_list = []
+            for segment in self.segments:
+                segment_dict = {
+                    "startTime": segment.startTime,
+                    "endTime": segment.endTime,
+                    "ref": segment.ref
+                }
+                if segment.audioStartTime is not None:
+                    segment_dict["audioStartTime"] = segment.audioStartTime
+                if segment.audioEndTime is not None:
+                    segment_dict["audioEndTime"] = segment.audioEndTime
+                segments_list.append(segment_dict)
+            result["segments"] = segments_list
+        return result
+
+
 AudioProviderSettings = IElevenLabsProviderSettings | IKlingAIProviderSettings
 VideoProviderSettings = (
     IKlingAIProviderSettings
@@ -1133,6 +1213,7 @@ VideoProviderSettings = (
     | IRunwayProviderSettings
     | ILightricksProviderSettings
     | ILumaProviderSettings
+    | ISyncProviderSettings
 )
 
 @dataclass
@@ -1160,9 +1241,9 @@ class IVideoInference:
     seed: Optional[int] = None
     CFGScale: Optional[float] = None
     acceleration: Optional[str] = None
-    numberResults: Optional[int] = 1
+    numberResults: Optional[int] = None
     providerSettings: Optional[VideoProviderSettings] = None
-    speech: Optional[IPixverseSpeechSettings] = None
+    speech: Optional[IVideoSpeechSettings] = None
     webhookURL: Optional[str] = None
     nsfw_check: Optional[Literal["none", "fast", "full"]] = None
     safety: Optional[ISafety] = None
