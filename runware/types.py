@@ -535,11 +535,21 @@ class IMidjourneyProviderSettings(BaseProviderSettings):
         return "midjourney"
 
 
+@dataclass
+class IAlibabaProviderSettings(BaseProviderSettings):
+    promptEnhancer: Optional[bool] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "alibaba"
+
+
 ImageProviderSettings = (
     IOpenAIProviderSettings
     | IBriaProviderSettings
     | ILightricksProviderSettings
     | IMidjourneyProviderSettings
+    | IAlibabaProviderSettings
 )
 
 @dataclass
@@ -569,7 +579,7 @@ class IInputReference:
 @dataclass
 class IInputs(BaseRequestField):
     references: Optional[List[Union[str, File]]] = field(default_factory=list)
-    referenceImages: Optional[List[IInputReference]] = None
+    referenceImages: Optional[List[Union[str, File, IInputReference]]] = None
     image: Optional[Union[str, File]] = None
     
     @property
@@ -584,7 +594,7 @@ class IInputs(BaseRequestField):
                 stacklevel=3
             )
             if self.referenceImages is None:
-                self.referenceImages = [IInputReference(image=ref) if isinstance(ref, (str, File)) else IInputReference(**ref) for ref in self.references]
+                self.referenceImages = self.references
 
 
 @dataclass
