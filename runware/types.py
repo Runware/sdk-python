@@ -995,6 +995,7 @@ class IBytedanceProviderSettings(BaseProviderSettings):
 
 @dataclass
 class IKlingAIProviderSettings(BaseProviderSettings):
+    sound: Optional[bool] = None
     cameraControl: Optional[IKlingCameraControl] = None
     soundVolume: Optional[float] = None  
     originalAudioVolume: Optional[float] = None
@@ -1009,6 +1010,8 @@ class IKlingAIProviderSettings(BaseProviderSettings):
 
     def serialize(self) -> Dict[str, Any]:
         result = {}
+        if self.sound is not None:
+            result["sound"] = self.sound
         if self.cameraControl:
             camera_control_data = self.cameraControl.serialize()
             if camera_control_data:
