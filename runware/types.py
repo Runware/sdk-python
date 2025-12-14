@@ -538,6 +538,9 @@ class IMidjourneyProviderSettings(BaseProviderSettings):
 @dataclass
 class IAlibabaProviderSettings(BaseProviderSettings):
     promptEnhancer: Optional[bool] = None
+    promptExtend: Optional[bool] = None
+    audio: Optional[bool] = None
+    multiShots: Optional[bool] = None
 
     @property
     def provider_key(self) -> str:
