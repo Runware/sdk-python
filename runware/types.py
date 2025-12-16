@@ -544,12 +544,22 @@ class IAlibabaProviderSettings(BaseProviderSettings):
         return "alibaba"
 
 
+@dataclass
+class IBlackForestLabsProviderSettings(BaseProviderSettings):
+    safetyTolerance: Optional[int] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "bfl"
+
+
 ImageProviderSettings = (
     IOpenAIProviderSettings
     | IBriaProviderSettings
     | ILightricksProviderSettings
     | IMidjourneyProviderSettings
     | IAlibabaProviderSettings
+    | IBlackForestLabsProviderSettings
 )
 
 @dataclass
