@@ -568,6 +568,7 @@ class ISafety(BaseRequestField):
 class ISettings(BaseRequestField):
     temperature: Optional[float] = None
     systemPrompt: Optional[str] = None
+    topP: Optional[float] = None
 
     @property
     def request_key(self) -> str:
@@ -991,7 +992,6 @@ class IKlingCameraControl(SerializableMixin):
 class IGoogleProviderSettings(BaseProviderSettings):
     generateAudio: Optional[bool] = None
     enhancePrompt: Optional[bool] = None
-    topP: Optional[float] = None
     search: Optional[bool] = None
 
     @property
