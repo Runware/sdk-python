@@ -1919,6 +1919,7 @@ class RunwareBase:
         self._addOptionalField(request_object, requestImage.inputs)
         self._addImageProviderSettings(request_object, requestImage)
         self._addOptionalField(request_object, requestImage.safety)
+        self._addOptionalField(request_object, requestImage.settings)
         
         return request_object
 

@@ -561,7 +561,17 @@ class ISafety(BaseRequestField):
 
     @property
     def request_key(self) -> str:
-        return "safety"  
+        return "safety"
+
+
+@dataclass
+class ISettings(BaseRequestField):
+    temperature: Optional[float] = None
+    systemPrompt: Optional[str] = None
+
+    @property
+    def request_key(self) -> str:
+        return "settings"  
 
 
 @dataclass
@@ -704,6 +714,7 @@ class IImageInference:
     puLID: Optional[IPuLID] = None
     providerSettings: Optional[ImageProviderSettings] = None
     safety: Optional[ISafety] = None
+    settings: Optional[ISettings] = None
     inputs: Optional[IInputs] = None
     useCache: Optional[bool] = None
     resolution: Optional[str] = None
@@ -980,6 +991,8 @@ class IKlingCameraControl(SerializableMixin):
 class IGoogleProviderSettings(BaseProviderSettings):
     generateAudio: Optional[bool] = None
     enhancePrompt: Optional[bool] = None
+    topP: Optional[float] = None
+    search: Optional[bool] = None
 
     @property
     def provider_key(self) -> str:
