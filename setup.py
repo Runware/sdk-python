@@ -6,13 +6,13 @@ with open("README.md", "r", encoding="utf-8") as fh:
 setup(
     name="runware",
     license="MIT",
-    version="0.4.35",
+    version="0.4.36",
     author="Runware Inc.",
     author_email="python.sdk@runware.ai",
-    description="The Python Runware SDK is used to run image inference with the Runware API, powered by the Runware inference platform. It can be used to generate images with text-to-image and image-to-image. It also allows the use of an existing gallery of models or selecting any model or LoRA from the CivitAI gallery. The API also supports upscaling, background removal, inpainting and outpainting, and a series of other ControlNet models.",
+    description="The Python Runware SDK is used to interact with the Runware API, powered by the Runware inference platform. It supports image generation, video generation, image upscale, video upscale, image caption, video caption, image background removal, video background removal, audio generation, and more. It also allows the use of an existing gallery of models or selecting any model or LoRA from the CivitAI gallery. The API also supports inpainting, outpainting, and a series of other ControlNet models.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    keywords=["Runware", "stable diffusion", "text to image", "image to text"],
+    keywords=["Runware", "stable diffusion", "text to image", "image to text", "text to video", "image to video", "video generation", "text to audio", "audio generation", "image upscale", "video upscale", "background removal"],
     url="https://github.com/runware/sdk-python",
     project_urls={
         "Documentation": "https://docs.runware.ai/",
