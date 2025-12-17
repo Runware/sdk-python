@@ -1919,7 +1919,7 @@ class RunwareBase:
         self._addOptionalField(request_object, requestImage.inputs)
         self._addImageProviderSettings(request_object, requestImage)
         self._addOptionalField(request_object, requestImage.safety)
-        
+
         return request_object
 
     def _addOptionalImageFields(self, request_object: Dict[str, Any], requestImage: IImageInference) -> None:

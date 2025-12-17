@@ -544,12 +544,22 @@ class IAlibabaProviderSettings(BaseProviderSettings):
         return "alibaba"
 
 
+@dataclass
+class IBlackForestLabsProviderSettings(BaseProviderSettings):
+    safetyTolerance: Optional[int] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "bfl"
+
+
 ImageProviderSettings = (
     IOpenAIProviderSettings
     | IBriaProviderSettings
     | ILightricksProviderSettings
     | IMidjourneyProviderSettings
     | IAlibabaProviderSettings
+    | IBlackForestLabsProviderSettings
 )
 
 @dataclass
@@ -578,7 +588,7 @@ class IInputReference:
 
 @dataclass
 class IInputs(BaseRequestField):
-    references: Optional[List[Union[str, File]]] = field(default_factory=list)
+    references: Optional[List[Union[str, File]]] = None
     referenceImages: Optional[List[Union[str, File, IInputReference]]] = None
     image: Optional[Union[str, File]] = None
     
