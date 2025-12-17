@@ -538,6 +538,9 @@ class IMidjourneyProviderSettings(BaseProviderSettings):
 @dataclass
 class IAlibabaProviderSettings(BaseProviderSettings):
     promptEnhancer: Optional[bool] = None
+    promptExtend: Optional[bool] = None
+    audio: Optional[bool] = None
+    shotType: Optional[str] = None
 
     @property
     def provider_key(self) -> str:
@@ -634,7 +637,7 @@ class ISpeechInput:
 
 @dataclass
 class IVideoInputs(BaseRequestField):
-    references: Optional[List[Union[str, File, Dict[str, Any]]]] = field(default_factory=list)
+    references: Optional[List[Union[str, File, Dict[str, Any]]]] = None
     image: Optional[Union[str, File]] = None
     images: Optional[List[Union[str, File]]] = None
     frames: Optional[List[IInputFrame]] = None

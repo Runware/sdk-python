@@ -1795,7 +1795,7 @@ class RunwareBase:
         await self._processVideoImages(requestVideo)
         requestVideo.taskUUID = requestVideo.taskUUID or getUUID()
         request_object = self._buildVideoRequest(requestVideo)
-
+        
         if requestVideo.webhookURL:
             request_object["webhookURL"] = requestVideo.webhookURL
 
@@ -1872,7 +1872,7 @@ class RunwareBase:
         self._addOptionalField(request_object, requestVideo.safety)
         self._addOptionalField(request_object, requestVideo.advancedFeatures)
         self._addOptionalField(request_object, requestVideo.acceleratorOptions)
-        
+
         return request_object
 
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
