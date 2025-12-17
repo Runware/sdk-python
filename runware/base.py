@@ -1795,7 +1795,7 @@ class RunwareBase:
         await self._processVideoImages(requestVideo)
         requestVideo.taskUUID = requestVideo.taskUUID or getUUID()
         request_object = self._buildVideoRequest(requestVideo)
-
+        
         if requestVideo.webhookURL:
             request_object["webhookURL"] = requestVideo.webhookURL
 
