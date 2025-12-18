@@ -556,6 +556,15 @@ class IBlackForestLabsProviderSettings(BaseProviderSettings):
         return "bfl"
 
 
+@dataclass
+class IMireloProviderSettings(BaseProviderSettings):
+    startOffset: Optional[int] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "mirelo"
+
+
 ImageProviderSettings = (
     IOpenAIProviderSettings
     | IBriaProviderSettings
@@ -1240,6 +1249,7 @@ VideoProviderSettings = (
     | ILightricksProviderSettings
     | ILumaProviderSettings
     | ISyncProviderSettings
+    | IMireloProviderSettings
 )
 
 @dataclass
