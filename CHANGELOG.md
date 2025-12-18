@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.36]
+
+### Added
+- Added `IBlackForestLabsProviderSettings` with `safetyTolerance` parameter
+- Added new `ISettings` class with the following parameters:
+  - `temperature`
+  - `systemPrompt`
+  - `topP`
+- Added `search` parameter to `IGoogleProviderSettings`
+- Added new parameters to `IAlibabaProviderSettings`:
+  - `promptExtend`
+  - `audio`
+  - `shotType`
+
+### Changed
+- Updated `IInputs.references` default value from `field(default_factory=list)` to `None`
+- Updated `IVideoInputs.references` default value from `field(default_factory=list)` to `None`
+
 ## [0.4.35] 
 
 ### Added
