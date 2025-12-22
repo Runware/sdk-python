@@ -1237,7 +1237,7 @@ class ISyncProviderSettings(BaseProviderSettings):
         return result
 
 
-AudioProviderSettings = IElevenLabsProviderSettings | IKlingAIProviderSettings
+AudioProviderSettings = IElevenLabsProviderSettings | IKlingAIProviderSettings | IMireloProviderSettings
 VideoProviderSettings = (
     IKlingAIProviderSettings
     | IGoogleProviderSettings
@@ -1249,7 +1249,6 @@ VideoProviderSettings = (
     | ILightricksProviderSettings
     | ILumaProviderSettings
     | ISyncProviderSettings
-    | IMireloProviderSettings
 )
 
 @dataclass
@@ -1293,6 +1292,7 @@ class IVideoInference:
 @dataclass
 class IAudioInputs(BaseRequestField):
     video: Optional[str] = None
+    videos: Optional[List[str]] = None
 
     @property
     def request_key(self) -> str:
