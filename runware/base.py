@@ -2242,6 +2242,7 @@ class RunwareBase:
     async def _requestAudio(self, requestAudio: IAudioInference) -> Union[List[IAudio], IAsyncTaskResponse]:
         requestAudio.taskUUID = requestAudio.taskUUID or getUUID()
         request_object = self._buildAudioRequest(requestAudio)
+
         await self.send([request_object])
         return await self._handleInitialAudioResponse(
             requestAudio.taskUUID,
