@@ -498,21 +498,6 @@ class IBriaMaskSettings(SerializableMixin):
     # An array of coordinate dictionaries defining the mask hints.
     # Each dictionary must have: x (int), y (int), type (str: "positive" or "negative")
     keyPoints: Optional[List[Dict[str, Any]]] = None
-    
-    def __post_init__(self):
-        if self.keyPoints is not None:
-            for i, key_point in enumerate(self.keyPoints):
-                if not isinstance(key_point, dict):
-                    raise ValueError(f"keyPoints[{i}] must be a dictionary")
-                required_keys = {"x", "y", "type"}
-                if set(key_point.keys()) != required_keys:
-                    raise ValueError(f"keyPoints[{i}] must have exactly 3 fields: x (int), y (int), type (str)")
-                if not isinstance(key_point.get("x"), int):
-                    raise ValueError(f"keyPoints[{i}].x must be an integer")
-                if not isinstance(key_point.get("y"), int):
-                    raise ValueError(f"keyPoints[{i}].y must be an integer")
-                if not isinstance(key_point.get("type"), str) or key_point.get("type") not in ["positive", "negative"]:
-                    raise ValueError(f"keyPoints[{i}].type must be a string: 'positive' or 'negative'")
 
 
 @dataclass
