@@ -657,6 +657,7 @@ class IVideoInputs(BaseRequestField):
     frameImages: Optional[List[IInputFrame]] = None
     referenceImages: Optional[List[Union[str, File]]] = None
     referenceVideos: Optional[List[str]] = None
+    referenceVoices: Optional[List[str]] = None
     video: Optional[str] = None
     audio: Optional[Union[str, List[IAudioInput]]] = None
     speech: Optional[List[ISpeechInput]] = None
@@ -1057,7 +1058,8 @@ class IKlingAIProviderSettings(BaseProviderSettings):
     soundEffectPrompt: Optional[str] = None  
     bgmPrompt: Optional[str] = None  
     asmrMode: Optional[bool] = None
-    keepOriginalSound: Optional[bool] = None  
+    keepOriginalSound: Optional[bool] = None
+    characterOrientation: Optional[str] = None  
 
     @property
     def provider_key(self) -> str:
@@ -1083,6 +1085,8 @@ class IKlingAIProviderSettings(BaseProviderSettings):
             result["asmrMode"] = self.asmrMode
         if self.keepOriginalSound is not None:
             result["keepOriginalSound"] = self.keepOriginalSound
+        if self.characterOrientation is not None:
+            result["characterOrientation"] = self.characterOrientation
         return result
 
 
