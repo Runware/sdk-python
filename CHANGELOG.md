@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.37]
+
+### Added
+- Added `audio` parameter to `IBytedanceProviderSettings` (providerSettings.bytedance.audio)
+- Added new parameters to `IBriaProviderSettings`:
+  - `preserveAudio` 
+  - `autoTrim` 
+- Added `IBriaMaskSettings` with the following parameters:
+  - `foreground`
+  - `prompt`
+  - `frameIndex`
+  - `keyPoints`
+
+### Changed
+- Added validation in `_pollResults()`: if `number_results` is None, then `number_results = 1`
+
 ## [0.4.36]
 
 ### Added
