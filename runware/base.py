@@ -1782,7 +1782,7 @@ class RunwareBase:
     async def getResponse(
         self,
         taskUUID: str,
-        numberResults: int = 1,
+        numberResults: Optional[int] = 1,
     ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage]]:
         await self.ensureConnection()
 
@@ -1795,7 +1795,7 @@ class RunwareBase:
         await self._processVideoImages(requestVideo)
         requestVideo.taskUUID = requestVideo.taskUUID or getUUID()
         request_object = self._buildVideoRequest(requestVideo)
-        
+
         if requestVideo.webhookURL:
             request_object["webhookURL"] = requestVideo.webhookURL
 
@@ -2406,8 +2406,12 @@ class RunwareBase:
     async def _pollResults(
         self,
         task_uuid: str,
-        number_results: int,
+        number_results: Optional[int],
     ) -> Union[List[IVideo], List[IVideoToText], List[IAudio], List[IImage]]:
+        # Default to 1 if number_results is None
+        if number_results is None:
+            number_results = 1
+            
         completed_results: List[Dict[str, Any]] = []
         lis = self.globalListener(taskUUID=task_uuid)
 

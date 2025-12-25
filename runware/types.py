@@ -491,6 +491,16 @@ class IOpenAIProviderSettings(BaseProviderSettings):
 
 
 @dataclass
+class IBriaMaskSettings(SerializableMixin):
+    foreground: Optional[bool] = None
+    prompt: Optional[str] = None
+    frameIndex: Optional[int] = None
+    # An array of coordinate dictionaries defining the mask hints.
+    # Each dictionary must have: x (int), y (int), type (str: "positive" or "negative")
+    keyPoints: Optional[List[Dict[str, Any]]] = None
+
+
+@dataclass
 class IBriaProviderSettings(BaseProviderSettings):
     medium: Optional[Literal["photography", "art"]] = None
     promptEnhancement: Optional[bool] = None
@@ -504,6 +514,9 @@ class IBriaProviderSettings(BaseProviderSettings):
     refinePrompt: Optional[bool] = None
     originalQuality: Optional[bool] = None
     forceBackgroundDetection: Optional[bool] = None
+    preserveAudio: Optional[bool] = True
+    autoTrim: Optional[bool] = False
+    mask: Optional[IBriaMaskSettings] = None
 
     @property
     def provider_key(self) -> str:
