@@ -453,6 +453,34 @@ class IAdvancedFeatures:
 
 
 @dataclass
+class BaseAdvancedFeature(SerializableMixin, ABC):
+    @property
+    @abstractmethod
+    def feature_key(self) -> str:
+        pass
+
+    def to_request_dict(self) -> Dict[str, Any]:
+        data = self.serialize()
+        if data:
+            return {self.feature_key: data}
+        return {}
+
+
+@dataclass
+class IWanAnimate(BaseAdvancedFeature):
+    mode: Optional[str] = None
+    retargetPose: Optional[bool] = None
+    prevSegCondFrames: Optional[int] = None
+
+    @property
+    def feature_key(self) -> str:
+        return "wanAnimate"
+
+
+VideoAdvancedFeatureTypes = IWanAnimate
+
+
+@dataclass
 class IVideoAdvancedFeatures(BaseRequestField):
     videoCFGScale: Optional[float] = None  
     audioCFGScale: Optional[float] = None  
@@ -460,10 +488,23 @@ class IVideoAdvancedFeatures(BaseRequestField):
     videoNegativePrompt: Optional[str] = None  
     audioNegativePrompt: Optional[str] = None  
     slgLayer: Optional[int] = None
+    advancedFeature: Optional[VideoAdvancedFeatureTypes] = None
 
     @property
     def request_key(self) -> str:
         return "advancedFeatures"
+
+    def serialize(self) -> Dict[str, Any]:
+        result = {k: v for k, v in asdict(self).items()
+                  if v is not None and not k.startswith('_')}
+        
+        if 'advancedFeature' in result and self.advancedFeature:
+            result.pop('advancedFeature')
+            feature_dict = self.advancedFeature.to_request_dict()
+            if feature_dict:
+                result.update(feature_dict)
+        
+        return result
 
 
 @dataclass
