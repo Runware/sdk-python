@@ -358,13 +358,6 @@ class SerializableMixin:
         return {}
 
 @dataclass
-class BaseRequestField(SerializableMixin, ABC):
-    @property
-    @abstractmethod
-    def request_key(self) -> str:
-        pass
-
-@dataclass
 class IOutpaint:
     top: Optional[int] = None
     right: Optional[int] = None
@@ -421,7 +414,7 @@ class IPuLID:
 
 
 @dataclass
-class IAcceleratorOptions(BaseRequestField):
+class IAcceleratorOptions(SerializableMixin):
     fbcache: Optional[bool] = None
     cacheDistance: Optional[float] = None
     teaCache: Optional[bool] = None
@@ -453,15 +446,7 @@ class IAdvancedFeatures:
 
 
 @dataclass
-class BaseAdvancedFeature(SerializableMixin, ABC):
-    @property
-    @abstractmethod
-    def request_key(self) -> str:
-        pass
-
-
-@dataclass
-class IWanAnimate(BaseAdvancedFeature):
+class IWanAnimate(SerializableMixin):
     mode: Optional[str] = None
     retargetPose: Optional[bool] = None
     prevSegCondFrames: Optional[int] = None
@@ -475,7 +460,7 @@ VideoAdvancedFeatureTypes = IWanAnimate
 
 
 @dataclass
-class IVideoAdvancedFeatures(BaseRequestField):
+class IVideoAdvancedFeatures(SerializableMixin):
     videoCFGScale: Optional[float] = None  
     audioCFGScale: Optional[float] = None  
     fps: Optional[int] = None  
@@ -613,7 +598,7 @@ ImageProviderSettings = (
 )
 
 @dataclass
-class ISafety(BaseRequestField):
+class ISafety(SerializableMixin):
     tolerance: Optional[bool] = None
     checkInputs: Optional[bool] = None
     checkContent: Optional[bool] = None
@@ -625,7 +610,7 @@ class ISafety(BaseRequestField):
 
 
 @dataclass
-class ISettings(BaseRequestField):
+class ISettings(SerializableMixin):
     temperature: Optional[float] = None
     systemPrompt: Optional[str] = None
     topP: Optional[float] = None
@@ -648,7 +633,7 @@ class IInputReference:
 
 
 @dataclass
-class IInputs(BaseRequestField):
+class IInputs(SerializableMixin):
     references: Optional[List[Union[str, File]]] = None
     referenceImages: Optional[List[Union[str, File, IInputReference]]] = None
     image: Optional[Union[str, File]] = None
@@ -683,7 +668,7 @@ class ISpeechInput:
 
 
 @dataclass
-class IVideoInputs(BaseRequestField):
+class IVideoInputs(SerializableMixin):
     references: Optional[List[Union[str, File, Dict[str, Any]]]] = None
     image: Optional[Union[str, File]] = None
     images: Optional[List[Union[str, File]]] = None
@@ -796,7 +781,7 @@ class IImageCaption:
 
 
 @dataclass
-class IAudioSettings(BaseRequestField):
+class IAudioSettings(SerializableMixin):
     sampleRate: Optional[int] = None  # Min: 8000, Max: 48000, Default: 44100
     bitrate: Optional[int] = None  # Min: 32, Max: 320, Default: 128
 
@@ -1136,7 +1121,7 @@ class ILumaProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class IVideoSpeechSettings(BaseRequestField):
+class IVideoSpeechSettings(SerializableMixin):
     voice: Optional[str] = None  # Speaker voice from the available TTS speaker list
     text: Optional[str] = None  # Text script to be converted to speech (~200 characters, not UTF-8 Encoding)
 
@@ -1329,7 +1314,7 @@ class IVideoInference:
 
 
 @dataclass
-class IAudioInputs(BaseRequestField):
+class IAudioInputs(SerializableMixin):
     video: Optional[str] = None
 
     @property
