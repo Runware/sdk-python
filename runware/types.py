@@ -351,18 +351,18 @@ class SerializableMixin:
         return {k: v for k, v in asdict(self).items()
                 if v is not None and not k.startswith('_')}
 
+    def to_request_dict(self) -> Dict[str, Any]:
+        data = self.serialize()
+        if data:
+            return {self.request_key: data}
+        return {}
+
 @dataclass
 class BaseRequestField(SerializableMixin, ABC):
     @property
     @abstractmethod
     def request_key(self) -> str:
         pass
-
-    def to_request_dict(self) -> Dict[str, Any]:
-        data = self.serialize()
-        if data:
-            return {self.request_key: data}
-        return {}
 
 @dataclass
 class IOutpaint:
@@ -456,14 +456,8 @@ class IAdvancedFeatures:
 class BaseAdvancedFeature(SerializableMixin, ABC):
     @property
     @abstractmethod
-    def feature_key(self) -> str:
+    def request_key(self) -> str:
         pass
-
-    def to_request_dict(self) -> Dict[str, Any]:
-        data = self.serialize()
-        if data:
-            return {self.feature_key: data}
-        return {}
 
 
 @dataclass
@@ -473,7 +467,7 @@ class IWanAnimate(BaseAdvancedFeature):
     prevSegCondFrames: Optional[int] = None
 
     @property
-    def feature_key(self) -> str:
+    def request_key(self) -> str:
         return "wanAnimate"
 
 
