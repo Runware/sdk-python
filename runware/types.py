@@ -492,11 +492,10 @@ class IVideoAdvancedFeatures(BaseRequestField):
         result = {k: v for k, v in asdict(self).items()
                   if v is not None and not k.startswith('_')}
         
-        if 'advancedFeature' in result and self.advancedFeature:
-            result.pop('advancedFeature')
-            feature_dict = self.advancedFeature.to_request_dict()
-            if feature_dict:
-                result.update(feature_dict)
+
+        if self.advancedFeature:
+            result.pop('advancedFeature', None)
+            result.update(self.advancedFeature.to_request_dict())
         
         return result
 
