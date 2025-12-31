@@ -876,6 +876,9 @@ def instantiateDataclassList(
     :param data_list: A list of dictionaries with data.
     :return: A list of instantiated dataclass objects.
     """
+    if data_list is None or len(data_list) == 0:
+        raise ValueError("Message could not be received")
+    
     # Get the set of valid field names for the dataclass
     instances = []
     for data in data_list:
