@@ -2141,7 +2141,16 @@ class RunwareBase:
         finally:
             lis["destroy"]()
 
-        if initial_response and isinstance(initial_response[0], IAsyncTaskResponse):
+        if not initial_response or len(initial_response) == 0:
+            if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
+                
+                return createAsyncTaskResponse({
+                    "taskUUID": task_uuid,
+                    "taskType": ETaskType.VIDEO_INFERENCE.value
+                })
+
+        
+        if isinstance(initial_response[0], IAsyncTaskResponse):
             return initial_response[0]
         
         return instantiateDataclassList(IVideo, initial_response)
@@ -2183,6 +2192,7 @@ class RunwareBase:
                 return False
 
         try:
+
             initial_response = await getIntervalWithPromise(
                 check_initial_response,
                 debugKey=debug_key,
@@ -2201,7 +2211,16 @@ class RunwareBase:
         finally:
             lis["destroy"]()
 
-        if initial_response and isinstance(initial_response[0], IAsyncTaskResponse):
+        if not initial_response or len(initial_response) == 0:
+            if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
+                
+                return createAsyncTaskResponse({
+                    "taskUUID": task_uuid,
+                    "taskType": ETaskType.IMAGE_INFERENCE.value
+                })
+
+        
+        if isinstance(initial_response[0], IAsyncTaskResponse):
             return initial_response[0]
         
         return instantiateDataclassList(IImage, initial_response)
@@ -2350,7 +2369,16 @@ class RunwareBase:
         finally:
             lis["destroy"]()
 
-        if initial_response and isinstance(initial_response[0], IAsyncTaskResponse):
+        if not initial_response or len(initial_response) == 0:
+            if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
+                
+                return createAsyncTaskResponse({
+                    "taskUUID": task_uuid,
+                    "taskType": ETaskType.AUDIO_INFERENCE.value
+                })
+
+        
+        if isinstance(initial_response[0], IAsyncTaskResponse):
             return initial_response[0]
 
         return instantiateDataclassList(IAudio, initial_response)
@@ -2465,7 +2493,7 @@ class RunwareBase:
             for poll_count in range(MAX_POLLS):
                 try:
                     responses = await self._sendPollRequest(task_uuid, poll_count)
-
+                    print(f"\n\n[_pollResults] responses: {responses}")
                     for response in responses:
                         if response.get("code"):
                             raise RunwareAPIError(response)
