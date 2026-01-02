@@ -1795,8 +1795,7 @@ class RunwareBase:
         await self._processVideoImages(requestVideo)
         requestVideo.taskUUID = requestVideo.taskUUID or getUUID()
         request_object = self._buildVideoRequest(requestVideo)
-        import json
-        print(f"DEBUG: request_object: {json.dumps(request_object, indent=4)}")
+
         if requestVideo.webhookURL:
             request_object["webhookURL"] = requestVideo.webhookURL
 
@@ -2101,7 +2100,7 @@ class RunwareBase:
         async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
             async with self._messages_lock:
                 response_list = self._globalMessages.get(task_uuid, [])
-                print(f"DEBUG: response_list: {response_list}")
+
                 if not response_list:
                     return False
 
