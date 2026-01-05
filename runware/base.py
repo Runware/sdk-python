@@ -2148,7 +2148,13 @@ class RunwareBase:
                     "taskUUID": task_uuid,
                     "taskType": ETaskType.VIDEO_INFERENCE.value
                 })
-
+            else:
+                # For sync delivery method, raise an error if no initial response is received
+                raise RunwareError(
+                    f"No initial response received for video generation | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"delivery_method={delivery_method_enum} | "
+                )
         
         if isinstance(initial_response[0], IAsyncTaskResponse):
             return initial_response[0]
@@ -2218,7 +2224,13 @@ class RunwareBase:
                     "taskUUID": task_uuid,
                     "taskType": ETaskType.IMAGE_INFERENCE.value
                 })
-
+            else:
+                # For sync delivery method, raise an error if no initial response is received
+                raise RunwareError(
+                    f"No initial response received for image inference | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"delivery_method={delivery_method_enum} | "
+                )
         
         if isinstance(initial_response[0], IAsyncTaskResponse):
             return initial_response[0]
@@ -2376,7 +2388,13 @@ class RunwareBase:
                     "taskUUID": task_uuid,
                     "taskType": ETaskType.AUDIO_INFERENCE.value
                 })
-
+            else:
+                # For sync delivery method, raise an error if no initial response is received
+                raise RunwareError(
+                    f"No initial response received for audio inference | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"delivery_method={delivery_method_enum} | "
+                )
         
         if isinstance(initial_response[0], IAsyncTaskResponse):
             return initial_response[0]
