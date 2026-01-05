@@ -351,13 +351,6 @@ class SerializableMixin:
         return {k: v for k, v in asdict(self).items()
                 if v is not None and not k.startswith('_')}
 
-@dataclass
-class BaseRequestField(SerializableMixin, ABC):
-    @property
-    @abstractmethod
-    def request_key(self) -> str:
-        pass
-
     def to_request_dict(self) -> Dict[str, Any]:
         data = self.serialize()
         if data:
@@ -421,7 +414,7 @@ class IPuLID:
 
 
 @dataclass
-class IAcceleratorOptions(BaseRequestField):
+class IAcceleratorOptions(SerializableMixin):
     fbcache: Optional[bool] = None
     cacheDistance: Optional[float] = None
     teaCache: Optional[bool] = None
@@ -453,17 +446,43 @@ class IAdvancedFeatures:
 
 
 @dataclass
-class IVideoAdvancedFeatures(BaseRequestField):
+class IWanAnimate(SerializableMixin):
+    mode: Optional[str] = None
+    retargetPose: Optional[bool] = None
+    prevSegCondFrames: Optional[int] = None
+
+    @property
+    def request_key(self) -> str:
+        return "wanAnimate"
+
+
+VideoAdvancedFeatureTypes = IWanAnimate
+
+
+@dataclass
+class IVideoAdvancedFeatures(SerializableMixin):
     videoCFGScale: Optional[float] = None  
     audioCFGScale: Optional[float] = None  
     fps: Optional[int] = None  
     videoNegativePrompt: Optional[str] = None  
     audioNegativePrompt: Optional[str] = None  
     slgLayer: Optional[int] = None
+    advancedFeature: Optional[VideoAdvancedFeatureTypes] = None
 
     @property
     def request_key(self) -> str:
         return "advancedFeatures"
+
+    def serialize(self) -> Dict[str, Any]:
+        result = {k: v for k, v in asdict(self).items()
+                  if v is not None and not k.startswith('_')}
+        
+
+        if self.advancedFeature:
+            result.pop('advancedFeature', None)
+            result.update(self.advancedFeature.to_request_dict())
+        
+        return result
 
 
 @dataclass
@@ -579,7 +598,7 @@ ImageProviderSettings = (
 )
 
 @dataclass
-class ISafety(BaseRequestField):
+class ISafety(SerializableMixin):
     tolerance: Optional[bool] = None
     checkInputs: Optional[bool] = None
     checkContent: Optional[bool] = None
@@ -591,7 +610,7 @@ class ISafety(BaseRequestField):
 
 
 @dataclass
-class ISettings(BaseRequestField):
+class ISettings(SerializableMixin):
     temperature: Optional[float] = None
     systemPrompt: Optional[str] = None
     topP: Optional[float] = None
@@ -614,7 +633,7 @@ class IInputReference:
 
 
 @dataclass
-class IInputs(BaseRequestField):
+class IInputs(SerializableMixin):
     references: Optional[List[Union[str, File]]] = None
     referenceImages: Optional[List[Union[str, File, IInputReference]]] = None
     image: Optional[Union[str, File]] = None
@@ -649,7 +668,7 @@ class ISpeechInput:
 
 
 @dataclass
-class IVideoInputs(BaseRequestField):
+class IVideoInputs(SerializableMixin):
     references: Optional[List[Union[str, File, Dict[str, Any]]]] = None
     image: Optional[Union[str, File]] = None
     images: Optional[List[Union[str, File]]] = None
@@ -763,7 +782,7 @@ class IImageCaption:
 
 
 @dataclass
-class IAudioSettings(BaseRequestField):
+class IAudioSettings(SerializableMixin):
     sampleRate: Optional[int] = None  # Min: 8000, Max: 48000, Default: 44100
     bitrate: Optional[int] = None  # Min: 32, Max: 320, Default: 128
 
@@ -1106,7 +1125,7 @@ class ILumaProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class IVideoSpeechSettings(BaseRequestField):
+class IVideoSpeechSettings(SerializableMixin):
     voice: Optional[str] = None  # Speaker voice from the available TTS speaker list
     text: Optional[str] = None  # Text script to be converted to speech (~200 characters, not UTF-8 Encoding)
 
@@ -1299,7 +1318,7 @@ class IVideoInference:
 
 
 @dataclass
-class IAudioInputs(BaseRequestField):
+class IAudioInputs(SerializableMixin):
     video: Optional[str] = None
 
     @property
