@@ -2151,9 +2151,11 @@ class RunwareBase:
             else:
                 # For sync delivery method, raise an error if no initial response is received
                 raise RunwareError(
-                    f"No initial response received for video generation | "
-                    f"TaskUUID: {task_uuid} | "
-                    f"delivery_method={delivery_method_enum} | "
+                    IError(
+                        error=True,
+                        error_message=f"No initial response received for video generation | delivery_method={delivery_method_enum}",
+                        task_uuid=task_uuid
+                    )
                 )
         
         if isinstance(initial_response[0], IAsyncTaskResponse):
@@ -2227,9 +2229,11 @@ class RunwareBase:
             else:
                 # For sync delivery method, raise an error if no initial response is received
                 raise RunwareError(
-                    f"No initial response received for image inference | "
-                    f"TaskUUID: {task_uuid} | "
-                    f"delivery_method={delivery_method_enum} | "
+                    IError(
+                        error=True,
+                        error_message=f"No initial response received for image inference | delivery_method={delivery_method_enum}",
+                        task_uuid=task_uuid
+                    )
                 )
         
         if isinstance(initial_response[0], IAsyncTaskResponse):
@@ -2391,9 +2395,11 @@ class RunwareBase:
             else:
                 # For sync delivery method, raise an error if no initial response is received
                 raise RunwareError(
-                    f"No initial response received for audio inference | "
-                    f"TaskUUID: {task_uuid} | "
-                    f"delivery_method={delivery_method_enum} | "
+                    IError(
+                        error=True,
+                        error_message=f"No initial response received for audio inference | delivery_method={delivery_method_enum}",
+                        task_uuid=task_uuid
+                    )
                 )
         
         if isinstance(initial_response[0], IAsyncTaskResponse):
