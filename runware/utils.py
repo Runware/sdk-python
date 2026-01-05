@@ -127,7 +127,7 @@ AUDIO_POLLING_DELAY = int(os.environ.get(
 # Used in: _handleInitialImageResponse() for async delivery method
 IMAGE_INITIAL_TIMEOUT = int(os.environ.get(
     "RUNWARE_IMAGE_INITIAL_TIMEOUT",
-    30000
+    60000
 ))
 
 # Image polling delay (milliseconds)
@@ -876,6 +876,11 @@ def instantiateDataclassList(
     :param data_list: A list of dictionaries with data.
     :return: A list of instantiated dataclass objects.
     """
+    if data_list is None or len(data_list) == 0:
+        raise ValueError(
+            f"Cannot instantiate dataclass list: data_list is None or empty for type {getattr(dataclass_type, '__name__', str(dataclass_type))}"
+        )
+    
     # Get the set of valid field names for the dataclass
     instances = []
     for data in data_list:
