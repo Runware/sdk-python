@@ -3,6 +3,7 @@ import inspect
 import logging
 import os
 import re
+import time
 import uuid
 from asyncio import gather
 from dataclasses import asdict
@@ -53,6 +54,8 @@ from .types import (
 )
 from .types import IImage, IError, SdkType, ListenerType
 from .utils import (
+    PING_TIMEOUT_DURATION,
+    PING_INTERVAL,
     BASE_RUNWARE_URLS,
     getUUID,
     fileToBase64,
@@ -1502,6 +1505,7 @@ class RunwareBase:
 
         This method checks if the current connection is active and, if not, initiates a new connection.
         It handles authentication and retries the connection if necessary.
+        It also checks for dead connections (e.g., when internet is disconnected but WebSocket state is still OPEN).
 
         :raises: An error message if the connection cannot be established due to an invalid API key or other reasons.
         """
@@ -1516,6 +1520,13 @@ class RunwareBase:
                 if circuit_state == ConnectionState.CIRCUIT_OPEN:
                     raise ConnectionError(self._invalidAPIkey)
 
+            # Check connection health even if state appears open (detects dead connections)
+            if isConnected:
+                connection_error = self._checkConnectionHealth()
+                if connection_error:
+                    # Connection appears dead, try to reconnect
+                    isConnected = False
+
             if not isConnected:
                 await self.connect()
 
@@ -1527,6 +1538,38 @@ class RunwareBase:
                 self._invalidAPIkey
                 or "Could not connect to server. Ensure your API key is correct"
             )
+
+    def _checkConnectionHealth(self) -> Optional[ConnectionError]:
+        """
+        Check if the WebSocket connection is healthy.
+        
+        Returns a ConnectionError if the connection is dead or shutting down, None otherwise.
+        This method can be used in polling/waiting callbacks to detect connection loss.
+        
+        :return: ConnectionError if connection is dead, None if connection is healthy
+        """
+        # Check if WebSocket is still open
+        if not self.connected() or (self._ws and self._ws.state is not State.OPEN):
+            return ConnectionError("WebSocket connection lost")
+        
+        # Check if connection is shutting down
+        if self._is_shutting_down:
+            return ConnectionError("Connection is shutting down")
+        
+        # Check if we haven't received a pong recently (connection might be dead)
+        # The heartbeat mechanism checks every PING_INTERVAL and closes if no pong for PING_TIMEOUT_DURATION
+        # Worst case: heartbeat can take up to PING_INTERVAL + PING_TIMEOUT_DURATION to detect and close
+        # We use 1.5x to account for timing variations and ensure heartbeat has time to close the connection
+        if self._last_pong_time > 0:
+            time_since_last_pong = time.perf_counter() - self._last_pong_time
+            heartbeat_max_detection_time = (PING_INTERVAL + PING_TIMEOUT_DURATION) / 1000
+            if time_since_last_pong > heartbeat_max_detection_time * 1.5:
+                return ConnectionError(
+                    f"Connection appears dead. No pong received for {time_since_last_pong:.2f} seconds. "
+                    f"Timeout threshold: {heartbeat_max_detection_time * 1.5:.2f} seconds"
+                )
+        
+        return None
 
     async def getSimililarImage(
         self,
@@ -1549,9 +1592,15 @@ class RunwareBase:
 
         async def check(
                 resolve: Callable[[List[IImage]], None],
-                reject: Callable[[IError], None],
+                reject: Callable[[Exception], None],
                 intervalId: Any,
         ) -> Optional[bool]:
+            
+            connection_error = self._checkConnectionHealth()
+            if connection_error:
+                reject(connection_error)
+                return True
+            
             async with self._images_lock:
                 logger.debug(f"Check # Global images: {self._globalImages}")
                 imagesWithSimilarTask = [
@@ -2098,6 +2147,12 @@ class RunwareBase:
         delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(delivery_method)
 
         async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
+            
+            connection_error = self._checkConnectionHealth()
+            if connection_error:
+                reject(connection_error)
+                return True
+            
             async with self._messages_lock:
                 response_list = self._globalMessages.get(task_uuid, [])
 
@@ -2175,6 +2230,12 @@ class RunwareBase:
         delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(delivery_method)
 
         async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
+            
+            connection_error = self._checkConnectionHealth()
+            if connection_error:
+                reject(connection_error)
+                return True
+            
             async with self._messages_lock:
                 response_list = self._globalMessages.get(task_uuid, [])
 
@@ -2242,6 +2303,11 @@ class RunwareBase:
         return instantiateDataclassList(IImage, initial_response)
 
     async def _sendPollRequest(self, task_uuid: str, poll_count: int) -> List[Dict[str, Any]]:
+        
+        connection_error = self._checkConnectionHealth()
+        if connection_error:
+            raise ConnectionError(f"Cannot send poll request: {connection_error}")
+        
         lis = self.globalListener(taskUUID=task_uuid)
 
         try:
@@ -2251,6 +2317,12 @@ class RunwareBase:
             }])
 
             async def check_poll_response(resolve: callable, reject: callable, *args: Any) -> bool:
+                
+                connection_error = self._checkConnectionHealth()
+                if connection_error:
+                    reject(connection_error)
+                    return True
+                
                 async with self._messages_lock:
                     response_list = self._globalMessages.get(task_uuid, [])
                     if response_list:
@@ -2340,6 +2412,12 @@ class RunwareBase:
         delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(delivery_method)
 
         async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
+            
+            connection_error = self._checkConnectionHealth()
+            if connection_error:
+                reject(connection_error)
+                return True
+            
             async with self._messages_lock:
                 response_list = self._globalMessages.get(task_uuid, [])
 
@@ -2515,9 +2593,14 @@ class RunwareBase:
 
         try:
             for poll_count in range(MAX_POLLS):
+                
+                connection_error = self._checkConnectionHealth()
+                if connection_error:
+                    raise connection_error
+                
                 try:
                     responses = await self._sendPollRequest(task_uuid, poll_count)
-
+                    print(f"[DEBUG _pollResults] Responses: {responses}")
                     for response in responses:
                         if response.get("code"):
                             raise RunwareAPIError(response)
