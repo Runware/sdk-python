@@ -1549,7 +1549,7 @@ class RunwareBase:
         :return: ConnectionError if connection is dead, None if connection is healthy
         """
         # Check if WebSocket is still open
-        if not self.connected() or (self._ws and self._ws.state is not State.OPEN):
+        if not self.connected():
             return ConnectionError("WebSocket connection lost")
         
         # Check if connection is shutting down
@@ -2306,7 +2306,7 @@ class RunwareBase:
         
         connection_error = self._checkConnectionHealth()
         if connection_error:
-            raise ConnectionError(f"Cannot send poll request: {connection_error}")
+            raise connection_error
         
         lis = self.globalListener(taskUUID=task_uuid)
 
