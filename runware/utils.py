@@ -760,11 +760,11 @@ def createVideoToTextFromResponse(response: dict) -> IVideoToText:
 
 
 async def getIntervalWithPromise(
-    callback: GetWithPromiseCallBackType,
-    debugKey: str = "debugKey",
-    timeOutDuration: int = TIMEOUT_DURATION,
-    shouldThrowError: bool = True,
-    pollingInterval: int = 350,
+        callback: GetWithPromiseCallBackType,
+        debugKey: str = "debugKey",
+        timeOutDuration: int = TIMEOUT_DURATION,
+        shouldThrowError: bool = True,
+        pollingInterval: int = 350,
 ) -> Any:
     logger = logging.getLogger(__name__)
 
