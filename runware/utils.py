@@ -38,7 +38,7 @@ if not mimetypes.guess_type("test.webp")[0]:
     mimetypes.add_type("image/webp", ".webp")
 
 BASE_RUNWARE_URLS = {
-    Environment.PRODUCTION: "wss://ws-api.runware.ai/v1",
+    Environment.PRODUCTION: "wss://ws-api.runware.dev/v1",
     Environment.TEST: "ws://localhost:8080",
 }
 
@@ -80,6 +80,14 @@ IMAGE_OPERATION_TIMEOUT = int(os.environ.get(
 IMAGE_UPLOAD_TIMEOUT = int(os.environ.get(
     "RUNWARE_IMAGE_UPLOAD_TIMEOUT",
     60000
+))
+
+# Model upload timeout (milliseconds)
+# Maximum time to wait for model upload to complete
+# Used in: _modelUpload() for uploading models (LoRA, checkpoints, etc.)
+MODEL_UPLOAD_TIMEOUT = int(os.environ.get(
+    "RUNWARE_MODEL_UPLOAD_TIMEOUT",
+    900000  # 15 minutes default - models can be large
 ))
 
 # Video initial response timeout (milliseconds)

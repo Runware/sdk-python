@@ -79,6 +79,7 @@ from .utils import (
     IMAGE_OPERATION_TIMEOUT,
     PROMPT_ENHANCE_TIMEOUT,
     IMAGE_UPLOAD_TIMEOUT,
+    MODEL_UPLOAD_TIMEOUT,
     IMAGE_INITIAL_TIMEOUT,
     IMAGE_POLLING_DELAY,
     AUDIO_INITIAL_TIMEOUT,
@@ -1685,7 +1686,7 @@ class RunwareBase:
             return False
 
         response = await getIntervalWithPromise(
-            check, debugKey="upload-model", timeOutDuration=self._timeout
+            check, debugKey="upload-model", timeOutDuration=MODEL_UPLOAD_TIMEOUT
         )
 
         lis["destroy"]()
