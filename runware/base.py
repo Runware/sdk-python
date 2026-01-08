@@ -126,61 +126,55 @@ class RunwareBase:
         self._images_lock = asyncio.Lock()
         self._listener_tasks = set()
         self._reconnection_manager = ReconnectionManager(logger=self.logger)
-        self._consecutive_auth_failures = 0
-        self._max_auth_retries = 10
-        self._auth_retry_lock = asyncio.Lock()
+        self._reconnect_lock = asyncio.Lock()
 
 
     async def _retry_with_reconnect(self, func, *args, **kwargs):
-        
+
         last_error = None
+        max_total_attempts = 10
         
-        for attempt in range(self._max_auth_retries):
+        for attempt in range(max_total_attempts):
             try:
                 result = await func(*args, **kwargs)
-                
-                async with self._auth_retry_lock:
-                    self._consecutive_auth_failures = 0
                 return result
                 
             except Exception as e:
                 last_error = e
                 error_msg = str(e)
                 
-                
                 if "Invalid API key" not in error_msg:
                     raise
                 
-                async with self._auth_retry_lock:
-                    self._consecutive_auth_failures += 1
-                    current_failures = self._consecutive_auth_failures
-                
-                self.logger.warning(
-                    f"Authentication error (attempt {current_failures}/{self._max_auth_retries}): {e}"
-                )
-                
-                if current_failures >= self._max_auth_retries:
-                    self.logger.error(
-                        f"Max authentication retries exceeded ({self._max_auth_retries}). Giving up.",
-                        exc_info=True
-                    )
+                if attempt >= max_total_attempts - 1:
+                    self.logger.error(f"Max authentication retry attempts ({max_total_attempts}) exceeded")
                     raise ConnectionError(
-                        f"Failed to authenticate after {self._max_auth_retries} attempts. "
+                        f"Failed to authenticate after {max_total_attempts} attempts. "
                         f"Last error: {last_error}"
                     )
                 
-                try:
-                    self.logger.info(f"Attempting to reconnect (attempt {current_failures}/{self._max_auth_retries})")
+                async with self._reconnect_lock:
+                    should_open_circuit = self._reconnection_manager.on_auth_failure()
                     
-                    self._invalidAPIkey = None
-                    self._connectionSessionUUID = None
-                    
-                    await self.connect()
-                    self.logger.info("Reconnection successful, retrying request")
-                    
-                except Exception as reconnect_error:
-                    self.logger.error(f"Error while reconnecting:", exc_info=reconnect_error)
-                    await asyncio.sleep(1)
+                    if should_open_circuit:
+                        self.logger.error(f"Max retry attempts ({max_total_attempts}) exceeded")
+                        raise ConnectionError(
+                            f"Failed to authenticate after {max_total_attempts} attempts. "
+                            f"Last error: {last_error}"
+                        )
+                    try:
+                        self.logger.info(f"Reconnecting after auth error: {error_msg}")
+                        
+                        self._invalidAPIkey = None
+                        self._connectionSessionUUID = None
+                        
+                        await self.connect()
+                        self.logger.info("Reconnection successful, retrying request")
+                        
+                    except Exception as reconnect_error:
+                        self.logger.error(f"Error while reconnecting:", exc_info=reconnect_error)
+                        delay = self._reconnection_manager.calculate_delay()
+                        await asyncio.sleep(delay)
 
     def _create_safe_async_listener(self, async_func):
         def wrapper(m):
@@ -387,9 +381,9 @@ class RunwareBase:
     async def imageInference(
         self, requestImage: IImageInference
     ) -> Union[List[IImage], IAsyncTaskResponse]:
-        return await self._retry_with_reconnect(self._imageInferenceWithRetry, requestImage)
+        return await self._retry_with_reconnect(self._imageInference, requestImage)
 
-    async def _imageInferenceWithRetry(
+    async def _imageInference(
         self, requestImage: IImageInference
     ) -> Union[List[IImage], IAsyncTaskResponse]:
         let_lis: Optional[Any] = None
@@ -1835,9 +1829,6 @@ class RunwareBase:
             raise RunwareAPIError({"message": str(e)})
 
     async def videoInference(self, requestVideo: IVideoInference) -> Union[List[IVideo], IAsyncTaskResponse]:
-        return await self._retry_with_reconnect(self._videoInferenceWithRetry, requestVideo)
-
-    async def _videoInferenceWithRetry(self, requestVideo: IVideoInference) -> Union[List[IVideo], IAsyncTaskResponse]:
         await self.ensureConnection()
         return await asyncRetry(lambda: self._requestVideo(requestVideo))
 
@@ -2333,9 +2324,6 @@ class RunwareBase:
         return any(response.get("status") == "processing" for response in responses)
 
     async def audioInference(self, requestAudio: IAudioInference) -> Union[List[IAudio], IAsyncTaskResponse]:
-        return await self._retry_with_reconnect(self._audioInferenceWithRetry, requestAudio)
-
-    async def _audioInferenceWithRetry(self, requestAudio: IAudioInference) -> Union[List[IAudio], IAsyncTaskResponse]:
         await self.ensureConnection()
         return await asyncRetry(lambda: self._requestAudio(requestAudio))
 
