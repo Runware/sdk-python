@@ -128,6 +128,7 @@ class RunwareBase:
         self._reconnection_manager = ReconnectionManager(logger=self.logger)
         self._consecutive_auth_failures = 0
         self._max_auth_retries = 10
+        self._auth_retry_lock = asyncio.Lock()
 
 
     async def _retry_with_reconnect(self, func, *args, **kwargs):
@@ -138,7 +139,8 @@ class RunwareBase:
             try:
                 result = await func(*args, **kwargs)
                 
-                self._consecutive_auth_failures = 0
+                async with self._auth_retry_lock:
+                    self._consecutive_auth_failures = 0
                 return result
                 
             except Exception as e:
@@ -149,12 +151,15 @@ class RunwareBase:
                 if "Invalid API key" not in error_msg:
                     raise
                 
-                self._consecutive_auth_failures += 1
+                async with self._auth_retry_lock:
+                    self._consecutive_auth_failures += 1
+                    current_failures = self._consecutive_auth_failures
+                
                 self.logger.warning(
-                    f"Authentication error (attempt {self._consecutive_auth_failures}/{self._max_auth_retries}): {e}"
+                    f"Authentication error (attempt {current_failures}/{self._max_auth_retries}): {e}"
                 )
                 
-                if self._consecutive_auth_failures >= self._max_auth_retries:
+                if current_failures >= self._max_auth_retries:
                     self.logger.error(
                         f"Max authentication retries exceeded ({self._max_auth_retries}). Giving up.",
                         exc_info=True
@@ -165,7 +170,7 @@ class RunwareBase:
                     )
                 
                 try:
-                    self.logger.info(f"Attempting to reconnect (attempt {self._consecutive_auth_failures}/{self._max_auth_retries})")
+                    self.logger.info(f"Attempting to reconnect (attempt {current_failures}/{self._max_auth_retries})")
                     
                     self._invalidAPIkey = None
                     self._connectionSessionUUID = None
