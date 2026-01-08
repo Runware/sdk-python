@@ -142,10 +142,12 @@ class RunwareBase:
                 
             except Exception as e:
                 last_error = e
-                error_msg = str(e)
                 
-                if "Invalid API key" not in error_msg:
+
+                if not isinstance(e, ConnectionError):
                     raise
+                
+                error_msg = str(e)
                 
                 if attempt >= max_total_attempts - 1:
                     self.logger.error(f"Max authentication retry attempts ({max_total_attempts}) exceeded")
@@ -170,12 +172,23 @@ class RunwareBase:
                         self._connectionSessionUUID = None
                         
                         await self.connect()
+                        
+
+                        if not self.connected():
+                            raise ConnectionError("Reconnection failed; WebSocket is not open")
+                        
                         self.logger.info("Reconnection successful, retrying request")
                         
                     except Exception as reconnect_error:
                         self.logger.error(f"Error while reconnecting:", exc_info=reconnect_error)
                         delay = self._reconnection_manager.calculate_delay()
                         await asyncio.sleep(delay)
+        
+
+        raise ConnectionError(
+            f"Retry loop in _retry_with_reconnect completed without success. "
+            f"Last error: {last_error}"
+        )
 
     def _create_safe_async_listener(self, async_func):
         def wrapper(m):
