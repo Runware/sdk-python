@@ -129,6 +129,8 @@ class RunwareBase:
         self._images_lock = asyncio.Lock()
         self._listener_tasks = set()
         self._reconnection_manager = ReconnectionManager(logger=self.logger)
+        self._last_pong_time: float = 0.0
+        self._is_shutting_down: bool = False
 
 
     def _create_safe_async_listener(self, async_func):
