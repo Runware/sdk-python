@@ -137,6 +137,7 @@ class RunwareBase:
         for attempt in range(max_total_attempts):
             try:
                 result = await func(*args, **kwargs)
+                self._reconnection_manager.on_connection_success()
                 return result
                 
             except Exception as e:
@@ -157,9 +158,9 @@ class RunwareBase:
                     should_open_circuit = self._reconnection_manager.on_auth_failure()
                     
                     if should_open_circuit:
-                        self.logger.error(f"Max retry attempts ({max_total_attempts}) exceeded")
+                        self.logger.error("Authentication circuit breaker opened due to repeated failures")
                         raise ConnectionError(
-                            f"Failed to authenticate after {max_total_attempts} attempts. "
+                            f"Authentication circuit breaker opened due to repeated failures. "
                             f"Last error: {last_error}"
                         )
                     try:
