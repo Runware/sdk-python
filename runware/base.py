@@ -1683,6 +1683,8 @@ class RunwareBase:
     async def _modelUpload(
         self, requestModel: IUploadModelBaseType
     ) -> Optional[IUploadModelResponse]:
+        await self.ensureConnection()
+        
         task_uuid = getUUID()
         base_fields = {
             "taskType": ETaskType.MODEL_UPLOAD.value,
