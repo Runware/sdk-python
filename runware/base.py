@@ -184,7 +184,7 @@ class RunwareBase:
                         self.logger.info("Reconnection successful, retrying request")
                         
                     except Exception as reconnect_error:
-                        self.logger.error(f"Error while reconnecting:", exc_info=reconnect_error)
+                        self.logger.error(f"Error while reconnecting: {reconnect_error}", exc_info=True)
                         delay = self._reconnection_manager.calculate_delay()
                         await asyncio.sleep(delay)
 
