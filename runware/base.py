@@ -589,13 +589,10 @@ class RunwareBase:
         return await self._retry_with_reconnect(self._imageCaption, requestImageToText)
 
     async def _imageCaption(self, requestImageToText: IImageCaption) -> Union[IImageToText, IAsyncTaskResponse]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(
-                lambda: self._requestImageToText(requestImageToText)
-            )
-        except Exception as e:
-            raise e
+        await self.ensureConnection()
+        return await asyncRetry(
+            lambda: self._requestImageToText(requestImageToText)
+        )
 
     async def _requestImageToText(
         self, requestImageToText: IImageCaption
@@ -705,13 +702,10 @@ class RunwareBase:
         return await self._retry_with_reconnect(self._videoCaption, requestVideoCaption)
 
     async def _videoCaption(self, requestVideoCaption: IVideoCaption) -> Union[List[IVideoToText], IAsyncTaskResponse]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(
-                lambda: self._requestVideoCaption(requestVideoCaption)
-            )
-        except Exception as e:
-            raise e
+        await self.ensureConnection()
+        return await asyncRetry(
+            lambda: self._requestVideoCaption(requestVideoCaption)
+        )
 
     async def _requestVideoCaption(
         self, requestVideoCaption: IVideoCaption
@@ -753,13 +747,10 @@ class RunwareBase:
         return await self._retry_with_reconnect(self._videoBackgroundRemoval, requestVideoBackgroundRemoval)
 
     async def _videoBackgroundRemoval(self, requestVideoBackgroundRemoval: IVideoBackgroundRemoval) -> Union[List[IVideo], IAsyncTaskResponse]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(
-                lambda: self._requestVideoBackgroundRemoval(requestVideoBackgroundRemoval)
-            )
-        except Exception as e:
-            raise e
+        await self.ensureConnection()
+        return await asyncRetry(
+            lambda: self._requestVideoBackgroundRemoval(requestVideoBackgroundRemoval)
+        )
 
     async def _requestVideoBackgroundRemoval(
         self, requestVideoBackgroundRemoval: IVideoBackgroundRemoval
@@ -814,13 +805,10 @@ class RunwareBase:
         return await self._retry_with_reconnect(self._videoUpscale, requestVideoUpscale)
 
     async def _videoUpscale(self, requestVideoUpscale: IVideoUpscale) -> Union[List[IVideo], IAsyncTaskResponse]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(
-                lambda: self._requestVideoUpscale(requestVideoUpscale)
-            )
-        except Exception as e:
-            raise e
+        await self.ensureConnection()
+        return await asyncRetry(
+            lambda: self._requestVideoUpscale(requestVideoUpscale)
+        )
 
     async def _requestVideoUpscale(
         self, requestVideoUpscale: IVideoUpscale
@@ -981,11 +969,8 @@ class RunwareBase:
         return await self._retry_with_reconnect(self._imageUpscale, upscaleGanPayload)
 
     async def _imageUpscale(self, upscaleGanPayload: IImageUpscale) -> Union[List[IImage], IAsyncTaskResponse]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(lambda: self._upscaleGan(upscaleGanPayload))
-        except Exception as e:
-            raise e
+        await self.ensureConnection()
+        return await asyncRetry(lambda: self._upscaleGan(upscaleGanPayload))
 
     async def _upscaleGan(self, upscaleGanPayload: IImageUpscale) -> Union[List[IImage], IAsyncTaskResponse]:
         # Support both inputImage (legacy) and inputs.image (new format)
@@ -1099,11 +1084,8 @@ class RunwareBase:
         return await self._retry_with_reconnect(self._imageVectorize, vectorizePayload)
 
     async def _imageVectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(lambda: self._vectorize(vectorizePayload))
-        except Exception as e:
-            raise e
+        await self.ensureConnection()
+        return await asyncRetry(lambda: self._vectorize(vectorizePayload))
 
     async def _vectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
         # Process the image from inputs
@@ -1264,156 +1246,152 @@ class RunwareBase:
         return list(set(enhanced_prompts))
 
     async def uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
-        return await self._retry_with_reconnect(self._uploadImageWrapper, file)
-
-    async def _uploadImageWrapper(self, file: Union[File, str]) -> Optional[UploadImageType]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(lambda: self._uploadImage(file))
-        except Exception as e:
-            raise e
+        return await self._retry_with_reconnect(self._uploadImage, file)
 
     async def _uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
-        task_uuid = getUUID()
-        local_file = True
-        if isinstance(file, str):
-            if os.path.exists(file):
-                local_file = True
-            else:
-                local_file = isLocalFile(file)
+        await self.ensureConnection()
+        
+        async def upload():
+            task_uuid = getUUID()
+            local_file = True
+            
+            if isinstance(file, str):
+                if os.path.exists(file):
+                    local_file = True
+                else:
+                    local_file = isLocalFile(file)
 
-                # Check if it's a base64 string (with or without data URI prefix)
-                if file.startswith("data:") or re.match(
-                    r"^[A-Za-z0-9+/]+={0,2}$", file
-                ):
-                    # Assume it's a base64 string (with or without data URI prefix)
-                    local_file = False
-            if not local_file:
-                return UploadImageType(
-                    imageUUID=file,
-                    imageURL=file,
-                    taskUUID=task_uuid,
-                )
+                    # Check if it's a base64 string (with or without data URI prefix)
+                    if file.startswith("data:") or re.match(
+                        r"^[A-Za-z0-9+/]+={0,2}$", file
+                    ):
+                        # Assume it's a base64 string (with or without data URI prefix)
+                        local_file = False
+                if not local_file:
+                    return UploadImageType(
+                        imageUUID=file,
+                        imageURL=file,
+                        taskUUID=task_uuid,
+                    )
 
-            file = await fileToBase64(file)
+                file = await fileToBase64(file)
 
-        await self.send(
-            [
-                {
-                    "taskType": ETaskType.IMAGE_UPLOAD.value,
-                    "taskUUID": task_uuid,
-                    "image": file,
-                }
-            ]
-        )
-
-        lis = self.globalListener(taskUUID=task_uuid)
-
-        async def check(resolve: callable, reject: callable, *args: Any) -> bool:
-            async with self._messages_lock:
-                uploaded_image_list = self._globalMessages.get(task_uuid)
-                uploaded_image = uploaded_image_list[0] if uploaded_image_list else None
-
-                if uploaded_image and uploaded_image.get("error"):
-                    reject(uploaded_image)
-                    return True
-
-                if uploaded_image:
-                    del self._globalMessages[task_uuid]
-                    resolve(uploaded_image)
-                    return True
-
-            return False
-
-        response = await getIntervalWithPromise(
-            check, debugKey="upload-image", timeOutDuration=IMAGE_UPLOAD_TIMEOUT
-        )
-
-        lis["destroy"]()
-
-        if "code" in response:
-            # This indicates an error response
-            raise RunwareAPIError(response)
-
-        if response:
-            image = UploadImageType(
-                imageUUID=response["imageUUID"],
-                imageURL=response["imageURL"],
-                taskUUID=response["taskUUID"],
+            await self.send(
+                [
+                    {
+                        "taskType": ETaskType.IMAGE_UPLOAD.value,
+                        "taskUUID": task_uuid,
+                        "image": file,
+                    }
+                ]
             )
-        else:
-            image = None
-        return image
+
+            lis = self.globalListener(taskUUID=task_uuid)
+
+            async def check(resolve: callable, reject: callable, *args: Any) -> bool:
+                async with self._messages_lock:
+                    uploaded_image_list = self._globalMessages.get(task_uuid)
+                    uploaded_image = uploaded_image_list[0] if uploaded_image_list else None
+
+                    if uploaded_image and uploaded_image.get("error"):
+                        reject(uploaded_image)
+                        return True
+
+                    if uploaded_image:
+                        del self._globalMessages[task_uuid]
+                        resolve(uploaded_image)
+                        return True
+
+                return False
+
+            response = await getIntervalWithPromise(
+                check, debugKey="upload-image", timeOutDuration=IMAGE_UPLOAD_TIMEOUT
+            )
+
+            lis["destroy"]()
+
+            if "code" in response:
+                # This indicates an error response
+                raise RunwareAPIError(response)
+
+            if response:
+                image = UploadImageType(
+                    imageUUID=response["imageUUID"],
+                    imageURL=response["imageURL"],
+                    taskUUID=response["taskUUID"],
+                )
+            else:
+                image = None
+            return image
+        
+        return await asyncRetry(upload)
 
     async def uploadMedia(self, media_url: str) -> Optional[MediaStorageType]:
-        return await self._retry_with_reconnect(self._uploadMediaWrapper, media_url)
-
-    async def _uploadMediaWrapper(self, media_url: str) -> Optional[MediaStorageType]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(lambda: self._uploadMedia(media_url))
-        except Exception as e:
-            raise e
+        return await self._retry_with_reconnect(self._uploadMedia, media_url)
 
     async def _uploadMedia(self, media_url: str) -> Optional[MediaStorageType]:
-        task_uuid = getUUID()
-        local_file = True
+        await self.ensureConnection()
         
-        if isinstance(media_url, str):
-            if os.path.exists(media_url):
-                # Local file - convert to base64
-                media_url = await fileToBase64(media_url)
-                # Strip the data URI prefix for media storage API
-                if media_url.startswith("data:"):
-                    media_url = media_url.split(",", 1)[1]
-            # For URLs and base64 strings, send them directly to the API
-        
-        await self.send(
-            [
-                {
-                    "taskType": ETaskType.MEDIA_STORAGE.value,
-                    "taskUUID": task_uuid,
-                    "operation": "upload",
-                    "media": media_url,
-                }
-            ]
-        )
-
-        lis = self.globalListener(taskUUID=task_uuid)
-
-        def check(resolve: callable, reject: callable, *args: Any) -> bool:
-            uploaded_media_list = self._globalMessages.get(task_uuid)
-            uploaded_media = uploaded_media_list[0] if uploaded_media_list else None
-
-            if uploaded_media and uploaded_media.get("error"):
-                reject(uploaded_media)
-                return True
-
-            if uploaded_media:
-                del self._globalMessages[task_uuid]
-                resolve(uploaded_media)
-                return True
-
-            return False
-
-        response = await getIntervalWithPromise(
-            check, debugKey="upload-media", timeOutDuration=self._timeout
-        )
-
-        lis["destroy"]()
-
-        if "code" in response:
-            # This indicates an error response
-            raise RunwareAPIError(response)
-
-        if response:
-            media = MediaStorageType(
-                mediaUUID=response["mediaUUID"],
-                taskUUID=response["taskUUID"],
+        async def upload():
+            task_uuid = getUUID()
+            
+            if isinstance(media_url, str):
+                if os.path.exists(media_url):
+                    # Local file - convert to base64
+                    media_url = await fileToBase64(media_url)
+                    # Strip the data URI prefix for media storage API
+                    if media_url.startswith("data:"):
+                        media_url = media_url.split(",", 1)[1]
+                # For URLs and base64 strings, send them directly to the API
+            
+            await self.send(
+                [
+                    {
+                        "taskType": ETaskType.MEDIA_STORAGE.value,
+                        "taskUUID": task_uuid,
+                        "operation": "upload",
+                        "media": media_url,
+                    }
+                ]
             )
-        else:
-            media = None
-        return media
+
+            lis = self.globalListener(taskUUID=task_uuid)
+
+            def check(resolve: callable, reject: callable, *args: Any) -> bool:
+                uploaded_media_list = self._globalMessages.get(task_uuid)
+                uploaded_media = uploaded_media_list[0] if uploaded_media_list else None
+
+                if uploaded_media and uploaded_media.get("error"):
+                    reject(uploaded_media)
+                    return True
+
+                if uploaded_media:
+                    del self._globalMessages[task_uuid]
+                    resolve(uploaded_media)
+                    return True
+
+                return False
+
+            response = await getIntervalWithPromise(
+                check, debugKey="upload-media", timeOutDuration=self._timeout
+            )
+
+            lis["destroy"]()
+
+            if "code" in response:
+                # This indicates an error response
+                raise RunwareAPIError(response)
+
+            if response:
+                media = MediaStorageType(
+                    mediaUUID=response["mediaUUID"],
+                    taskUUID=response["taskUUID"],
+                )
+            else:
+                media = None
+            return media
+        
+        return await asyncRetry(upload)
 
     async def uploadUnprocessedImage(
         self,
@@ -1899,6 +1877,7 @@ class RunwareBase:
         await self._processVideoImages(requestVideo)
         requestVideo.taskUUID = requestVideo.taskUUID or getUUID()
         request_object = self._buildVideoRequest(requestVideo)
+        
 
         if requestVideo.webhookURL:
             request_object["webhookURL"] = requestVideo.webhookURL
