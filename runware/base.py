@@ -1762,7 +1762,8 @@ class RunwareBase:
 
         lis["destroy"]()
 
-        self._handle_error_response(response)
+        if isinstance(response, dict):
+            self._handle_error_response(response)
 
         if response:
             if not isinstance(response, list):
