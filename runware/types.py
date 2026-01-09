@@ -1339,6 +1339,9 @@ class IAudio:
     audioURL: Optional[str] = None
     audioBase64Data: Optional[str] = None
     audioDataURI: Optional[str] = None
+    videoUUID: Optional[str] = None
+    videoURL: Optional[str] = None
+    seed: Optional[int] = None
     cost: Optional[float] = None
 
 
