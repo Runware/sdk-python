@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.39]
+
+### Added
+- Added `MODEL_UPLOAD_TIMEOUT` constant in `runware/utils.py` with 15-minute default (900000ms) for large model uploads
+- Added `RUNWARE_MODEL_UPLOAD_TIMEOUT` environment variable support for configuring model upload timeout
+
+### Changed
+- Updated `_modelUpload()` in `runware/base.py` to use `MODEL_UPLOAD_TIMEOUT` instead of general timeout to prevent timeouts during large LoRA model uploads
+
 ## [0.4.38]
 
 ### Added
