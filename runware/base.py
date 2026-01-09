@@ -167,7 +167,7 @@ class RunwareBase:
                         self.logger.error("Authentication circuit breaker opened due to repeated failures")
                         raise ConnectionError(
                             f"Authentication circuit breaker opened due to repeated failures. "
-                            f"Last error: {last_error}"
+                            f"Last error: {str(last_error)}"
                         )
                     try:
                         self.logger.info(f"Reconnecting after auth error: {str(e)}")
@@ -1263,7 +1263,6 @@ class RunwareBase:
         async def upload():
             task_uuid = getUUID()
             local_file = True
-            file_data = file
             
             if isinstance(file, str):
                 if os.path.exists(file):
@@ -1284,7 +1283,8 @@ class RunwareBase:
                         taskUUID=task_uuid,
                     )
 
-                file_data = await fileToBase64(file)
+            # Convert file to base64 (handles both File objects and string paths)
+            file_data = await fileToBase64(file)
 
             await self.send(
                 [
@@ -1738,7 +1738,7 @@ class RunwareBase:
 
                 for uploaded_model in uploaded_model_list:
                     if uploaded_model.get("code"):
-                        raise RunwareAPIError(uploaded_model)
+                        self._handle_error_response(uploaded_model)
 
                     status = uploaded_model.get("status")
 
@@ -1747,7 +1747,7 @@ class RunwareBase:
                         unique_statuses.add(status)
 
                     if status is not None and "error" in status:
-                        raise RunwareAPIError(uploaded_model)
+                        self._handle_error_response(uploaded_model)
 
                     if status == "ready":
                         uploaded_model_list.remove(uploaded_model)
@@ -1790,11 +1790,7 @@ class RunwareBase:
     async def modelUpload(
         self, requestModel: IUploadModelBaseType
     ) -> Optional[IUploadModelResponse]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(lambda: self._modelUpload(requestModel))
-        except Exception as e:
-            raise e
+        return await self._retry_with_reconnect(self._modelUpload, requestModel)
 
     async def modelSearch(self, payload: IModelSearch) -> IModelSearchResponse:
         return await self._retry_with_reconnect(self._modelSearch, payload)
