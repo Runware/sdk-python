@@ -1260,79 +1260,76 @@ class RunwareBase:
     async def _uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
         await self.ensureConnection()
         
-        async def upload():
-            task_uuid = getUUID()
-            local_file = True
-            
-            if isinstance(file, str):
-                if os.path.exists(file):
-                    local_file = True
-                else:
-                    local_file = isLocalFile(file)
-
-                    # Check if it's a base64 string (with or without data URI prefix)
-                    if file.startswith("data:") or re.match(
-                        r"^[A-Za-z0-9+/]+={0,2}$", file
-                    ):
-                        # Assume it's a base64 string (with or without data URI prefix)
-                        local_file = False
-                if not local_file:
-                    return UploadImageType(
-                        imageUUID=file,
-                        imageURL=file,
-                        taskUUID=task_uuid,
-                    )
-
-            # Convert file to base64 (handles both File objects and string paths)
-            file_data = await fileToBase64(file)
-
-            await self.send(
-                [
-                    {
-                        "taskType": ETaskType.IMAGE_UPLOAD.value,
-                        "taskUUID": task_uuid,
-                        "image": file_data,
-                    }
-                ]
-            )
-
-            lis = self.globalListener(taskUUID=task_uuid)
-
-            async def check(resolve: callable, reject: callable, *args: Any) -> bool:
-                async with self._messages_lock:
-                    uploaded_image_list = self._globalMessages.get(task_uuid)
-                    uploaded_image = uploaded_image_list[0] if uploaded_image_list else None
-
-                    if uploaded_image and uploaded_image.get("error"):
-                        reject(uploaded_image)
-                        return True
-
-                    if uploaded_image:
-                        del self._globalMessages[task_uuid]
-                        resolve(uploaded_image)
-                        return True
-
-                return False
-
-            response = await getIntervalWithPromise(
-                check, debugKey="upload-image", timeOutDuration=IMAGE_UPLOAD_TIMEOUT
-            )
-
-            lis["destroy"]()
-
-            self._handle_error_response(response)
-
-            if response:
-                image = UploadImageType(
-                    imageUUID=response["imageUUID"],
-                    imageURL=response["imageURL"],
-                    taskUUID=response["taskUUID"],
-                )
-            else:
-                image = None
-            return image
+        task_uuid = getUUID()
+        local_file = True
         
-        return await asyncRetry(upload)
+        if isinstance(file, str):
+            if os.path.exists(file):
+                local_file = True
+            else:
+                local_file = isLocalFile(file)
+
+                # Check if it's a base64 string (with or without data URI prefix)
+                if file.startswith("data:") or re.match(
+                    r"^[A-Za-z0-9+/]+={0,2}$", file
+                ):
+                    # Assume it's a base64 string (with or without data URI prefix)
+                    local_file = False
+            if not local_file:
+                return UploadImageType(
+                    imageUUID=file,
+                    imageURL=file,
+                    taskUUID=task_uuid,
+                )
+
+        # Convert file to base64 (handles both File objects and string paths)
+        file_data = await fileToBase64(file)
+
+        await self.send(
+            [
+                {
+                    "taskType": ETaskType.IMAGE_UPLOAD.value,
+                    "taskUUID": task_uuid,
+                    "image": file_data,
+                }
+            ]
+        )
+
+        lis = self.globalListener(taskUUID=task_uuid)
+
+        async def check(resolve: callable, reject: callable, *args: Any) -> bool:
+            async with self._messages_lock:
+                uploaded_image_list = self._globalMessages.get(task_uuid)
+                uploaded_image = uploaded_image_list[0] if uploaded_image_list else None
+
+                if uploaded_image and uploaded_image.get("error"):
+                    reject(uploaded_image)
+                    return True
+
+                if uploaded_image:
+                    del self._globalMessages[task_uuid]
+                    resolve(uploaded_image)
+                    return True
+
+            return False
+
+        response = await getIntervalWithPromise(
+            check, debugKey="upload-image", timeOutDuration=IMAGE_UPLOAD_TIMEOUT
+        )
+
+        lis["destroy"]()
+
+        self._handle_error_response(response)
+
+        if response:
+            image = UploadImageType(
+                imageUUID=response["imageUUID"],
+                imageURL=response["imageURL"],
+                taskUUID=response["taskUUID"],
+            )
+        else:
+            image = None
+        return image
 
     async def uploadMedia(self, media_url: str) -> Optional[MediaStorageType]:
         return await self._retry_with_reconnect(self._uploadMedia, media_url)
@@ -1340,65 +1337,62 @@ class RunwareBase:
     async def _uploadMedia(self, media_url: str) -> Optional[MediaStorageType]:
         await self.ensureConnection()
         
-        async def upload():
-            task_uuid = getUUID()
-            media_data = media_url
-            
-            if isinstance(media_url, str):
-                if os.path.exists(media_url):
-                    # Local file - convert to base64
-                    media_data = await fileToBase64(media_url)
-                    # Strip the data URI prefix for media storage API
-                    if media_data.startswith("data:"):
-                        media_data = media_data.split(",", 1)[1]
-                # For URLs and base64 strings, send them directly to the API
-            
-            await self.send(
-                [
-                    {
-                        "taskType": ETaskType.MEDIA_STORAGE.value,
-                        "taskUUID": task_uuid,
-                        "operation": "upload",
-                        "media": media_data,
-                    }
-                ]
-            )
-
-            lis = self.globalListener(taskUUID=task_uuid)
-
-            def check(resolve: callable, reject: callable, *args: Any) -> bool:
-                uploaded_media_list = self._globalMessages.get(task_uuid)
-                uploaded_media = uploaded_media_list[0] if uploaded_media_list else None
-
-                if uploaded_media and uploaded_media.get("error"):
-                    reject(uploaded_media)
-                    return True
-
-                if uploaded_media:
-                    del self._globalMessages[task_uuid]
-                    resolve(uploaded_media)
-                    return True
-
-                return False
-
-            response = await getIntervalWithPromise(
-                check, debugKey="upload-media", timeOutDuration=self._timeout
-            )
-
-            lis["destroy"]()
-
-            self._handle_error_response(response)
-
-            if response:
-                media = MediaStorageType(
-                    mediaUUID=response["mediaUUID"],
-                    taskUUID=response["taskUUID"],
-                )
-            else:
-                media = None
-            return media
+        task_uuid = getUUID()
+        media_data = media_url
         
-        return await asyncRetry(upload)
+        if isinstance(media_url, str):
+            if os.path.exists(media_url):
+                # Local file - convert to base64
+                media_data = await fileToBase64(media_url)
+                # Strip the data URI prefix for media storage API
+                if media_data.startswith("data:"):
+                    media_data = media_data.split(",", 1)[1]
+            # For URLs and base64 strings, send them directly to the API
+        
+        await self.send(
+            [
+                {
+                    "taskType": ETaskType.MEDIA_STORAGE.value,
+                    "taskUUID": task_uuid,
+                    "operation": "upload",
+                    "media": media_data,
+                }
+            ]
+        )
+
+        lis = self.globalListener(taskUUID=task_uuid)
+
+        def check(resolve: callable, reject: callable, *args: Any) -> bool:
+            uploaded_media_list = self._globalMessages.get(task_uuid)
+            uploaded_media = uploaded_media_list[0] if uploaded_media_list else None
+
+            if uploaded_media and uploaded_media.get("error"):
+                reject(uploaded_media)
+                return True
+
+            if uploaded_media:
+                del self._globalMessages[task_uuid]
+                resolve(uploaded_media)
+                return True
+
+            return False
+
+        response = await getIntervalWithPromise(
+            check, debugKey="upload-media", timeOutDuration=self._timeout
+        )
+
+        lis["destroy"]()
+
+        self._handle_error_response(response)
+
+        if response:
+            media = MediaStorageType(
+                mediaUUID=response["mediaUUID"],
+                taskUUID=response["taskUUID"],
+            )
+        else:
+            media = None
+        return media
 
     async def uploadUnprocessedImage(
         self,
