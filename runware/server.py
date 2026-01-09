@@ -351,6 +351,10 @@ class RunwareServer(RunwareBase):
                     break
 
                 try:
+                    # Clear old session before reconnecting
+                    self._connectionSessionUUID = None
+                    self._invalidAPIkey = None
+                    
                     await self.connect()
                     if self.isWebsocketReadyState():
                         self.logger.info("Reconnected successfully")

@@ -188,6 +188,23 @@ class RunwareBase:
                         delay = self._reconnection_manager.calculate_delay()
                         await asyncio.sleep(delay)
 
+    def _handle_error_response(self, response: Dict[str, Any]) -> None:
+        """
+        Handle error responses from the server.
+        Raises ConnectionError for authentication errors, RunwareAPIError for others.
+        """
+        if not response.get("code"):
+            return
+            
+        # Check if this is an authentication error
+        if response.get("taskType") == "authentication" or response.get("code") == "missingApiKey":
+            error_message = response.get("message", "Authentication error")
+            self.logger.warning(f"Authentication error detected: {error_message}")
+            raise ConnectionError(error_message)
+        
+        # For other errors, raise RunwareAPIError
+        raise RunwareAPIError(response)
+    
     def _create_safe_async_listener(self, async_func):
         def wrapper(m):
             task = asyncio.create_task(async_func(m))
@@ -376,9 +393,7 @@ class RunwareBase:
 
             lis["destroy"]()
 
-            if "code" in response:
-                # This indicates an error response
-                raise RunwareAPIError(response)
+            self._handle_error_response(response)
 
             if response:
                 if not isinstance(response, list):
@@ -689,9 +704,7 @@ class RunwareBase:
 
         lis["destroy"]()
 
-        if "code" in response:
-            # This indicates an error response
-            raise RunwareAPIError(response)
+        self._handle_error_response(response)
 
         if response:
             return createImageToTextFromResponse(response)
@@ -956,9 +969,7 @@ class RunwareBase:
 
         lis["destroy"]()
 
-        if "code" in response:
-            # This indicates an error response
-            raise RunwareAPIError(response)
+        self._handle_error_response(response)
 
         image = createImageFromResponse(response)
         image_list: List[IImage] = [image]
@@ -1072,9 +1083,7 @@ class RunwareBase:
 
         lis["destroy"]()
 
-        if "code" in response:
-            # This indicates an error response
-            raise RunwareAPIError(response)
+        self._handle_error_response(response)
 
         image = createImageFromResponse(response)
         image_list: List[IImage] = [image]
@@ -1311,9 +1320,7 @@ class RunwareBase:
 
             lis["destroy"]()
 
-            if "code" in response:
-                # This indicates an error response
-                raise RunwareAPIError(response)
+            self._handle_error_response(response)
 
             if response:
                 image = UploadImageType(
@@ -1380,9 +1387,7 @@ class RunwareBase:
 
             lis["destroy"]()
 
-            if "code" in response:
-                # This indicates an error response
-                raise RunwareAPIError(response)
+            self._handle_error_response(response)
 
             if response:
                 media = MediaStorageType(
@@ -1761,9 +1766,7 @@ class RunwareBase:
 
         lis["destroy"]()
 
-        if "code" in response:
-            # This indicates an error response
-            raise RunwareAPIError(response)
+        self._handle_error_response(response)
 
         if response:
             if not isinstance(response, list):
@@ -1837,9 +1840,7 @@ class RunwareBase:
 
             listener["destroy"]()
 
-            if "code" in response:
-                # This indicates an error response
-                raise RunwareAPIError(response)
+            self._handle_error_response(response)
 
             return instantiateDataclass(IModelSearchResponse, response)
 
@@ -2151,8 +2152,7 @@ class RunwareBase:
 
                 response = response_list[0] if isinstance(response_list, list) else response_list
 
-                if response.get("code"):
-                    raise RunwareAPIError(response)
+                self._handle_error_response(response)
 
                 if isinstance(response, dict) and response.get("error"):
                     reject(response)
@@ -2173,8 +2173,8 @@ class RunwareBase:
         finally:
             lis["destroy"]()
 
-        if isinstance(response, dict) and "code" in response:
-            raise RunwareAPIError(response)
+        if isinstance(response, dict):
+            self._handle_error_response(response)
 
         return response
 
@@ -2191,8 +2191,7 @@ class RunwareBase:
 
                 response = response_list[0]
 
-                if response.get("code"):
-                    raise RunwareAPIError(response)
+                self._handle_error_response(response)
 
                 if response.get("status") == "success" or response.get("videoUUID") is not None or response.get("mediaUUID") is not None:
                     del self._globalMessages[task_uuid]
@@ -2227,21 +2226,10 @@ class RunwareBase:
             lis["destroy"]()
 
         if not initial_response or len(initial_response) == 0:
-            if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
-                
-                return createAsyncTaskResponse({
-                    "taskUUID": task_uuid,
-                    "taskType": ETaskType.VIDEO_INFERENCE.value
-                })
-            else:
-                # For sync delivery method, raise an error if no initial response is received
-                raise RunwareError(
-                    IError(
-                        error=True,
-                        error_message=f"No initial response received for video generation | delivery_method={delivery_method_enum}",
-                        task_uuid=task_uuid
-                    )
-                )
+            # No response from server means connection was lost during request
+            raise ConnectionError(
+                f"No initial response received for video generation | delivery_method={delivery_method_enum} | taskUUID={task_uuid}"
+            )
         
         if isinstance(initial_response[0], IAsyncTaskResponse):
             return initial_response[0]
@@ -2268,8 +2256,7 @@ class RunwareBase:
 
                 response = response_list[0]
 
-                if response.get("code"):
-                    raise RunwareAPIError(response)
+                self._handle_error_response(response)
 
                 if response.get("status") == "success" or response.get("imageUUID") is not None:
                     del self._globalMessages[task_uuid]
@@ -2305,21 +2292,10 @@ class RunwareBase:
             lis["destroy"]()
 
         if not initial_response or len(initial_response) == 0:
-            if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
-                
-                return createAsyncTaskResponse({
-                    "taskUUID": task_uuid,
-                    "taskType": ETaskType.IMAGE_INFERENCE.value
-                })
-            else:
-                # For sync delivery method, raise an error if no initial response is received
-                raise RunwareError(
-                    IError(
-                        error=True,
-                        error_message=f"No initial response received for image inference | delivery_method={delivery_method_enum}",
-                        task_uuid=task_uuid
-                    )
-                )
+            # No response from server means connection was lost during request
+            raise ConnectionError(
+                f"No initial response received for image inference | delivery_method={delivery_method_enum} | taskUUID={task_uuid}"
+            )
         
         if isinstance(initial_response[0], IAsyncTaskResponse):
             return initial_response[0]
@@ -2436,8 +2412,7 @@ class RunwareBase:
 
                 response = response_list[0]
 
-                if response.get("code"):
-                    raise RunwareAPIError(response)
+                self._handle_error_response(response)
 
                 if response.get("status") == "success" or response.get("audioUUID") is not None:
                 
@@ -2474,21 +2449,10 @@ class RunwareBase:
             lis["destroy"]()
 
         if not initial_response or len(initial_response) == 0:
-            if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
-                
-                return createAsyncTaskResponse({
-                    "taskUUID": task_uuid,
-                    "taskType": ETaskType.AUDIO_INFERENCE.value
-                })
-            else:
-                # For sync delivery method, raise an error if no initial response is received
-                raise RunwareError(
-                    IError(
-                        error=True,
-                        error_message=f"No initial response received for audio inference | delivery_method={delivery_method_enum}",
-                        task_uuid=task_uuid
-                    )
-                )
+            # No response from server means connection was lost during request
+            raise ConnectionError(
+                f"No initial response received for audio inference | delivery_method={delivery_method_enum} | taskUUID={task_uuid}"
+            )
         
         if isinstance(initial_response[0], IAsyncTaskResponse):
             return initial_response[0]
@@ -2523,8 +2487,7 @@ class RunwareBase:
             )
             lis["destroy"]()
 
-            if "code" in response:
-                raise RunwareAPIError(response)
+            self._handle_error_response(response)
 
             return self._createAudioFromResponse(response) if response else None
         except Exception as e:
@@ -2535,8 +2498,7 @@ class RunwareBase:
         completed_results: List[Dict[str, Any]] = []
 
         for response in responses:
-            if response.get("code"):
-                raise RunwareAPIError(response)
+            self._handle_error_response(response)
 
             if response.get("status") == "success":
                 completed_results.append(response)
@@ -2607,8 +2569,7 @@ class RunwareBase:
                     responses = await self._sendPollRequest(task_uuid, poll_count)
 
                     for response in responses:
-                        if response.get("code"):
-                            raise RunwareAPIError(response)
+                        self._handle_error_response(response)
 
                     if task_type is None:
                         for resp in responses:
