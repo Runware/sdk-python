@@ -1254,6 +1254,7 @@ class RunwareBase:
         async def upload():
             task_uuid = getUUID()
             local_file = True
+            file_data = file
             
             if isinstance(file, str):
                 if os.path.exists(file):
@@ -1274,14 +1275,14 @@ class RunwareBase:
                         taskUUID=task_uuid,
                     )
 
-                file = await fileToBase64(file)
+                file_data = await fileToBase64(file)
 
             await self.send(
                 [
                     {
                         "taskType": ETaskType.IMAGE_UPLOAD.value,
                         "taskUUID": task_uuid,
-                        "image": file,
+                        "image": file_data,
                     }
                 ]
             )
@@ -1334,14 +1335,15 @@ class RunwareBase:
         
         async def upload():
             task_uuid = getUUID()
+            media_data = media_url
             
             if isinstance(media_url, str):
                 if os.path.exists(media_url):
                     # Local file - convert to base64
-                    media_url = await fileToBase64(media_url)
+                    media_data = await fileToBase64(media_url)
                     # Strip the data URI prefix for media storage API
-                    if media_url.startswith("data:"):
-                        media_url = media_url.split(",", 1)[1]
+                    if media_data.startswith("data:"):
+                        media_data = media_data.split(",", 1)[1]
                 # For URLs and base64 strings, send them directly to the API
             
             await self.send(
@@ -1350,7 +1352,7 @@ class RunwareBase:
                         "taskType": ETaskType.MEDIA_STORAGE.value,
                         "taskUUID": task_uuid,
                         "operation": "upload",
-                        "media": media_url,
+                        "media": media_data,
                     }
                 ]
             )
