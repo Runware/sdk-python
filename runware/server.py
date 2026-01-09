@@ -41,8 +41,6 @@ class RunwareServer(RunwareBase):
         self._sdkType: SdkType = SdkType.SERVER
         self._apiKey: str = api_key
         self._message_handler_task: Optional[asyncio.Task] = None
-        self._last_pong_time: float = 0.0
-        self._is_shutting_down: bool = False
         self._max_retries: int = max_retries
         self._retry_delay: int = retry_delay
         self._heartbeat_task: Optional[asyncio.Task] = None
