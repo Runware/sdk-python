@@ -82,6 +82,14 @@ IMAGE_UPLOAD_TIMEOUT = int(os.environ.get(
     60000
 ))
 
+# Model upload timeout (milliseconds)
+# Maximum time to wait for model upload to complete
+# Used in: _modelUpload() for uploading models (LoRA, checkpoints, etc.)
+MODEL_UPLOAD_TIMEOUT = int(os.environ.get(
+    "RUNWARE_MODEL_UPLOAD_TIMEOUT",
+    900000  # 15 minutes default - models can be large
+))
+
 # Video initial response timeout (milliseconds)
 # Maximum time to wait for initial video generation response or polling response
 # Used in: _handleInitialVideoResponse(), _sendPollRequest()
