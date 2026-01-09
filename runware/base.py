@@ -2462,7 +2462,7 @@ class RunwareBase:
             for poll_count in range(MAX_POLLS):
                 try:
                     responses = await self._sendPollRequest(task_uuid, poll_count)
-                    
+
                     for response in responses:
                         if response.get("code"):
                             raise RunwareAPIError(response)
