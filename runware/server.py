@@ -111,9 +111,8 @@ class RunwareServer(RunwareBase):
                         check=pong_check, lis=pong_lis
                     )
 
-                if self._reconnecting_task:
-                    self._reconnecting_task.cancel()
-                    self._tasks.pop("Task_Reconnecting", None)
+                # Don't cancel reconnecting task here - it would cancel this entire operation!
+                # The reconnecting task will stop naturally when connect() succeeds
 
                 if self._connectionSessionUUID and self.isWebsocketReadyState():
                     self.logger.info(
@@ -351,6 +350,10 @@ class RunwareServer(RunwareBase):
                     break
 
                 try:
+                    # Clear old session before reconnecting
+                    self._connectionSessionUUID = None
+                    self._invalidAPIkey = None
+                    
                     await self.connect()
                     if self.isWebsocketReadyState():
                         self.logger.info("Reconnected successfully")
