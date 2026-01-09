@@ -750,7 +750,9 @@ class RunwareBase:
         )
 
     async def videoBackgroundRemoval(self, requestVideoBackgroundRemoval: IVideoBackgroundRemoval) -> Union[List[IVideo], IAsyncTaskResponse]:
+        return await self._retry_with_reconnect(self._videoBackgroundRemoval, requestVideoBackgroundRemoval)
 
+    async def _videoBackgroundRemoval(self, requestVideoBackgroundRemoval: IVideoBackgroundRemoval) -> Union[List[IVideo], IAsyncTaskResponse]:
         try:
             await self.ensureConnection()
             return await asyncRetry(
@@ -809,6 +811,9 @@ class RunwareBase:
         )
 
     async def videoUpscale(self, requestVideoUpscale: IVideoUpscale) -> Union[List[IVideo], IAsyncTaskResponse]:
+        return await self._retry_with_reconnect(self._videoUpscale, requestVideoUpscale)
+
+    async def _videoUpscale(self, requestVideoUpscale: IVideoUpscale) -> Union[List[IVideo], IAsyncTaskResponse]:
         try:
             await self.ensureConnection()
             return await asyncRetry(
@@ -973,6 +978,9 @@ class RunwareBase:
         return image_list
 
     async def imageUpscale(self, upscaleGanPayload: IImageUpscale) -> Union[List[IImage], IAsyncTaskResponse]:
+        return await self._retry_with_reconnect(self._imageUpscale, upscaleGanPayload)
+
+    async def _imageUpscale(self, upscaleGanPayload: IImageUpscale) -> Union[List[IImage], IAsyncTaskResponse]:
         try:
             await self.ensureConnection()
             return await asyncRetry(lambda: self._upscaleGan(upscaleGanPayload))
@@ -1088,6 +1096,9 @@ class RunwareBase:
         return image_list
 
     async def imageVectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
+        return await self._retry_with_reconnect(self._imageVectorize, vectorizePayload)
+
+    async def _imageVectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
         try:
             await self.ensureConnection()
             return await asyncRetry(lambda: self._vectorize(vectorizePayload))
@@ -1253,6 +1264,9 @@ class RunwareBase:
         return list(set(enhanced_prompts))
 
     async def uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
+        return await self._retry_with_reconnect(self._uploadImageWrapper, file)
+
+    async def _uploadImageWrapper(self, file: Union[File, str]) -> Optional[UploadImageType]:
         try:
             await self.ensureConnection()
             return await asyncRetry(lambda: self._uploadImage(file))
@@ -1332,6 +1346,9 @@ class RunwareBase:
         return image
 
     async def uploadMedia(self, media_url: str) -> Optional[MediaStorageType]:
+        return await self._retry_with_reconnect(self._uploadMediaWrapper, media_url)
+
+    async def _uploadMediaWrapper(self, media_url: str) -> Optional[MediaStorageType]:
         try:
             await self.ensureConnection()
             return await asyncRetry(lambda: self._uploadMedia(media_url))
@@ -1797,6 +1814,9 @@ class RunwareBase:
             raise e
 
     async def modelSearch(self, payload: IModelSearch) -> IModelSearchResponse:
+        return await self._retry_with_reconnect(self._modelSearch, payload)
+
+    async def _modelSearch(self, payload: IModelSearch) -> IModelSearchResponse:
         try:
             await self.ensureConnection()
             task_uuid = getUUID()
@@ -1857,6 +1877,13 @@ class RunwareBase:
         return await asyncRetry(lambda: self._requestVideo(requestVideo))
 
     async def getResponse(
+        self,
+        taskUUID: str,
+        numberResults: Optional[int] = 1,
+    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage]]:
+        return await self._retry_with_reconnect(self._getResponse, taskUUID, numberResults)
+
+    async def _getResponse(
         self,
         taskUUID: str,
         numberResults: Optional[int] = 1,
