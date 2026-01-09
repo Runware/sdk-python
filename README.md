@@ -1086,6 +1086,9 @@ RUNWARE_IMAGE_INFERENCE_TIMEOUT=300000      # Image generation (default: 5 min)
 RUNWARE_IMAGE_OPERATION_TIMEOUT=120000      # Caption, upscale, background removal (default: 2 min)
 RUNWARE_IMAGE_UPLOAD_TIMEOUT=60000          # Image upload (default: 1 min)
 
+# Model Operations (milliseconds)
+RUNWARE_MODEL_UPLOAD_TIMEOUT=900000         # Model upload (default: 15 min)
+
 # Video Operations (milliseconds)
 RUNWARE_VIDEO_INITIAL_TIMEOUT=30000         # Initial response wait (default: 30 sec)
 RUNWARE_VIDEO_POLLING_DELAY=3000            # Delay between status checks (default: 3 sec)
