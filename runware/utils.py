@@ -90,9 +90,7 @@ MODEL_UPLOAD_TIMEOUT = int(os.environ.get(
     900000  # 15 minutes default - models can be large
 ))
 
-# Maximum authentication retry attempts
-# Maximum number of times to retry authentication after connection errors
-# Used in: _retry_with_reconnect() for handling authentication failures
+# Maximum number of times to retry after authentication failures (used in _retry_with_reconnect())
 MAX_RETRY_ATTEMPTS = 10
 
 # Video initial response timeout (milliseconds)
