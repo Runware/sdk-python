@@ -88,6 +88,7 @@ from .utils import (
     MAX_POLLS,
     MAX_POLLS_VIDEO_GENERATION,
     MAX_POLLS_AUDIO_GENERATION,
+    MAX_RETRY_ATTEMPTS,
 )
 
 # Configure logging
@@ -133,9 +134,8 @@ class RunwareBase:
     async def _retry_with_reconnect(self, func, *args, **kwargs):
 
         last_error = None
-        max_total_attempts = 10
         
-        for attempt in range(max_total_attempts):
+        for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
                 result = await func(*args, **kwargs)
                 self._reconnection_manager.on_connection_success()
@@ -148,16 +148,19 @@ class RunwareBase:
                 if not isinstance(e, ConnectionError):
                     raise
                 
-                error_msg = str(e)
-                
-                if attempt >= max_total_attempts - 1:
-                    self.logger.error(f"Max authentication retry attempts ({max_total_attempts}) exceeded")
+                if attempt >= MAX_RETRY_ATTEMPTS - 1:
+                    self.logger.error(f"Max authentication retry attempts ({MAX_RETRY_ATTEMPTS}) exceeded")
                     raise ConnectionError(
-                        f"Failed to authenticate after {max_total_attempts} attempts. "
+                        f"Failed to authenticate after {MAX_RETRY_ATTEMPTS} attempts. "
                         f"Last error: {last_error}"
                     )
                 
                 async with self._reconnect_lock:
+                    # Check if already connected (another concurrent task may have reconnected)
+                    if self.connected() and self._connectionSessionUUID is not None:
+                        self.logger.info("Connection already re-established by another task, retrying request")
+                        continue
+                    
                     should_open_circuit = self._reconnection_manager.on_auth_failure()
                     
                     if should_open_circuit:
@@ -167,7 +170,7 @@ class RunwareBase:
                             f"Last error: {last_error}"
                         )
                     try:
-                        self.logger.info(f"Reconnecting after auth error: {error_msg}")
+                        self.logger.info(f"Reconnecting after auth error: {str(e)}")
                         
                         self._invalidAPIkey = None
                         self._connectionSessionUUID = None
@@ -184,12 +187,6 @@ class RunwareBase:
                         self.logger.error(f"Error while reconnecting:", exc_info=reconnect_error)
                         delay = self._reconnection_manager.calculate_delay()
                         await asyncio.sleep(delay)
-        
-
-        raise ConnectionError(
-            f"Retry loop in _retry_with_reconnect completed without success. "
-            f"Last error: {last_error}"
-        )
 
     def _create_safe_async_listener(self, async_func):
         def wrapper(m):
@@ -290,6 +287,9 @@ class RunwareBase:
         self._invalidAPIkey = None
 
     async def photoMaker(self, requestPhotoMaker: IPhotoMaker) -> Union[List[IImage], IAsyncTaskResponse]:
+        return await self._retry_with_reconnect(self._photoMaker, requestPhotoMaker)
+
+    async def _photoMaker(self, requestPhotoMaker: IPhotoMaker) -> Union[List[IImage], IAsyncTaskResponse]:
         retry_count = 0
 
         try:
@@ -586,6 +586,9 @@ class RunwareBase:
         # return images
 
     async def imageCaption(self, requestImageToText: IImageCaption) -> Union[IImageToText, IAsyncTaskResponse]:
+        return await self._retry_with_reconnect(self._imageCaption, requestImageToText)
+
+    async def _imageCaption(self, requestImageToText: IImageCaption) -> Union[IImageToText, IAsyncTaskResponse]:
         try:
             await self.ensureConnection()
             return await asyncRetry(
@@ -699,6 +702,9 @@ class RunwareBase:
             return None
 
     async def videoCaption(self, requestVideoCaption: IVideoCaption) -> Union[List[IVideoToText], IAsyncTaskResponse]:
+        return await self._retry_with_reconnect(self._videoCaption, requestVideoCaption)
+
+    async def _videoCaption(self, requestVideoCaption: IVideoCaption) -> Union[List[IVideoToText], IAsyncTaskResponse]:
         try:
             await self.ensureConnection()
             return await asyncRetry(
@@ -1844,6 +1850,9 @@ class RunwareBase:
             raise RunwareAPIError({"message": str(e)})
 
     async def videoInference(self, requestVideo: IVideoInference) -> Union[List[IVideo], IAsyncTaskResponse]:
+        return await self._retry_with_reconnect(self._videoInference, requestVideo)
+
+    async def _videoInference(self, requestVideo: IVideoInference) -> Union[List[IVideo], IAsyncTaskResponse]:
         await self.ensureConnection()
         return await asyncRetry(lambda: self._requestVideo(requestVideo))
 
@@ -2339,6 +2348,9 @@ class RunwareBase:
         return any(response.get("status") == "processing" for response in responses)
 
     async def audioInference(self, requestAudio: IAudioInference) -> Union[List[IAudio], IAsyncTaskResponse]:
+        return await self._retry_with_reconnect(self._audioInference, requestAudio)
+
+    async def _audioInference(self, requestAudio: IAudioInference) -> Union[List[IAudio], IAsyncTaskResponse]:
         await self.ensureConnection()
         return await asyncRetry(lambda: self._requestAudio(requestAudio))
 
