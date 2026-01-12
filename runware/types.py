@@ -614,6 +614,8 @@ class ISettings(SerializableMixin):
     temperature: Optional[float] = None
     systemPrompt: Optional[str] = None
     topP: Optional[float] = None
+    layers: Optional[int] = None  
+    trueCFGScale: Optional[float] = None  
 
     @property
     def request_key(self) -> str:
