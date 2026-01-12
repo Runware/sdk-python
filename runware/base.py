@@ -2067,7 +2067,8 @@ class RunwareBase:
 
                 response = response_list[0] if isinstance(response_list, list) else response_list
 
-                if response.get("code"):
+                if self._is_error_response(response):
+                    del self._globalMessages[task_uuid]
                     raise RunwareAPIError(response)
 
                 if isinstance(response, dict) and response.get("error"):
@@ -2107,7 +2108,8 @@ class RunwareBase:
 
                 response = response_list[0]
 
-                if response.get("code"):
+                if self._is_error_response(response):
+                    del self._globalMessages[task_uuid]
                     raise RunwareAPIError(response)
 
                 if response.get("status") == "success" or response.get("videoUUID") is not None or response.get("mediaUUID") is not None:
@@ -2129,7 +2131,11 @@ class RunwareBase:
                 debugKey=debug_key,
                 timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else VIDEO_INITIAL_TIMEOUT
             )
+        except RunwareAPIError:
+            lis["destroy"]()
+            raise
         except Exception as e:
+            lis["destroy"]()
             if delivery_method_enum is EDeliveryMethod.SYNC:
                 error_msg = (
                     f"Timeout waiting for video generation | "
@@ -2139,12 +2145,11 @@ class RunwareBase:
                 )
                 raise Exception(error_msg)
             initial_response = None
-        finally:
+        else:
             lis["destroy"]()
 
         if not initial_response or len(initial_response) == 0:
             if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
-                
                 return createAsyncTaskResponse({
                     "taskUUID": task_uuid,
                     "taskType": ETaskType.VIDEO_INFERENCE.value
@@ -2158,10 +2163,10 @@ class RunwareBase:
                         task_uuid=task_uuid
                     )
                 )
-        
+
         if isinstance(initial_response[0], IAsyncTaskResponse):
             return initial_response[0]
-        
+
         return instantiateDataclassList(IVideo, initial_response)
 
     async def _handleInitialImageResponse(
@@ -2184,7 +2189,8 @@ class RunwareBase:
 
                 response = response_list[0]
 
-                if response.get("code"):
+                if self._is_error_response(response):
+                    del self._globalMessages[task_uuid]
                     raise RunwareAPIError(response)
 
                 if response.get("status") == "success" or response.get("imageUUID") is not None:
@@ -2201,13 +2207,16 @@ class RunwareBase:
                 return False
 
         try:
-
             initial_response = await getIntervalWithPromise(
                 check_initial_response,
                 debugKey=debug_key,
                 timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else IMAGE_INITIAL_TIMEOUT
             )
+        except RunwareAPIError:
+            lis["destroy"]()
+            raise
         except Exception as e:
+            lis["destroy"]()
             if delivery_method_enum is EDeliveryMethod.SYNC:
                 error_msg = (
                     f"Timeout waiting for image generation | "
@@ -2217,12 +2226,12 @@ class RunwareBase:
                 )
                 raise Exception(error_msg)
             initial_response = None
-        finally:
+        else:
             lis["destroy"]()
 
         if not initial_response or len(initial_response) == 0:
             if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
-                
+
                 return createAsyncTaskResponse({
                     "taskUUID": task_uuid,
                     "taskType": ETaskType.IMAGE_INFERENCE.value
@@ -2236,10 +2245,10 @@ class RunwareBase:
                         task_uuid=task_uuid
                     )
                 )
-        
+
         if isinstance(initial_response[0], IAsyncTaskResponse):
             return initial_response[0]
-        
+
         return instantiateDataclassList(IImage, initial_response)
 
     async def _sendPollRequest(self, task_uuid: str, poll_count: int) -> List[Dict[str, Any]]:
@@ -2349,11 +2358,12 @@ class RunwareBase:
 
                 response = response_list[0]
 
-                if response.get("code"):
+                if self._is_error_response(response):
+                    del self._globalMessages[task_uuid]
                     raise RunwareAPIError(response)
 
                 if response.get("status") == "success" or response.get("audioUUID") is not None:
-                
+
                     del self._globalMessages[task_uuid]
                     resolve([response])
                     return True
@@ -2372,9 +2382,12 @@ class RunwareBase:
                 debugKey=debug_key,
                 timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else AUDIO_INITIAL_TIMEOUT
             )
+        except RunwareAPIError:
+            lis["destroy"]()
+            raise
         except Exception as e:
+            lis["destroy"]()
             if delivery_method_enum is EDeliveryMethod.SYNC:
-                lis["destroy"]()
                 error_msg = (
                     f"Timeout waiting for audio generation | "
                     f"TaskUUID: {task_uuid} | "
@@ -2383,12 +2396,12 @@ class RunwareBase:
                 )
                 raise Exception(error_msg)
             initial_response = None
-        finally:
+        else:
             lis["destroy"]()
 
         if not initial_response or len(initial_response) == 0:
             if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
-                
+
                 return createAsyncTaskResponse({
                     "taskUUID": task_uuid,
                     "taskType": ETaskType.AUDIO_INFERENCE.value
@@ -2402,7 +2415,7 @@ class RunwareBase:
                         task_uuid=task_uuid
                     )
                 )
-        
+
         if isinstance(initial_response[0], IAsyncTaskResponse):
             return initial_response[0]
 
@@ -2580,3 +2593,19 @@ class RunwareBase:
         :return: True if the connection is active and authenticated, False otherwise.
         """
         return self.isWebsocketReadyState() and self._connectionSessionUUID is not None
+
+    def _is_error_response(self, response: Dict[str, Any]) -> bool:
+        """Check if response indicates an error in any known format."""
+        if not response or not isinstance(response, dict):
+            return False
+
+        if response.get("code"):
+            return True
+        if response.get("error"):
+            return True
+        if response.get("errorId"):
+            return True
+
+        return False
+
+
