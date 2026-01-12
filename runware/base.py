@@ -2595,7 +2595,7 @@ class RunwareBase:
         return self.isWebsocketReadyState() and self._connectionSessionUUID is not None
 
     def _is_error_response(self, response: Dict[str, Any]) -> bool:
-        """Check if response indicates an error in any known format."""
+        """Check if response indicates an error via 'code', 'error', or 'errorId' fields."""
         if not response or not isinstance(response, dict):
             return False
 
