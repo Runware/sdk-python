@@ -151,6 +151,15 @@ class RunwareServer(RunwareBase):
                     )
 
                 if self.isWebsocketReadyState():
+                    # Cancel existing heartbeat task if it exists to prevent duplicates
+                    if self._heartbeat_task and not self._heartbeat_task.done():
+                        self.logger.info("Cancelling existing heartbeat task")
+                        self._heartbeat_task.cancel()
+                        try:
+                            await self._heartbeat_task
+                        except asyncio.CancelledError:
+                            pass
+                    
                     self.logger.info("Starting heartbeat task")
                     self._heartbeat_task = asyncio.create_task(
                         self.heartBeat(), name="Task_Heartbeat"
