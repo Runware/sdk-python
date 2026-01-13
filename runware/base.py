@@ -144,6 +144,32 @@ class RunwareBase:
             except Exception as e:
                 last_error = e
                 
+                # When conflictTaskUUID: raise on first attempt, return async response on retry
+                if isinstance(e, RunwareAPIError) and e.code == "conflictTaskUUID":
+                    if attempt == 0:
+                        raise
+                    else:
+                        task_uuid = e.error_data.get("taskUUID")
+                        
+                        await asyncio.sleep(10)
+                        
+                        task_type = None
+                        async with self._messages_lock:
+                            response_list = self._globalMessages.get(task_uuid, [])
+                            if response_list:
+                                task_type = response_list[0].get("taskType")
+                        if task_type:
+                            return createAsyncTaskResponse({
+                                "taskType": task_type,
+                                "taskUUID": task_uuid
+                            })
+                        else:
+                            raise RunwareAPIError({
+                                "code": "conflictTaskUUIDDuringRetries",
+                                "message": "Lost connection during request submission",
+                                "taskUUID": task_uuid
+                            })
+                
                 if not isinstance(e, ConnectionError):
                     raise
                 
