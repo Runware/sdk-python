@@ -149,26 +149,24 @@ class RunwareBase:
                     if attempt == 0:
                         raise
                     else:
-                        task_uuid = e.error_data.get("taskUUID")
+                        #
+                        context = e.error_data.get("context", {})
+                        task_type = context.get("taskType")
+                        task_uuid = context.get("taskUUID") or e.error_data.get("taskUUID")
+                        delivery_method_raw = context.get("deliveryMethod")
+                        delivery_method_enum = EDeliveryMethod(delivery_method_raw) if isinstance(delivery_method_raw, str) else delivery_method_raw if delivery_method_raw else None
                         
-                        await asyncio.sleep(10)
-                        
-                        task_type = None
-                        async with self._messages_lock:
-                            response_list = self._globalMessages.get(task_uuid, [])
-                            if response_list:
-                                task_type = response_list[0].get("taskType")
-                        if task_type:
+                        if task_type and task_uuid and delivery_method_enum is EDeliveryMethod.ASYNC:
                             return createAsyncTaskResponse({
                                 "taskType": task_type,
                                 "taskUUID": task_uuid
                             })
-                        else:
-                            raise RunwareAPIError({
-                                "code": "conflictTaskUUIDDuringRetries",
-                                "message": "Lost connection during request submission",
-                                "taskUUID": task_uuid
-                            })
+                        
+                        raise RunwareAPIError({
+                            "code": "conflictTaskUUIDDuringRetries",
+                            "message": "Lost connection during request submission",
+                            "taskUUID": task_uuid
+                        })
                 
                 if not isinstance(e, ConnectionError):
                     raise
@@ -218,7 +216,7 @@ class RunwareBase:
         Handle error responses from the server.
         Raises ConnectionError for authentication errors, RunwareAPIError for others.
         """
-        if not response.get("code"):
+        if not self._is_error_response(response):
             return
             
         # If an authentication error, raise ConnectionError to trigger retry
@@ -549,15 +547,13 @@ class RunwareBase:
                     "image-inference-initial"
                 )
             
-            return await asyncRetry(
-                lambda: self._requestImages(
-                    request_object=request_object,
-                    task_uuids=task_uuids,
-                    let_lis=let_lis,
-                    retry_count=retry_count,
-                    number_of_images=requestImage.numberResults,
-                    on_partial_images=requestImage.onPartialImages,
-                )
+            return await self._requestImages(
+                request_object=request_object,
+                task_uuids=task_uuids,
+                let_lis=let_lis,
+                retry_count=retry_count,
+                number_of_images=requestImage.numberResults,
+                on_partial_images=requestImage.onPartialImages,
             )
         except Exception as e:
             if let_lis:
@@ -631,9 +627,7 @@ class RunwareBase:
 
     async def _imageCaption(self, requestImageToText: IImageCaption) -> Union[IImageToText, IAsyncTaskResponse]:
         await self.ensureConnection()
-        return await asyncRetry(
-            lambda: self._requestImageToText(requestImageToText)
-        )
+        return await self._requestImageToText(requestImageToText)
 
     async def _requestImageToText(
         self, requestImageToText: IImageCaption
@@ -742,9 +736,7 @@ class RunwareBase:
 
     async def _videoCaption(self, requestVideoCaption: IVideoCaption) -> Union[List[IVideoToText], IAsyncTaskResponse]:
         await self.ensureConnection()
-        return await asyncRetry(
-            lambda: self._requestVideoCaption(requestVideoCaption)
-        )
+        return await self._requestVideoCaption(requestVideoCaption)
 
     async def _requestVideoCaption(
         self, requestVideoCaption: IVideoCaption
@@ -787,9 +779,7 @@ class RunwareBase:
 
     async def _videoBackgroundRemoval(self, requestVideoBackgroundRemoval: IVideoBackgroundRemoval) -> Union[List[IVideo], IAsyncTaskResponse]:
         await self.ensureConnection()
-        return await asyncRetry(
-            lambda: self._requestVideoBackgroundRemoval(requestVideoBackgroundRemoval)
-        )
+        return await self._requestVideoBackgroundRemoval(requestVideoBackgroundRemoval)
 
     async def _requestVideoBackgroundRemoval(
         self, requestVideoBackgroundRemoval: IVideoBackgroundRemoval
@@ -845,9 +835,7 @@ class RunwareBase:
 
     async def _videoUpscale(self, requestVideoUpscale: IVideoUpscale) -> Union[List[IVideo], IAsyncTaskResponse]:
         await self.ensureConnection()
-        return await asyncRetry(
-            lambda: self._requestVideoUpscale(requestVideoUpscale)
-        )
+        return await self._requestVideoUpscale(requestVideoUpscale)
 
     async def _requestVideoUpscale(
         self, requestVideoUpscale: IVideoUpscale
@@ -1007,7 +995,7 @@ class RunwareBase:
 
     async def _imageUpscale(self, upscaleGanPayload: IImageUpscale) -> Union[List[IImage], IAsyncTaskResponse]:
         await self.ensureConnection()
-        return await asyncRetry(lambda: self._upscaleGan(upscaleGanPayload))
+        return await self._upscaleGan(upscaleGanPayload)
 
     async def _upscaleGan(self, upscaleGanPayload: IImageUpscale) -> Union[List[IImage], IAsyncTaskResponse]:
         # Support both inputImage (legacy) and inputs.image (new format)
@@ -1120,7 +1108,7 @@ class RunwareBase:
 
     async def _imageVectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
         await self.ensureConnection()
-        return await asyncRetry(lambda: self._vectorize(vectorizePayload))
+        return await self._vectorize(vectorizePayload)
 
     async def _vectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
         # Process the image from inputs
@@ -1882,7 +1870,7 @@ class RunwareBase:
 
     async def _videoInference(self, requestVideo: IVideoInference) -> Union[List[IVideo], IAsyncTaskResponse]:
         await self.ensureConnection()
-        return await asyncRetry(lambda: self._requestVideo(requestVideo))
+        return await self._requestVideo(requestVideo)
 
     async def getResponse(
         self,
@@ -2251,10 +2239,8 @@ class RunwareBase:
                 timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else VIDEO_INITIAL_TIMEOUT
             )
         except RunwareAPIError:
-            lis["destroy"]()
             raise
         except Exception as e:
-            lis["destroy"]()
             # Check if connection was lost during the wait
             if not self.connected() or not self.isWebsocketReadyState():
                 raise ConnectionError(
@@ -2272,7 +2258,7 @@ class RunwareBase:
                 )
                 raise ConnectionError(error_msg)
             initial_response = None
-        else:
+        finally:
             lis["destroy"]()
 
         if not initial_response or len(initial_response) == 0:
@@ -2339,10 +2325,8 @@ class RunwareBase:
                 timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else IMAGE_INITIAL_TIMEOUT
             )
         except RunwareAPIError:
-            lis["destroy"]()
             raise
         except Exception as e:
-            lis["destroy"]()
             # Check if connection was lost during the wait
             if not self.connected() or not self.isWebsocketReadyState():
                 raise ConnectionError(
@@ -2360,7 +2344,7 @@ class RunwareBase:
                 )
                 raise ConnectionError(error_msg)
             initial_response = None
-        else:
+        finally:
             lis["destroy"]()
 
         if not initial_response or len(initial_response) == 0:
@@ -2408,7 +2392,7 @@ class RunwareBase:
 
     async def _audioInference(self, requestAudio: IAudioInference) -> Union[List[IAudio], IAsyncTaskResponse]:
         await self.ensureConnection()
-        return await asyncRetry(lambda: self._requestAudio(requestAudio))
+        return await self._requestAudio(requestAudio)
 
     async def _requestAudio(self, requestAudio: IAudioInference) -> Union[List[IAudio], IAsyncTaskResponse]:
         requestAudio.taskUUID = requestAudio.taskUUID or getUUID()
@@ -2518,10 +2502,8 @@ class RunwareBase:
                 timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else AUDIO_INITIAL_TIMEOUT
             )
         except RunwareAPIError:
-            lis["destroy"]()
             raise
         except Exception as e:
-            lis["destroy"]()
             # Check if connection was lost during the wait
             if not self.connected() or not self.isWebsocketReadyState():
                 raise ConnectionError(
@@ -2539,7 +2521,7 @@ class RunwareBase:
                 )
                 raise ConnectionError(error_msg)
             initial_response = None
-        else:
+        finally:
             lis["destroy"]()
 
         if not initial_response or len(initial_response) == 0:

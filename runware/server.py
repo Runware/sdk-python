@@ -145,6 +145,7 @@ class RunwareServer(RunwareBase):
                         try:
                             await self._heartbeat_task
                         except asyncio.CancelledError:
+                            # Expected when cancelling the previous heartbeat task; safe to ignore.
                             pass
                     
                     self.logger.info("Starting heartbeat task")
