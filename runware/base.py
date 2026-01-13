@@ -292,12 +292,35 @@ class RunwareBase:
         return {"destroy": destroy}
 
     def handle_connection_response(self, m):
+        # Print and log full authentication response data
+        import json
+        import sys
+        auth_response_json = json.dumps(m, indent=2)
+        print(f"Authentication response received: {auth_response_json}", flush=True)
+        self.logger.debug(f"Authentication response received: {auth_response_json}")
+        sys.stdout.flush()
+        
         if m.get("error"):
             if m["errorId"] == 19:
                 self._invalidAPIkey = "Invalid API key"
             else:
                 self._invalidAPIkey = "Error connection"
             return
+        
+        # Handle response with "data" array (new format)
+        if m.get("data") and isinstance(m["data"], list):
+            for item in m["data"]:
+                if item.get("taskType") == "authentication":
+                    connection_uuid = item.get("connectionSessionUUID")
+                    if connection_uuid:
+                        self._connectionSessionUUID = connection_uuid
+                        self._invalidAPIkey = None
+                        print(f"Authentication successful. connectionSessionUUID: {connection_uuid}", flush=True)
+                        self.logger.info(f"Authentication successful. connectionSessionUUID: {connection_uuid}")
+                        sys.stdout.flush()
+                        return
+        
+        # Handle old format with newConnectionSessionUUID
         self._connectionSessionUUID = m.get("newConnectionSessionUUID", {}).get(
             "connectionSessionUUID"
         )
@@ -365,17 +388,8 @@ class RunwareBase:
             )
 
             numberOfResults = requestPhotoMaker.numberResults
-            
-            initial_session_uuid = self._connectionSessionUUID
 
             async def check(resolve: callable, reject: callable, *args: Any) -> bool:
-                if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
-                    reject(ConnectionError(
-                        f"Connection lost while waiting for photo maker response | "
-                        f"TaskUUID: {task_uuid}"
-                    ))
-                    return True
-                
                 async with self._messages_lock:
                     photo_maker_list = self._globalMessages.get(task_uuid, [])
                     unique_results = {}
@@ -426,128 +440,110 @@ class RunwareBase:
     async def _imageInference(
         self, requestImage: IImageInference
     ) -> Union[List[IImage], IAsyncTaskResponse]:
-        let_lis: Optional[Any] = None
-        request_object: Optional[Dict[str, Any]] = None
-        task_uuids: List[str] = []
-        retry_count = 0
-        try:
-            await self.ensureConnection()
-            control_net_data: List[IControlNet] = []
-            requestImage.taskUUID = requestImage.taskUUID or getUUID()
-            requestImage.maskImage = await process_image(requestImage.maskImage)
-            requestImage.seedImage = await process_image(requestImage.seedImage)
-            if requestImage.referenceImages:
-                requestImage.referenceImages = await process_image(
-                    requestImage.referenceImages
-                )
-            if requestImage.controlNet:
-                for control_data in requestImage.controlNet:
-                    image_uploaded = await self.uploadImage(control_data.guideImage)
-                    if not image_uploaded:
-                        return []
-                    if hasattr(control_data, "preprocessor"):
-                        control_data.preprocessor = control_data.preprocessor.value
-                    control_data.guideImage = image_uploaded.imageUUID
-                    control_net_data.append(control_data)
-            prompt = requestImage.positivePrompt.strip() if requestImage.positivePrompt else None
-
-            control_net_data_dicts = [asdict(item) for item in control_net_data]
-
-            instant_id_data = {}
-            if requestImage.instantID:
-                instant_id_data = {
-                    k: v
-                    for k, v in vars(requestImage.instantID).items()
-                    if v is not None
-                }
-
-                if "inputImage" in instant_id_data:
-                    instant_id_data["inputImage"] = await process_image(
-                        instant_id_data["inputImage"]
-                    )
-
-                if "poseImage" in instant_id_data:
-                    instant_id_data["poseImage"] = await process_image(
-                        instant_id_data["poseImage"]
-                    )
-
-            ip_adapters_data = []
-            if requestImage.ipAdapters:
-                for ip_adapter in requestImage.ipAdapters:
-                    ip_adapter_data = {
-                        k: v for k, v in vars(ip_adapter).items() if v is not None
-                    }
-                    if "guideImage" in ip_adapter_data:
-                        ip_adapter_data["guideImage"] = await process_image(
-                            ip_adapter_data["guideImage"]
-                        )
-
-                    ip_adapters_data.append(ip_adapter_data)
-
-            ace_plus_plus_data = {}
-            if requestImage.acePlusPlus:
-                ace_plus_plus_data = {
-                    "inputImages": [],
-                    "repaintingScale": requestImage.acePlusPlus.repaintingScale,
-                    "type": requestImage.acePlusPlus.taskType,
-                }
-                if requestImage.acePlusPlus.inputImages:
-                    ace_plus_plus_data["inputImages"] = await process_image(
-                        requestImage.acePlusPlus.inputImages
-                    )
-                if requestImage.acePlusPlus.inputMasks:
-                    ace_plus_plus_data["inputMasks"] = await process_image(
-                        requestImage.acePlusPlus.inputMasks
-                    )
-
-            pulid_data = {}
-            if requestImage.puLID:
-                pulid_data = {
-                    "inputImages": [],
-                    "idWeight": requestImage.puLID.idWeight,
-                    "trueCFGScale": requestImage.puLID.trueCFGScale,
-                    "CFGStartStep": requestImage.puLID.CFGStartStep,
-                    "CFGStartStepPercentage": requestImage.puLID.CFGStartStepPercentage,
-                }
-                if requestImage.puLID.inputImages:
-                    pulid_data["inputImages"] = await process_image(
-                        requestImage.puLID.inputImages
-                    )
-
-            request_object = self._buildImageRequest(requestImage, prompt, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
-
-            delivery_method_enum = EDeliveryMethod(requestImage.deliveryMethod) if isinstance(requestImage.deliveryMethod, str) else requestImage.deliveryMethod
-            
-            if delivery_method_enum is EDeliveryMethod.ASYNC:
-                if requestImage.webhookURL:
-                    request_object["webhookURL"] = requestImage.webhookURL
-                
-                await self.send([request_object])
-                
-                return await self._handleInitialImageResponse(
-                    requestImage.taskUUID,
-                    requestImage.numberResults,
-                    requestImage.deliveryMethod,
-                    request_object.get("webhookURL"),
-                    "image-inference-initial"
-                )
-            
-            return await asyncRetry(
-                lambda: self._requestImages(
-                    request_object=request_object,
-                    task_uuids=task_uuids,
-                    let_lis=let_lis,
-                    retry_count=retry_count,
-                    number_of_images=requestImage.numberResults,
-                    on_partial_images=requestImage.onPartialImages,
-                )
+        await self.ensureConnection()
+        control_net_data: List[IControlNet] = []
+        requestImage.taskUUID = requestImage.taskUUID or getUUID()
+        requestImage.maskImage = await process_image(requestImage.maskImage)
+        requestImage.seedImage = await process_image(requestImage.seedImage)
+        if requestImage.referenceImages:
+            requestImage.referenceImages = await process_image(
+                requestImage.referenceImages
             )
-        except Exception as e:
-            if retry_count >= 2:
-                logger.error(f"Error in requestImages:", exc_info=e)
-                raise RunwareAPIError({"message": f"Image inference failed after retries: {str(e)}"})
-            else:
-                raise e
+        if requestImage.controlNet:
+            for control_data in requestImage.controlNet:
+                image_uploaded = await self.uploadImage(control_data.guideImage)
+                if not image_uploaded:
+                    return []
+                if hasattr(control_data, "preprocessor"):
+                    control_data.preprocessor = control_data.preprocessor.value
+                control_data.guideImage = image_uploaded.imageUUID
+                control_net_data.append(control_data)
+        prompt = requestImage.positivePrompt.strip() if requestImage.positivePrompt else None
+
+        control_net_data_dicts = [asdict(item) for item in control_net_data]
+
+        instant_id_data = {}
+        if requestImage.instantID:
+            instant_id_data = {
+                k: v
+                for k, v in vars(requestImage.instantID).items()
+                if v is not None
+            }
+
+            if "inputImage" in instant_id_data:
+                instant_id_data["inputImage"] = await process_image(
+                    instant_id_data["inputImage"]
+                )
+
+            if "poseImage" in instant_id_data:
+                instant_id_data["poseImage"] = await process_image(
+                    instant_id_data["poseImage"]
+                )
+
+        ip_adapters_data = []
+        if requestImage.ipAdapters:
+            for ip_adapter in requestImage.ipAdapters:
+                ip_adapter_data = {
+                    k: v for k, v in vars(ip_adapter).items() if v is not None
+                }
+                if "guideImage" in ip_adapter_data:
+                    ip_adapter_data["guideImage"] = await process_image(
+                        ip_adapter_data["guideImage"]
+                    )
+
+                ip_adapters_data.append(ip_adapter_data)
+
+        ace_plus_plus_data = {}
+        if requestImage.acePlusPlus:
+            ace_plus_plus_data = {
+                "inputImages": [],
+                "repaintingScale": requestImage.acePlusPlus.repaintingScale,
+                "type": requestImage.acePlusPlus.taskType,
+            }
+            if requestImage.acePlusPlus.inputImages:
+                ace_plus_plus_data["inputImages"] = await process_image(
+                    requestImage.acePlusPlus.inputImages
+                )
+            if requestImage.acePlusPlus.inputMasks:
+                ace_plus_plus_data["inputMasks"] = await process_image(
+                    requestImage.acePlusPlus.inputMasks
+                )
+
+        pulid_data = {}
+        if requestImage.puLID:
+            pulid_data = {
+                "inputImages": [],
+                "idWeight": requestImage.puLID.idWeight,
+                "trueCFGScale": requestImage.puLID.trueCFGScale,
+                "CFGStartStep": requestImage.puLID.CFGStartStep,
+                "CFGStartStepPercentage": requestImage.puLID.CFGStartStepPercentage,
+            }
+            if requestImage.puLID.inputImages:
+                pulid_data["inputImages"] = await process_image(
+                    requestImage.puLID.inputImages
+                )
+
+        request_object = self._buildImageRequest(requestImage, prompt, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
+
+        if requestImage.webhookURL:
+            request_object["webhookURL"] = requestImage.webhookURL
+        
+        # Print full imageInference request
+        import json
+        import sys
+        request_json = json.dumps([request_object], indent=2)
+        print(f"ImageInference request sent: {request_json}", flush=True)
+        sys.stdout.flush()
+        
+        await self.send([request_object])
+        
+        return await self._handleInitialImageResponse(
+            requestImage.taskUUID,
+            requestImage.numberResults,
+            requestImage.deliveryMethod,
+            request_object.get("webhookURL"),
+            "image-inference-initial"
+        )
 
     async def _requestImages(
         self,
@@ -558,6 +554,7 @@ class RunwareBase:
         number_of_images: int,
         on_partial_images: Optional[Callable[[List[IImage], Optional[IError]], None]],
     ) -> Union[List[IImage], IAsyncTaskResponse]:
+        await self.ensureConnection()
         retry_count += 1
         if let_lis:
             let_lis["destroy"]()
@@ -688,17 +685,8 @@ class RunwareBase:
         lis = self.globalListener(
             taskUUID=taskUUID,
         )
-        
-        initial_session_uuid = self._connectionSessionUUID
 
         async def check(resolve: callable, reject: callable, *args: Any) -> bool:
-            if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
-                reject(ConnectionError(
-                    f"Connection lost while waiting for image caption response | "
-                    f"TaskUUID: {taskUUID}"
-                ))
-                return True
-            
             async with self._messages_lock:
                 response = self._globalMessages.get(taskUUID)
                 if response:
@@ -734,7 +722,10 @@ class RunwareBase:
         return await self._retry_with_reconnect(self._videoCaption, requestVideoCaption)
 
     async def _videoCaption(self, requestVideoCaption: IVideoCaption) -> Union[List[IVideoToText], IAsyncTaskResponse]:
-        return await self._requestVideoCaption(requestVideoCaption)
+        await self.ensureConnection()
+        return await asyncRetry(
+            lambda: self._requestVideoCaption(requestVideoCaption)
+        )
 
     async def _requestVideoCaption(
         self, requestVideoCaption: IVideoCaption
@@ -887,7 +878,13 @@ class RunwareBase:
     async def imageBackgroundRemoval(
         self, removeImageBackgroundPayload: IImageBackgroundRemoval
     ) -> Union[List[IImage], IAsyncTaskResponse]:
-        return await self._retry_with_reconnect(self._removeImageBackground, removeImageBackgroundPayload)
+        try:
+            await self.ensureConnection()
+            return await asyncRetry(
+                lambda: self._removeImageBackground(removeImageBackgroundPayload)
+            )
+        except Exception as e:
+            raise e
 
     async def _removeImageBackground(
         self, removeImageBackgroundPayload: IImageBackgroundRemoval
@@ -954,17 +951,8 @@ class RunwareBase:
         lis = self.globalListener(
             taskUUID=taskUUID,
         )
-        
-        initial_session_uuid = self._connectionSessionUUID
 
         async def check(resolve: callable, reject: callable, *args: Any) -> bool:
-            if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
-                reject(ConnectionError(
-                    f"Connection lost while waiting for background removal response | "
-                    f"TaskUUID: {taskUUID}"
-                ))
-                return True
-            
             async with self._messages_lock:
                 response = self._globalMessages.get(taskUUID)
                 if response:
@@ -1077,17 +1065,8 @@ class RunwareBase:
         lis = self.globalListener(
             taskUUID=taskUUID,
         )
-        
-        initial_session_uuid = self._connectionSessionUUID
 
         async def check(resolve: callable, reject: callable, *args: Any) -> bool:
-            if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
-                reject(ConnectionError(
-                    f"Connection lost while waiting for image upscale response | "
-                    f"TaskUUID: {taskUUID}"
-                ))
-                return True
-            
             async with self._messages_lock:
                 response = self._globalMessages.get(taskUUID)
                 if response:
@@ -1121,7 +1100,8 @@ class RunwareBase:
         return await self._retry_with_reconnect(self._imageVectorize, vectorizePayload)
 
     async def _imageVectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
-        return await self._vectorize(vectorizePayload)
+        await self.ensureConnection()
+        return await asyncRetry(lambda: self._vectorize(vectorizePayload))
 
     async def _vectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
         # Process the image from inputs
@@ -1200,7 +1180,11 @@ class RunwareBase:
         :return: A list of IEnhancedPrompt objects representing the enhanced versions of the prompt.
         :raises: Any error that occurs during the enhancement process.
         """
-        return await self._retry_with_reconnect(self._enhancePrompt, promptEnhancer)
+        try:
+            await self.ensureConnection()
+            return await asyncRetry(lambda: self._enhancePrompt(promptEnhancer))
+        except Exception as e:
+            raise e
 
     async def _enhancePrompt(
         self, promptEnhancer: IPromptEnhance
@@ -1248,17 +1232,8 @@ class RunwareBase:
         lis = self.globalListener(
             taskUUID=taskUUID,
         )
-        
-        initial_session_uuid = self._connectionSessionUUID
 
         async def check(resolve: Any, reject: Any, *args: Any) -> bool:
-            if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
-                reject(ConnectionError(
-                    f"Connection lost while waiting for prompt enhancement response | "
-                    f"TaskUUID: {taskUUID}"
-                ))
-                return True
-            
             async with self._messages_lock:
                 response = self._globalMessages.get(taskUUID)
                 if isinstance(response, dict) and response.get("error"):
@@ -1649,6 +1624,7 @@ class RunwareBase:
         """
         taskUUIDs = taskUUID if isinstance(taskUUID, list) else [taskUUID]
         
+        # Store the connection session UUID at the start to detect reconnections
         initial_session_uuid = self._connectionSessionUUID
 
         async def check(
@@ -1656,7 +1632,18 @@ class RunwareBase:
                 reject: Callable[[IError], None],
                 intervalId: Any,
         ) -> Optional[bool]:
-            if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
+            # Check if connection was lost and re-established (session UUID changed)
+            if initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid:
+                reject(ConnectionError(
+                    f"Connection was lost and re-established while waiting for images | "
+                    f"TaskUUIDs: {taskUUIDs} | "
+                    f"Original session: {initial_session_uuid} | "
+                    f"New session: {self._connectionSessionUUID}"
+                ))
+                return True
+            
+            # Also check if connection is currently lost
+            if not self.connected() or not self.isWebsocketReadyState():
                 reject(ConnectionError(
                     f"Connection lost while waiting for images | "
                     f"TaskUUIDs: {taskUUIDs}"
@@ -1686,6 +1673,12 @@ class RunwareBase:
                         if img.get("taskType") in ["imageInference", "vectorize"]
                            and img.get("taskUUID") not in taskUUIDs
                     ]
+                    # Print full final images response
+                    import json
+                    import sys
+                    images_json = json.dumps(imagesWithSimilarTask[:numberOfImages], indent=2)
+                    print(f"Final images received: {images_json}", flush=True)
+                    sys.stdout.flush()
                     resolve(imagesWithSimilarTask[:numberOfImages])
                     return True
 
@@ -1699,6 +1692,9 @@ class RunwareBase:
                 timeOutDuration=IMAGE_INFERENCE_TIMEOUT,
             )
         except Exception as e:
+            # Check if connection was lost during the wait - if so, raise ConnectionError to trigger retry
+            if isinstance(e, ConnectionError):
+                raise
             if not self.connected() or not self.isWebsocketReadyState():
                 raise ConnectionError(
                     f"Connection lost while waiting for images | "
@@ -1773,17 +1769,8 @@ class RunwareBase:
         lis = self.globalListener(
             taskUUID=task_uuid,
         )
-        
-        initial_session_uuid = self._connectionSessionUUID
 
         async def check(resolve: callable, reject: callable, *args: Any) -> bool:
-            if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
-                reject(ConnectionError(
-                    f"Connection lost while waiting for model upload response | "
-                    f"TaskUUID: {task_uuid}"
-                ))
-                return True
-            
             async with self._messages_lock:
                 uploaded_model_list = self._globalMessages.get(task_uuid, [])
                 unique_statuses = set()
@@ -1871,17 +1858,8 @@ class RunwareBase:
             await self.send([request_object])
 
             listener = self.globalListener(taskUUID=task_uuid)
-            
-            initial_session_uuid = self._connectionSessionUUID
 
             async def check(resolve: Callable, reject: Callable, *args: Any) -> bool:
-                if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
-                    reject(ConnectionError(
-                        f"Connection lost while waiting for model search response | "
-                        f"TaskUUID: {task_uuid}"
-                    ))
-                    return True
-                
                 async with self._messages_lock:
                     response = self._globalMessages.get(task_uuid)
                     if response:
@@ -2240,14 +2218,14 @@ class RunwareBase:
     async def _handleInitialVideoResponse(self, task_uuid: str, number_results: int, delivery_method: Union[str, EDeliveryMethod] = EDeliveryMethod.ASYNC, webhook_url: Optional[str] = None, debug_key: str = "video-inference-initial") -> Union[List[IVideo], IAsyncTaskResponse]:
         lis = self.globalListener(taskUUID=task_uuid)
         delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(delivery_method)
-        
-        initial_session_uuid = self._connectionSessionUUID
 
         async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
-            if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
+            # Check if connection was lost during the wait
+            if not self.connected() or not self.isWebsocketReadyState():
                 reject(ConnectionError(
-                    f"Connection lost while waiting for video generation response | "
-                    f"TaskUUID: {task_uuid}"
+                    f"Connection lost while waiting for video response | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Delivery method: {delivery_method_enum}"
                 ))
                 return True
             
@@ -2281,14 +2259,22 @@ class RunwareBase:
                 timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else VIDEO_INITIAL_TIMEOUT
             )
         except Exception as e:
+            # Check if connection was lost during the wait
+            if not self.connected() or not self.isWebsocketReadyState():
+                raise ConnectionError(
+                    f"Connection lost while waiting for video response | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Delivery method: {delivery_method_enum}"
+                )
             if delivery_method_enum is EDeliveryMethod.SYNC:
+                # Raise ConnectionError so _retry_with_reconnect can retry the request
                 error_msg = (
                     f"Timeout waiting for video generation | "
                     f"TaskUUID: {task_uuid} | "
                     f"Timeout: {TIMEOUT_DURATION}ms | "
                     f"Original error: {str(e)}"
                 )
-                raise Exception(error_msg)
+                raise ConnectionError(error_msg)
             initial_response = None
         finally:
             lis["destroy"]()
@@ -2314,14 +2300,14 @@ class RunwareBase:
     ) -> Union[List[IImage], IAsyncTaskResponse]:
         lis = self.globalListener(taskUUID=task_uuid)
         delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(delivery_method)
-        
-        initial_session_uuid = self._connectionSessionUUID
 
         async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
-            if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
+            # Check if connection was lost during the wait
+            if not self.connected() or not self.isWebsocketReadyState():
                 reject(ConnectionError(
-                    f"Connection lost while waiting for image generation response | "
-                    f"TaskUUID: {task_uuid}"
+                    f"Connection lost while waiting for image response | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Delivery method: {delivery_method_enum}"
                 ))
                 return True
             
@@ -2332,6 +2318,13 @@ class RunwareBase:
                     return False
 
                 response = response_list[0]
+
+                # Print full image response
+                import json
+                import sys
+                response_json = json.dumps(response, indent=2)
+                print(f"Image response received: {response_json}", flush=True)
+                sys.stdout.flush()
 
                 self._handle_error_response(response)
 
@@ -2356,14 +2349,22 @@ class RunwareBase:
                 timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else IMAGE_INITIAL_TIMEOUT
             )
         except Exception as e:
+            # Check if connection was lost during the wait
+            if not self.connected() or not self.isWebsocketReadyState():
+                raise ConnectionError(
+                    f"Connection lost while waiting for image response | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Delivery method: {delivery_method_enum}"
+                )
             if delivery_method_enum is EDeliveryMethod.SYNC:
+                # Raise ConnectionError so _retry_with_reconnect can retry the request
                 error_msg = (
                     f"Timeout waiting for image generation | "
                     f"TaskUUID: {task_uuid} | "
                     f"Timeout: {TIMEOUT_DURATION}ms | "
                     f"Original error: {str(e)}"
                 )
-                raise Exception(error_msg)
+                raise ConnectionError(error_msg)
             initial_response = None
         finally:
             lis["destroy"]()
@@ -2381,8 +2382,6 @@ class RunwareBase:
 
     async def _sendPollRequest(self, task_uuid: str, poll_count: int) -> List[Dict[str, Any]]:
         lis = self.globalListener(taskUUID=task_uuid)
-        
-        initial_session_uuid = self._connectionSessionUUID
 
         try:
             await self.send([{
@@ -2391,13 +2390,6 @@ class RunwareBase:
             }])
 
             async def check_poll_response(resolve: callable, reject: callable, *args: Any) -> bool:
-                if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
-                    reject(ConnectionError(
-                        f"Connection lost while waiting for poll response | "
-                        f"TaskUUID: {task_uuid}"
-                    ))
-                    return True
-                
                 async with self._messages_lock:
                     response_list = self._globalMessages.get(task_uuid, [])
                     if response_list:
@@ -2488,15 +2480,14 @@ class RunwareBase:
     ) -> Union[List[IAudio], IAsyncTaskResponse]:
         lis = self.globalListener(taskUUID=task_uuid)
         delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(delivery_method)
-        
-        initial_session_uuid = self._connectionSessionUUID
 
         async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
-            if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
+            # Check if connection was lost during the wait
+            if not self.connected() or not self.isWebsocketReadyState():
                 reject(ConnectionError(
-                    f"Connection lost while waiting for audio generation response | "
+                    f"Connection lost while waiting for audio response | "
                     f"TaskUUID: {task_uuid} | "
-                    f"Session changed: {initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid}"
+                    f"Delivery method: {delivery_method_enum}"
                 ))
                 return True
             
@@ -2531,15 +2522,23 @@ class RunwareBase:
                 timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else AUDIO_INITIAL_TIMEOUT
             )
         except Exception as e:
+            # Check if connection was lost during the wait
+            if not self.connected() or not self.isWebsocketReadyState():
+                raise ConnectionError(
+                    f"Connection lost while waiting for audio response | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Delivery method: {delivery_method_enum}"
+                )
             if delivery_method_enum is EDeliveryMethod.SYNC:
                 lis["destroy"]()
+                # Raise ConnectionError so _retry_with_reconnect can retry the request
                 error_msg = (
                     f"Timeout waiting for audio generation | "
                     f"TaskUUID: {task_uuid} | "
                     f"Timeout: {TIMEOUT_DURATION}ms | "
                     f"Original error: {str(e)}"
                 )
-                raise Exception(error_msg)
+                raise ConnectionError(error_msg)
             initial_response = None
         finally:
             lis["destroy"]()
