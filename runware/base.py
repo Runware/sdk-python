@@ -292,6 +292,14 @@ class RunwareBase:
         return {"destroy": destroy}
 
     def handle_connection_response(self, m):
+        # Print and log full authentication response data
+        import json
+        import sys
+        auth_response_json = json.dumps(m, indent=2)
+        print(f"Authentication response received: {auth_response_json}", flush=True)
+        self.logger.info(f"Authentication response received: {auth_response_json}")
+        sys.stdout.flush()
+        
         if m.get("error"):
             if m["errorId"] == 19:
                 self._invalidAPIkey = "Invalid API key"
@@ -307,7 +315,9 @@ class RunwareBase:
                     if connection_uuid:
                         self._connectionSessionUUID = connection_uuid
                         self._invalidAPIkey = None
+                        print(f"Authentication successful. connectionSessionUUID: {connection_uuid}", flush=True)
                         self.logger.info(f"Authentication successful. connectionSessionUUID: {connection_uuid}")
+                        sys.stdout.flush()
                         return
         
         # Handle old format with newConnectionSessionUUID
@@ -430,103 +440,133 @@ class RunwareBase:
     async def _imageInference(
         self, requestImage: IImageInference
     ) -> Union[List[IImage], IAsyncTaskResponse]:
-        await self.ensureConnection()
-        control_net_data: List[IControlNet] = []
-        requestImage.taskUUID = requestImage.taskUUID or getUUID()
-        requestImage.maskImage = await process_image(requestImage.maskImage)
-        requestImage.seedImage = await process_image(requestImage.seedImage)
-        if requestImage.referenceImages:
-            requestImage.referenceImages = await process_image(
-                requestImage.referenceImages
-            )
-        if requestImage.controlNet:
-            for control_data in requestImage.controlNet:
-                image_uploaded = await self.uploadImage(control_data.guideImage)
-                if not image_uploaded:
-                    return []
-                if hasattr(control_data, "preprocessor"):
-                    control_data.preprocessor = control_data.preprocessor.value
-                control_data.guideImage = image_uploaded.imageUUID
-                control_net_data.append(control_data)
-        prompt = requestImage.positivePrompt.strip() if requestImage.positivePrompt else None
-
-        control_net_data_dicts = [asdict(item) for item in control_net_data]
-
-        instant_id_data = {}
-        if requestImage.instantID:
-            instant_id_data = {
-                k: v
-                for k, v in vars(requestImage.instantID).items()
-                if v is not None
-            }
-
-            if "inputImage" in instant_id_data:
-                instant_id_data["inputImage"] = await process_image(
-                    instant_id_data["inputImage"]
+        let_lis: Optional[Any] = None
+        request_object: Optional[Dict[str, Any]] = None
+        task_uuids: List[str] = []
+        retry_count = 0
+        try:
+            await self.ensureConnection()
+            control_net_data: List[IControlNet] = []
+            requestImage.taskUUID = requestImage.taskUUID or getUUID()
+            requestImage.maskImage = await process_image(requestImage.maskImage)
+            requestImage.seedImage = await process_image(requestImage.seedImage)
+            if requestImage.referenceImages:
+                requestImage.referenceImages = await process_image(
+                    requestImage.referenceImages
                 )
+            if requestImage.controlNet:
+                for control_data in requestImage.controlNet:
+                    image_uploaded = await self.uploadImage(control_data.guideImage)
+                    if not image_uploaded:
+                        return []
+                    if hasattr(control_data, "preprocessor"):
+                        control_data.preprocessor = control_data.preprocessor.value
+                    control_data.guideImage = image_uploaded.imageUUID
+                    control_net_data.append(control_data)
+            prompt = requestImage.positivePrompt.strip() if requestImage.positivePrompt else None
 
-            if "poseImage" in instant_id_data:
-                instant_id_data["poseImage"] = await process_image(
-                    instant_id_data["poseImage"]
-                )
+            control_net_data_dicts = [asdict(item) for item in control_net_data]
 
-        ip_adapters_data = []
-        if requestImage.ipAdapters:
-            for ip_adapter in requestImage.ipAdapters:
-                ip_adapter_data = {
-                    k: v for k, v in vars(ip_adapter).items() if v is not None
+            instant_id_data = {}
+            if requestImage.instantID:
+                instant_id_data = {
+                    k: v
+                    for k, v in vars(requestImage.instantID).items()
+                    if v is not None
                 }
-                if "guideImage" in ip_adapter_data:
-                    ip_adapter_data["guideImage"] = await process_image(
-                        ip_adapter_data["guideImage"]
+
+                if "inputImage" in instant_id_data:
+                    instant_id_data["inputImage"] = await process_image(
+                        instant_id_data["inputImage"]
                     )
 
-                ip_adapters_data.append(ip_adapter_data)
+                if "poseImage" in instant_id_data:
+                    instant_id_data["poseImage"] = await process_image(
+                        instant_id_data["poseImage"]
+                    )
 
-        ace_plus_plus_data = {}
-        if requestImage.acePlusPlus:
-            ace_plus_plus_data = {
-                "inputImages": [],
-                "repaintingScale": requestImage.acePlusPlus.repaintingScale,
-                "type": requestImage.acePlusPlus.taskType,
-            }
-            if requestImage.acePlusPlus.inputImages:
-                ace_plus_plus_data["inputImages"] = await process_image(
-                    requestImage.acePlusPlus.inputImages
+            ip_adapters_data = []
+            if requestImage.ipAdapters:
+                for ip_adapter in requestImage.ipAdapters:
+                    ip_adapter_data = {
+                        k: v for k, v in vars(ip_adapter).items() if v is not None
+                    }
+                    if "guideImage" in ip_adapter_data:
+                        ip_adapter_data["guideImage"] = await process_image(
+                            ip_adapter_data["guideImage"]
+                        )
+
+                    ip_adapters_data.append(ip_adapter_data)
+
+            ace_plus_plus_data = {}
+            if requestImage.acePlusPlus:
+                ace_plus_plus_data = {
+                    "inputImages": [],
+                    "repaintingScale": requestImage.acePlusPlus.repaintingScale,
+                    "type": requestImage.acePlusPlus.taskType,
+                }
+                if requestImage.acePlusPlus.inputImages:
+                    ace_plus_plus_data["inputImages"] = await process_image(
+                        requestImage.acePlusPlus.inputImages
+                    )
+                if requestImage.acePlusPlus.inputMasks:
+                    ace_plus_plus_data["inputMasks"] = await process_image(
+                        requestImage.acePlusPlus.inputMasks
+                    )
+
+            pulid_data = {}
+            if requestImage.puLID:
+                pulid_data = {
+                    "inputImages": [],
+                    "idWeight": requestImage.puLID.idWeight,
+                    "trueCFGScale": requestImage.puLID.trueCFGScale,
+                    "CFGStartStep": requestImage.puLID.CFGStartStep,
+                    "CFGStartStepPercentage": requestImage.puLID.CFGStartStepPercentage,
+                }
+                if requestImage.puLID.inputImages:
+                    pulid_data["inputImages"] = await process_image(
+                        requestImage.puLID.inputImages
+                    )
+
+            request_object = self._buildImageRequest(requestImage, prompt, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
+
+            delivery_method_enum = EDeliveryMethod(requestImage.deliveryMethod) if isinstance(requestImage.deliveryMethod, str) else requestImage.deliveryMethod
+            
+            if delivery_method_enum is EDeliveryMethod.ASYNC:
+                if requestImage.webhookURL:
+                    request_object["webhookURL"] = requestImage.webhookURL
+                
+                # Print full imageInference request
+                import json
+                import sys
+                request_json = json.dumps([request_object], indent=2)
+                print(f"ImageInference request sent: {request_json}", flush=True)
+                sys.stdout.flush()
+                
+                await self.send([request_object])
+                
+                return await self._handleInitialImageResponse(
+                    requestImage.taskUUID,
+                    requestImage.numberResults,
+                    requestImage.deliveryMethod,
+                    request_object.get("webhookURL"),
+                    "image-inference-initial"
                 )
-            if requestImage.acePlusPlus.inputMasks:
-                ace_plus_plus_data["inputMasks"] = await process_image(
-                    requestImage.acePlusPlus.inputMasks
+            
+            return await asyncRetry(
+                lambda: self._requestImages(
+                    request_object=request_object,
+                    task_uuids=task_uuids,
+                    let_lis=let_lis,
+                    retry_count=retry_count,
+                    number_of_images=requestImage.numberResults,
+                    on_partial_images=requestImage.onPartialImages,
                 )
-
-        pulid_data = {}
-        if requestImage.puLID:
-            pulid_data = {
-                "inputImages": [],
-                "idWeight": requestImage.puLID.idWeight,
-                "trueCFGScale": requestImage.puLID.trueCFGScale,
-                "CFGStartStep": requestImage.puLID.CFGStartStep,
-                "CFGStartStepPercentage": requestImage.puLID.CFGStartStepPercentage,
-            }
-            if requestImage.puLID.inputImages:
-                pulid_data["inputImages"] = await process_image(
-                    requestImage.puLID.inputImages
-                )
-
-        request_object = self._buildImageRequest(requestImage, prompt, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
-
-        if requestImage.webhookURL:
-            request_object["webhookURL"] = requestImage.webhookURL
-        
-        await self.send([request_object])
-        
-        return await self._handleInitialImageResponse(
-            requestImage.taskUUID,
-            requestImage.numberResults,
-            requestImage.deliveryMethod,
-            request_object.get("webhookURL"),
-            "image-inference-initial"
-        )
+            )
+        except Exception as e:
+            if let_lis:
+                let_lis["destroy"]()
+            raise e
 
     async def _requestImages(
         self,
@@ -557,6 +597,13 @@ class RunwareBase:
             "taskUUID": task_uuid,
             "numberResults": image_remaining,
         }
+
+        # Print full imageInference request
+        import json
+        import sys
+        request_json = json.dumps([new_request_object], indent=2)
+        print(f"ImageInference request sent: {request_json}", flush=True)
+        sys.stdout.flush()
 
         await self.send([new_request_object])
 
@@ -1656,6 +1703,12 @@ class RunwareBase:
                         if img.get("taskType") in ["imageInference", "vectorize"]
                            and img.get("taskUUID") not in taskUUIDs
                     ]
+                    # Print full final images response
+                    import json
+                    import sys
+                    images_json = json.dumps(imagesWithSimilarTask[:numberOfImages], indent=2)
+                    print(f"Final images received: {images_json}", flush=True)
+                    sys.stdout.flush()
                     resolve(imagesWithSimilarTask[:numberOfImages])
                     return True
 
@@ -2295,6 +2348,13 @@ class RunwareBase:
                     return False
 
                 response = response_list[0]
+
+                # Print full image response
+                import json
+                import sys
+                response_json = json.dumps(response, indent=2)
+                print(f"Image response received: {response_json}", flush=True)
+                sys.stdout.flush()
 
                 self._handle_error_response(response)
 

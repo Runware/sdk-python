@@ -747,6 +747,7 @@ class IImageInference:
     lora: Optional[List[ILora]] = field(default_factory=list)
     lycoris: Optional[List[ILycoris]] = field(default_factory=list)
     includeCost: Optional[bool] = None
+    onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]] = None
     refiner: Optional[IRefiner] = None
     vae: Optional[str] = None
     maskMargin: Optional[int] = None

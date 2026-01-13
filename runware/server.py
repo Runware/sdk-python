@@ -73,6 +73,14 @@ class RunwareServer(RunwareBase):
                     return False
 
                 def login_lis(m):
+                    # Print and log full authentication response data
+                    import json
+                    import sys
+                    auth_response_json = json.dumps(m, indent=2)
+                    print(f"Authentication response received: {auth_response_json}", flush=True)
+                    self.logger.info(f"Authentication response received: {auth_response_json}")
+                    sys.stdout.flush()
+                    
                     if m.get("errors"):
                         for error in m["errors"]:
                             if error.get("taskType") == "authentication":
@@ -91,7 +99,9 @@ class RunwareServer(RunwareBase):
                         self._connectionSessionUUID = connection_uuid
                         self._invalidAPIkey = None
                         self._reconnection_manager.on_connection_success()
+                        print(f"Authentication successful. connectionSessionUUID: {connection_uuid}", flush=True)
                         self.logger.info(f"Authentication successful. connectionSessionUUID: {connection_uuid}")
+                        sys.stdout.flush()
                         self._connection_session_uuid_event.set()
 
                 if not self._loginListener:
