@@ -1628,26 +1628,13 @@ class RunwareBase:
         :return: A list of IImage objects representing the images.
         """
         taskUUIDs = taskUUID if isinstance(taskUUID, list) else [taskUUID]
-        
-        # Store the connection session UUID at the start to detect reconnections
-        initial_session_uuid = self._connectionSessionUUID
 
         async def check(
                 resolve: Callable[[List[IImage]], None],
                 reject: Callable[[IError], None],
                 intervalId: Any,
         ) -> Optional[bool]:
-            # Check if connection was lost and re-established (session UUID changed)
-            if initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid:
-                reject(ConnectionError(
-                    f"Connection was lost and re-established while waiting for images | "
-                    f"TaskUUIDs: {taskUUIDs} | "
-                    f"Original session: {initial_session_uuid} | "
-                    f"New session: {self._connectionSessionUUID}"
-                ))
-                return True
-            
-            # Also check if connection is currently lost
+            # Check if connection is currently lost
             if not self.connected() or not self.isWebsocketReadyState():
                 reject(ConnectionError(
                     f"Connection lost while waiting for images | "
