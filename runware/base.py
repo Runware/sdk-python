@@ -525,7 +525,6 @@ class RunwareBase:
                 if requestImage.webhookURL:
                     request_object["webhookURL"] = requestImage.webhookURL
                 
-                # Print full imageInference request
                 await self.send([request_object])
                 
                 return await self._handleInitialImageResponse(
@@ -1692,6 +1691,9 @@ class RunwareBase:
                 timeOutDuration=IMAGE_INFERENCE_TIMEOUT,
             )
         except Exception as e:
+            # If RunwareAPIError just raise it
+            if isinstance(e, RunwareAPIError):
+                raise
             # Check if connection was lost during the wait - if so, raise ConnectionError to trigger retry
             if isinstance(e, ConnectionError):
                 raise
@@ -2237,7 +2239,9 @@ class RunwareBase:
 
                 response = response_list[0]
 
-                self._handle_error_response(response)
+                if self._is_error_response(response):
+                    del self._globalMessages[task_uuid]
+                    raise RunwareAPIError(response)
 
                 if response.get("status") == "success" or response.get("videoUUID") is not None or response.get("mediaUUID") is not None:
                     del self._globalMessages[task_uuid]
@@ -2258,10 +2262,11 @@ class RunwareBase:
                 debugKey=debug_key,
                 timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else VIDEO_INITIAL_TIMEOUT
             )
+        except RunwareAPIError:
+            lis["destroy"]()
+            raise
         except Exception as e:
-            # If RunwareAPIError just raise it
-            if isinstance(e, RunwareAPIError):
-                raise
+            lis["destroy"]()
             # Check if connection was lost during the wait
             if not self.connected() or not self.isWebsocketReadyState():
                 raise ConnectionError(
@@ -2279,7 +2284,7 @@ class RunwareBase:
                 )
                 raise ConnectionError(error_msg)
             initial_response = None
-        finally:
+        else:
             lis["destroy"]()
 
         if not initial_response or len(initial_response) == 0:
@@ -2322,7 +2327,9 @@ class RunwareBase:
 
                 response = response_list[0]
 
-                self._handle_error_response(response)
+                if self._is_error_response(response):
+                    del self._globalMessages[task_uuid]
+                    raise RunwareAPIError(response)
 
                 if response.get("status") == "success" or response.get("imageUUID") is not None:
                     del self._globalMessages[task_uuid]
@@ -2338,16 +2345,16 @@ class RunwareBase:
                 return False
 
         try:
-
             initial_response = await getIntervalWithPromise(
                 check_initial_response,
                 debugKey=debug_key,
                 timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else IMAGE_INITIAL_TIMEOUT
             )
+        except RunwareAPIError:
+            lis["destroy"]()
+            raise
         except Exception as e:
-            # If RunwareAPIError just raise it
-            if isinstance(e, RunwareAPIError):
-                raise
+            lis["destroy"]()
             # Check if connection was lost during the wait
             if not self.connected() or not self.isWebsocketReadyState():
                 raise ConnectionError(
@@ -2365,7 +2372,7 @@ class RunwareBase:
                 )
                 raise ConnectionError(error_msg)
             initial_response = None
-        finally:
+        else:
             lis["destroy"]()
 
         if not initial_response or len(initial_response) == 0:
@@ -2498,7 +2505,9 @@ class RunwareBase:
 
                 response = response_list[0]
 
-                self._handle_error_response(response)
+                if self._is_error_response(response):
+                    del self._globalMessages[task_uuid]
+                    raise RunwareAPIError(response)
 
                 if response.get("status") == "success" or response.get("audioUUID") is not None:
                 
@@ -2520,10 +2529,11 @@ class RunwareBase:
                 debugKey=debug_key,
                 timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else AUDIO_INITIAL_TIMEOUT
             )
+        except RunwareAPIError:
+            lis["destroy"]()
+            raise
         except Exception as e:
-            # If RunwareAPIError just raise it
-            if isinstance(e, RunwareAPIError):
-                raise
+            lis["destroy"]()
             # Check if connection was lost during the wait
             if not self.connected() or not self.isWebsocketReadyState():
                 raise ConnectionError(
@@ -2532,7 +2542,6 @@ class RunwareBase:
                     f"Delivery method: {delivery_method_enum}"
                 )
             if delivery_method_enum is EDeliveryMethod.SYNC:
-                lis["destroy"]()
                 # Raise ConnectionError so _retry_with_reconnect can retry the request
                 error_msg = (
                     f"Timeout waiting for audio generation | "
@@ -2542,7 +2551,7 @@ class RunwareBase:
                 )
                 raise ConnectionError(error_msg)
             initial_response = None
-        finally:
+        else:
             lis["destroy"]()
 
         if not initial_response or len(initial_response) == 0:
@@ -2725,3 +2734,17 @@ class RunwareBase:
         :return: True if the connection is active and authenticated, False otherwise.
         """
         return self.isWebsocketReadyState() and self._connectionSessionUUID is not None
+
+    def _is_error_response(self, response: Dict[str, Any]) -> bool:
+        """Check if response indicates an error via 'code', 'error', or 'errorId' fields."""
+        if not response or not isinstance(response, dict):
+            return False
+
+        if response.get("code"):
+            return True
+        if response.get("error"):
+            return True
+        if response.get("errorId"):
+            return True
+
+        return False
