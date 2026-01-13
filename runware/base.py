@@ -569,7 +569,6 @@ class RunwareBase:
         number_of_images: int,
         on_partial_images: Optional[Callable[[List[IImage], Optional[IError]], None]],
     ) -> Union[List[IImage], IAsyncTaskResponse]:
-        await self.ensureConnection()
         retry_count += 1
         if let_lis:
             let_lis["destroy"]()
