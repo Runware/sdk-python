@@ -292,14 +292,6 @@ class RunwareBase:
         return {"destroy": destroy}
 
     def handle_connection_response(self, m):
-        # Print and log full authentication response data
-        import json
-        import sys
-        auth_response_json = json.dumps(m, indent=2)
-        print(f"Authentication response received: {auth_response_json}", flush=True)
-        self.logger.debug(f"Authentication response received: {auth_response_json}")
-        sys.stdout.flush()
-        
         if m.get("error"):
             if m["errorId"] == 19:
                 self._invalidAPIkey = "Invalid API key"
@@ -315,9 +307,7 @@ class RunwareBase:
                     if connection_uuid:
                         self._connectionSessionUUID = connection_uuid
                         self._invalidAPIkey = None
-                        print(f"Authentication successful. connectionSessionUUID: {connection_uuid}", flush=True)
                         self.logger.info(f"Authentication successful. connectionSessionUUID: {connection_uuid}")
-                        sys.stdout.flush()
                         return
         
         # Handle old format with newConnectionSessionUUID
@@ -527,13 +517,6 @@ class RunwareBase:
 
         if requestImage.webhookURL:
             request_object["webhookURL"] = requestImage.webhookURL
-        
-        # Print full imageInference request
-        import json
-        import sys
-        request_json = json.dumps([request_object], indent=2)
-        print(f"ImageInference request sent: {request_json}", flush=True)
-        sys.stdout.flush()
         
         await self.send([request_object])
         
@@ -1673,12 +1656,6 @@ class RunwareBase:
                         if img.get("taskType") in ["imageInference", "vectorize"]
                            and img.get("taskUUID") not in taskUUIDs
                     ]
-                    # Print full final images response
-                    import json
-                    import sys
-                    images_json = json.dumps(imagesWithSimilarTask[:numberOfImages], indent=2)
-                    print(f"Final images received: {images_json}", flush=True)
-                    sys.stdout.flush()
                     resolve(imagesWithSimilarTask[:numberOfImages])
                     return True
 
@@ -2318,13 +2295,6 @@ class RunwareBase:
                     return False
 
                 response = response_list[0]
-
-                # Print full image response
-                import json
-                import sys
-                response_json = json.dumps(response, indent=2)
-                print(f"Image response received: {response_json}", flush=True)
-                sys.stdout.flush()
 
                 self._handle_error_response(response)
 
