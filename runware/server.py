@@ -87,11 +87,10 @@ class RunwareServer(RunwareBase):
                                 self._connection_session_uuid_event.set()
                                 return
                     if m.get("data") and len(m["data"]) > 0:
-                        connection_uuid = m["data"][0].get("connectionSessionUUID")
-                        self._connectionSessionUUID = connection_uuid
+                        self._connectionSessionUUID = m["data"][0].get("connectionSessionUUID")
                         self._invalidAPIkey = None
                         self._reconnection_manager.on_connection_success()
-                        self.logger.info(f"Authentication successful. connectionSessionUUID: {connection_uuid}")
+                        self.logger.info(f"Authentication successful. connectionSessionUUID: {self._connectionSessionUUID}")
                         self._connection_session_uuid_event.set()
 
                 if not self._loginListener:
@@ -113,8 +112,6 @@ class RunwareServer(RunwareBase):
                         check=pong_check, lis=pong_lis
                     )
 
-                # Don't cancel reconnecting task here - it would cancel this entire operation!
-                # The reconnecting task will stop naturally when connect() succeeds
 
                 if self._connectionSessionUUID and self.isWebsocketReadyState():
                     self.logger.info(
@@ -141,7 +138,7 @@ class RunwareServer(RunwareBase):
                     )
 
                 if self.isWebsocketReadyState():
-                    # Cancel existing heartbeat task if it exists to prevent duplicates
+                    # Cancel existing heartbeat task to prevent duplicates
                     if self._heartbeat_task and not self._heartbeat_task.done():
                         self.logger.info("Cancelling existing heartbeat task")
                         self._heartbeat_task.cancel()
@@ -361,7 +358,7 @@ class RunwareServer(RunwareBase):
                     break
 
                 try:
-                    # Clear old session before reconnecting
+                    
                     self._connectionSessionUUID = None
                     self._invalidAPIkey = None
                     

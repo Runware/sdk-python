@@ -195,7 +195,7 @@ class RunwareBase:
         if not response.get("code"):
             return
             
-        # Check if this is an authentication error - raise ConnectionError to trigger retry
+        # If an authentication error, raise ConnectionError to trigger retry
         if response.get("taskType") == "authentication" or response.get("code") == "missingApiKey":
             error_message = response.get("message", "Authentication error")
             self.logger.warning(f"Authentication error detected: {error_message}")
@@ -1666,19 +1666,6 @@ class RunwareBase:
                 timeOutDuration=IMAGE_INFERENCE_TIMEOUT,
             )
         except Exception as e:
-            # If RunwareAPIError just raise it
-            if isinstance(e, RunwareAPIError):
-                raise
-            # Check if connection was lost during the wait - if so, raise ConnectionError to trigger retry
-            if isinstance(e, ConnectionError):
-                raise
-            if not self.connected() or not self.isWebsocketReadyState():
-                raise ConnectionError(
-                    f"Connection lost while waiting for images | "
-                    f"TaskUUIDs: {taskUUIDs} | "
-                    f"Original error: {str(e)}"
-                ) from e
-            
             async with self._images_lock:
                 current_images = len([
                     img for img in self._globalImages
