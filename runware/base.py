@@ -144,7 +144,6 @@ class RunwareBase:
             except Exception as e:
                 last_error = e
                 
-
                 if not isinstance(e, ConnectionError):
                     raise
                 
@@ -154,11 +153,6 @@ class RunwareBase:
                         f"Failed to authenticate after {MAX_RETRY_ATTEMPTS} attempts. "
                         f"Last error: {last_error}"
                     )
-                
-                # Regenerate taskUUID for retry to avoid conflictTaskUUID errors
-                if args and hasattr(args[0], 'taskUUID') and args[0].taskUUID:
-                    self.logger.info(f"Regenerating taskUUID for retry (was: {args[0].taskUUID})")
-                    args[0].taskUUID = getUUID()
                 
                 async with self._reconnect_lock:
                     # Check if already connected (another concurrent task may have reconnected)
@@ -201,20 +195,13 @@ class RunwareBase:
         if not response.get("code"):
             return
             
-        # Check if this is an authentication error
+        # Check if this is an authentication error - raise ConnectionError to trigger retry
         if response.get("taskType") == "authentication" or response.get("code") == "missingApiKey":
             error_message = response.get("message", "Authentication error")
             self.logger.warning(f"Authentication error detected: {error_message}")
             raise ConnectionError(error_message)
         
-        # Check if this is a conflictTaskUUID error - this should not be retried
-        # as it indicates the taskUUID was already used
-        if response.get("code") == "conflictTaskUUID":
-            error_message = response.get("message", "TaskUUID conflict")
-            self.logger.warning(f"TaskUUID conflict detected: {error_message}")
-            raise RunwareAPIError(response)
-        
-        # For other errors, raise RunwareAPIError
+        # For all other errors (including conflictTaskUUID), raise RunwareAPIError
         raise RunwareAPIError(response)
     
     def _create_safe_async_listener(self, async_func):
@@ -2272,6 +2259,9 @@ class RunwareBase:
                 timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else VIDEO_INITIAL_TIMEOUT
             )
         except Exception as e:
+            # If RunwareAPIError just raise it
+            if isinstance(e, RunwareAPIError):
+                raise
             # Check if connection was lost during the wait
             if not self.connected() or not self.isWebsocketReadyState():
                 raise ConnectionError(
@@ -2355,6 +2345,9 @@ class RunwareBase:
                 timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else IMAGE_INITIAL_TIMEOUT
             )
         except Exception as e:
+            # If RunwareAPIError just raise it
+            if isinstance(e, RunwareAPIError):
+                raise
             # Check if connection was lost during the wait
             if not self.connected() or not self.isWebsocketReadyState():
                 raise ConnectionError(
@@ -2528,6 +2521,9 @@ class RunwareBase:
                 timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else AUDIO_INITIAL_TIMEOUT
             )
         except Exception as e:
+            # If RunwareAPIError just raise it
+            if isinstance(e, RunwareAPIError):
+                raise
             # Check if connection was lost during the wait
             if not self.connected() or not self.isWebsocketReadyState():
                 raise ConnectionError(
