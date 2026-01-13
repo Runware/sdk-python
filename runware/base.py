@@ -201,7 +201,7 @@ class RunwareBase:
             self.logger.warning(f"Authentication error detected: {error_message}")
             raise ConnectionError(error_message)
         
-        # For all other errors (including conflictTaskUUID), raise RunwareAPIError
+        # For all other errors 
         raise RunwareAPIError(response)
     
     def _create_safe_async_listener(self, async_func):
@@ -298,18 +298,6 @@ class RunwareBase:
                 self._invalidAPIkey = "Error connection"
             return
         
-        # Handle response with "data" array (new format)
-        if m.get("data") and isinstance(m["data"], list):
-            for item in m["data"]:
-                if item.get("taskType") == "authentication":
-                    connection_uuid = item.get("connectionSessionUUID")
-                    if connection_uuid:
-                        self._connectionSessionUUID = connection_uuid
-                        self._invalidAPIkey = None
-                        self.logger.info(f"Authentication successful. connectionSessionUUID: {connection_uuid}")
-                        return
-        
-        # Handle old format with newConnectionSessionUUID
         self._connectionSessionUUID = m.get("newConnectionSessionUUID", {}).get(
             "connectionSessionUUID"
         )
