@@ -365,8 +365,17 @@ class RunwareBase:
             )
 
             numberOfResults = requestPhotoMaker.numberResults
+            
+            initial_session_uuid = self._connectionSessionUUID
 
             async def check(resolve: callable, reject: callable, *args: Any) -> bool:
+                if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
+                    reject(ConnectionError(
+                        f"Connection lost while waiting for photo maker response | "
+                        f"TaskUUID: {task_uuid}"
+                    ))
+                    return True
+                
                 async with self._messages_lock:
                     photo_maker_list = self._globalMessages.get(task_uuid, [])
                     unique_results = {}
@@ -679,8 +688,17 @@ class RunwareBase:
         lis = self.globalListener(
             taskUUID=taskUUID,
         )
+        
+        initial_session_uuid = self._connectionSessionUUID
 
         async def check(resolve: callable, reject: callable, *args: Any) -> bool:
+            if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
+                reject(ConnectionError(
+                    f"Connection lost while waiting for image caption response | "
+                    f"TaskUUID: {taskUUID}"
+                ))
+                return True
+            
             async with self._messages_lock:
                 response = self._globalMessages.get(taskUUID)
                 if response:
@@ -945,8 +963,17 @@ class RunwareBase:
         lis = self.globalListener(
             taskUUID=taskUUID,
         )
+        
+        initial_session_uuid = self._connectionSessionUUID
 
         async def check(resolve: callable, reject: callable, *args: Any) -> bool:
+            if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
+                reject(ConnectionError(
+                    f"Connection lost while waiting for background removal response | "
+                    f"TaskUUID: {taskUUID}"
+                ))
+                return True
+            
             async with self._messages_lock:
                 response = self._globalMessages.get(taskUUID)
                 if response:
@@ -1059,8 +1086,17 @@ class RunwareBase:
         lis = self.globalListener(
             taskUUID=taskUUID,
         )
+        
+        initial_session_uuid = self._connectionSessionUUID
 
         async def check(resolve: callable, reject: callable, *args: Any) -> bool:
+            if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
+                reject(ConnectionError(
+                    f"Connection lost while waiting for image upscale response | "
+                    f"TaskUUID: {taskUUID}"
+                ))
+                return True
+            
             async with self._messages_lock:
                 response = self._globalMessages.get(taskUUID)
                 if response:
@@ -1617,12 +1653,21 @@ class RunwareBase:
         :return: A list of IImage objects representing the images.
         """
         taskUUIDs = taskUUID if isinstance(taskUUID, list) else [taskUUID]
+        
+        initial_session_uuid = self._connectionSessionUUID
 
         async def check(
                 resolve: Callable[[List[IImage]], None],
                 reject: Callable[[IError], None],
                 intervalId: Any,
         ) -> Optional[bool]:
+            if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
+                reject(ConnectionError(
+                    f"Connection lost while waiting for images | "
+                    f"TaskUUIDs: {taskUUIDs}"
+                ))
+                return True
+            
             async with self._images_lock:
                 logger.debug(f"Check # Global images: {self._globalImages}")
                 imagesWithSimilarTask = [
@@ -2175,8 +2220,17 @@ class RunwareBase:
     async def _handleInitialVideoResponse(self, task_uuid: str, number_results: int, delivery_method: Union[str, EDeliveryMethod] = EDeliveryMethod.ASYNC, webhook_url: Optional[str] = None, debug_key: str = "video-inference-initial") -> Union[List[IVideo], IAsyncTaskResponse]:
         lis = self.globalListener(taskUUID=task_uuid)
         delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(delivery_method)
+        
+        initial_session_uuid = self._connectionSessionUUID
 
         async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
+            if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
+                reject(ConnectionError(
+                    f"Connection lost while waiting for video generation response | "
+                    f"TaskUUID: {task_uuid}"
+                ))
+                return True
+            
             async with self._messages_lock:
                 response_list = self._globalMessages.get(task_uuid, [])
 
@@ -2240,8 +2294,17 @@ class RunwareBase:
     ) -> Union[List[IImage], IAsyncTaskResponse]:
         lis = self.globalListener(taskUUID=task_uuid)
         delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(delivery_method)
+        
+        initial_session_uuid = self._connectionSessionUUID
 
         async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
+            if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
+                reject(ConnectionError(
+                    f"Connection lost while waiting for image generation response | "
+                    f"TaskUUID: {task_uuid}"
+                ))
+                return True
+            
             async with self._messages_lock:
                 response_list = self._globalMessages.get(task_uuid, [])
 
@@ -2298,6 +2361,8 @@ class RunwareBase:
 
     async def _sendPollRequest(self, task_uuid: str, poll_count: int) -> List[Dict[str, Any]]:
         lis = self.globalListener(taskUUID=task_uuid)
+        
+        initial_session_uuid = self._connectionSessionUUID
 
         try:
             await self.send([{
@@ -2306,6 +2371,13 @@ class RunwareBase:
             }])
 
             async def check_poll_response(resolve: callable, reject: callable, *args: Any) -> bool:
+                if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
+                    reject(ConnectionError(
+                        f"Connection lost while waiting for poll response | "
+                        f"TaskUUID: {task_uuid}"
+                    ))
+                    return True
+                
                 async with self._messages_lock:
                     response_list = self._globalMessages.get(task_uuid, [])
                     if response_list:
@@ -2396,8 +2468,18 @@ class RunwareBase:
     ) -> Union[List[IAudio], IAsyncTaskResponse]:
         lis = self.globalListener(taskUUID=task_uuid)
         delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(delivery_method)
+        
+        initial_session_uuid = self._connectionSessionUUID
 
         async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
+            if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
+                reject(ConnectionError(
+                    f"Connection lost while waiting for audio generation response | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Session changed: {initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid}"
+                ))
+                return True
+            
             async with self._messages_lock:
                 response_list = self._globalMessages.get(task_uuid, [])
 
