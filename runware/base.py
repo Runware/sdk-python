@@ -734,10 +734,7 @@ class RunwareBase:
         return await self._retry_with_reconnect(self._videoCaption, requestVideoCaption)
 
     async def _videoCaption(self, requestVideoCaption: IVideoCaption) -> Union[List[IVideoToText], IAsyncTaskResponse]:
-        await self.ensureConnection()
-        return await asyncRetry(
-            lambda: self._requestVideoCaption(requestVideoCaption)
-        )
+        return await self._requestVideoCaption(requestVideoCaption)
 
     async def _requestVideoCaption(
         self, requestVideoCaption: IVideoCaption
@@ -890,13 +887,7 @@ class RunwareBase:
     async def imageBackgroundRemoval(
         self, removeImageBackgroundPayload: IImageBackgroundRemoval
     ) -> Union[List[IImage], IAsyncTaskResponse]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(
-                lambda: self._removeImageBackground(removeImageBackgroundPayload)
-            )
-        except Exception as e:
-            raise e
+        return await self._retry_with_reconnect(self._removeImageBackground, removeImageBackgroundPayload)
 
     async def _removeImageBackground(
         self, removeImageBackgroundPayload: IImageBackgroundRemoval
@@ -1130,8 +1121,7 @@ class RunwareBase:
         return await self._retry_with_reconnect(self._imageVectorize, vectorizePayload)
 
     async def _imageVectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
-        await self.ensureConnection()
-        return await asyncRetry(lambda: self._vectorize(vectorizePayload))
+        return await self._vectorize(vectorizePayload)
 
     async def _vectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
         # Process the image from inputs
@@ -1210,11 +1200,7 @@ class RunwareBase:
         :return: A list of IEnhancedPrompt objects representing the enhanced versions of the prompt.
         :raises: Any error that occurs during the enhancement process.
         """
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(lambda: self._enhancePrompt(promptEnhancer))
-        except Exception as e:
-            raise e
+        return await self._retry_with_reconnect(self._enhancePrompt, promptEnhancer)
 
     async def _enhancePrompt(
         self, promptEnhancer: IPromptEnhance
@@ -1262,8 +1248,17 @@ class RunwareBase:
         lis = self.globalListener(
             taskUUID=taskUUID,
         )
+        
+        initial_session_uuid = self._connectionSessionUUID
 
         async def check(resolve: Any, reject: Any, *args: Any) -> bool:
+            if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
+                reject(ConnectionError(
+                    f"Connection lost while waiting for prompt enhancement response | "
+                    f"TaskUUID: {taskUUID}"
+                ))
+                return True
+            
             async with self._messages_lock:
                 response = self._globalMessages.get(taskUUID)
                 if isinstance(response, dict) and response.get("error"):
@@ -1704,6 +1699,13 @@ class RunwareBase:
                 timeOutDuration=IMAGE_INFERENCE_TIMEOUT,
             )
         except Exception as e:
+            if not self.connected() or not self.isWebsocketReadyState():
+                raise ConnectionError(
+                    f"Connection lost while waiting for images | "
+                    f"TaskUUIDs: {taskUUIDs} | "
+                    f"Original error: {str(e)}"
+                ) from e
+            
             async with self._images_lock:
                 current_images = len([
                     img for img in self._globalImages
@@ -1771,8 +1773,17 @@ class RunwareBase:
         lis = self.globalListener(
             taskUUID=task_uuid,
         )
+        
+        initial_session_uuid = self._connectionSessionUUID
 
         async def check(resolve: callable, reject: callable, *args: Any) -> bool:
+            if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
+                reject(ConnectionError(
+                    f"Connection lost while waiting for model upload response | "
+                    f"TaskUUID: {task_uuid}"
+                ))
+                return True
+            
             async with self._messages_lock:
                 uploaded_model_list = self._globalMessages.get(task_uuid, [])
                 unique_statuses = set()
@@ -1860,8 +1871,17 @@ class RunwareBase:
             await self.send([request_object])
 
             listener = self.globalListener(taskUUID=task_uuid)
+            
+            initial_session_uuid = self._connectionSessionUUID
 
             async def check(resolve: Callable, reject: Callable, *args: Any) -> bool:
+                if (initial_session_uuid is not None and self._connectionSessionUUID != initial_session_uuid) or not self.connected() or not self.isWebsocketReadyState():
+                    reject(ConnectionError(
+                        f"Connection lost while waiting for model search response | "
+                        f"TaskUUID: {task_uuid}"
+                    ))
+                    return True
+                
                 async with self._messages_lock:
                     response = self._globalMessages.get(task_uuid)
                     if response:
