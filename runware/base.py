@@ -88,6 +88,7 @@ from .utils import (
     MAX_POLLS,
     MAX_POLLS_VIDEO_GENERATION,
     MAX_POLLS_AUDIO_GENERATION,
+    MAX_RETRY_ATTEMPTS,
 )
 
 # Configure logging
@@ -127,8 +128,106 @@ class RunwareBase:
         self._images_lock = asyncio.Lock()
         self._listener_tasks = set()
         self._reconnection_manager = ReconnectionManager(logger=self.logger)
+        self._reconnect_lock = asyncio.Lock()
 
 
+    async def _retry_with_reconnect(self, func, *args, **kwargs):
+
+        last_error = None
+        
+        for attempt in range(MAX_RETRY_ATTEMPTS):
+            try:
+                result = await func(*args, **kwargs)
+                self._reconnection_manager.on_connection_success()
+                return result
+                
+            except Exception as e:
+                last_error = e
+                
+                # When conflictTaskUUID: raise on first attempt, return async response on retry
+                if isinstance(e, RunwareAPIError) and e.code == "conflictTaskUUID":
+                    if attempt == 0:
+                        raise
+                    else:
+                        #
+                        context = e.error_data.get("context", {})
+                        task_type = context.get("taskType")
+                        task_uuid = context.get("taskUUID") or e.error_data.get("taskUUID")
+                        delivery_method_raw = context.get("deliveryMethod")
+                        delivery_method_enum = EDeliveryMethod(delivery_method_raw) if isinstance(delivery_method_raw, str) else delivery_method_raw if delivery_method_raw else None
+                        
+                        if task_type and task_uuid and delivery_method_enum is EDeliveryMethod.ASYNC:
+                            return createAsyncTaskResponse({
+                                "taskType": task_type,
+                                "taskUUID": task_uuid
+                            })
+                        
+                        raise RunwareAPIError({
+                            "code": "conflictTaskUUIDDuringRetries",
+                            "message": "Lost connection during request submission",
+                            "taskUUID": task_uuid
+                        })
+                
+                if not isinstance(e, ConnectionError):
+                    raise
+                
+                if attempt >= MAX_RETRY_ATTEMPTS - 1:
+                    self.logger.error(f"Max authentication retry attempts ({MAX_RETRY_ATTEMPTS}) exceeded")
+                    raise ConnectionError(
+                        f"Failed to authenticate after {MAX_RETRY_ATTEMPTS} attempts. "
+                        f"Last error: {last_error}"
+                    )
+                
+                async with self._reconnect_lock:
+                    # Check if already connected (another concurrent task may have reconnected)
+                    if self.connected() and self._connectionSessionUUID is not None:
+                        self.logger.info("Connection already re-established by another task, retrying request")
+                        continue
+                    
+                    should_open_circuit = self._reconnection_manager.on_auth_failure()
+                    
+                    if should_open_circuit:
+                        self.logger.error("Authentication circuit breaker opened due to repeated failures")
+                        raise ConnectionError(
+                            f"Authentication circuit breaker opened due to repeated failures. "
+                            f"Last error: {str(last_error)}"
+                        )
+                    try:
+                        self.logger.info(f"Reconnecting after auth error: {str(e)}")
+                        
+                        self._invalidAPIkey = None
+                        self._connectionSessionUUID = None
+                        
+                        await self.connect()
+                        
+
+                        if not self.connected():
+                            raise ConnectionError("Reconnection failed; WebSocket is not open")
+                        
+                        self.logger.info("Reconnection successful, retrying request")
+                        
+                    except Exception as reconnect_error:
+                        self.logger.error(f"Error while reconnecting: {reconnect_error}", exc_info=True)
+                        delay = self._reconnection_manager.calculate_delay()
+                        await asyncio.sleep(delay)
+
+    def _handle_error_response(self, response: Dict[str, Any]) -> None:
+        """
+        Handle error responses from the server.
+        Raises ConnectionError for authentication errors, RunwareAPIError for others.
+        """
+        if not self._is_error_response(response):
+            return
+            
+        # If an authentication error, raise ConnectionError to trigger retry
+        if response.get("taskType") == "authentication" or response.get("code") == "missingApiKey":
+            error_message = response.get("message", "Authentication error")
+            self.logger.warning(f"Authentication error detected: {error_message}")
+            raise ConnectionError(error_message)
+        
+        # For all other errors 
+        raise RunwareAPIError(response)
+    
     def _create_safe_async_listener(self, async_func):
         def wrapper(m):
             task = asyncio.create_task(async_func(m))
@@ -222,12 +321,16 @@ class RunwareBase:
             else:
                 self._invalidAPIkey = "Error connection"
             return
+        
         self._connectionSessionUUID = m.get("newConnectionSessionUUID", {}).get(
             "connectionSessionUUID"
         )
         self._invalidAPIkey = None
 
     async def photoMaker(self, requestPhotoMaker: IPhotoMaker) -> Union[List[IImage], IAsyncTaskResponse]:
+        return await self._retry_with_reconnect(self._photoMaker, requestPhotoMaker)
+
+    async def _photoMaker(self, requestPhotoMaker: IPhotoMaker) -> Union[List[IImage], IAsyncTaskResponse]:
         retry_count = 0
 
         try:
@@ -314,9 +417,8 @@ class RunwareBase:
 
             lis["destroy"]()
 
-            if "code" in response:
-                # This indicates an error response
-                raise RunwareAPIError(response)
+            if isinstance(response, dict):
+                self._handle_error_response(response)
 
             if response:
                 if not isinstance(response, list):
@@ -332,6 +434,11 @@ class RunwareBase:
                 raise e
 
     async def imageInference(
+        self, requestImage: IImageInference
+    ) -> Union[List[IImage], IAsyncTaskResponse]:
+        return await self._retry_with_reconnect(self._imageInference, requestImage)
+
+    async def _imageInference(
         self, requestImage: IImageInference
     ) -> Union[List[IImage], IAsyncTaskResponse]:
         let_lis: Optional[Any] = None
@@ -440,22 +547,18 @@ class RunwareBase:
                     "image-inference-initial"
                 )
             
-            return await asyncRetry(
-                lambda: self._requestImages(
-                    request_object=request_object,
-                    task_uuids=task_uuids,
-                    let_lis=let_lis,
-                    retry_count=retry_count,
-                    number_of_images=requestImage.numberResults,
-                    on_partial_images=requestImage.onPartialImages,
-                )
+            return await self._requestImages(
+                request_object=request_object,
+                task_uuids=task_uuids,
+                let_lis=let_lis,
+                retry_count=retry_count,
+                number_of_images=requestImage.numberResults,
+                on_partial_images=requestImage.onPartialImages,
             )
         except Exception as e:
-            if retry_count >= 2:
-                logger.error(f"Error in requestImages:", exc_info=e)
-                raise RunwareAPIError({"message": f"Image inference failed after retries: {str(e)}"})
-            else:
-                raise e
+            if let_lis:
+                let_lis["destroy"]()
+            raise e
 
     async def _requestImages(
         self,
@@ -519,13 +622,11 @@ class RunwareBase:
         # return images
 
     async def imageCaption(self, requestImageToText: IImageCaption) -> Union[IImageToText, IAsyncTaskResponse]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(
-                lambda: self._requestImageToText(requestImageToText)
-            )
-        except Exception as e:
-            raise e
+        return await self._retry_with_reconnect(self._imageCaption, requestImageToText)
+
+    async def _imageCaption(self, requestImageToText: IImageCaption) -> Union[IImageToText, IAsyncTaskResponse]:
+        await self.ensureConnection()
+        return await self._requestImageToText(requestImageToText)
 
     async def _requestImageToText(
         self, requestImageToText: IImageCaption
@@ -622,9 +723,7 @@ class RunwareBase:
 
         lis["destroy"]()
 
-        if "code" in response:
-            # This indicates an error response
-            raise RunwareAPIError(response)
+        self._handle_error_response(response)
 
         if response:
             return createImageToTextFromResponse(response)
@@ -632,13 +731,11 @@ class RunwareBase:
             return None
 
     async def videoCaption(self, requestVideoCaption: IVideoCaption) -> Union[List[IVideoToText], IAsyncTaskResponse]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(
-                lambda: self._requestVideoCaption(requestVideoCaption)
-            )
-        except Exception as e:
-            raise e
+        return await self._retry_with_reconnect(self._videoCaption, requestVideoCaption)
+
+    async def _videoCaption(self, requestVideoCaption: IVideoCaption) -> Union[List[IVideoToText], IAsyncTaskResponse]:
+        await self.ensureConnection()
+        return await self._requestVideoCaption(requestVideoCaption)
 
     async def _requestVideoCaption(
         self, requestVideoCaption: IVideoCaption
@@ -677,14 +774,11 @@ class RunwareBase:
         )
 
     async def videoBackgroundRemoval(self, requestVideoBackgroundRemoval: IVideoBackgroundRemoval) -> Union[List[IVideo], IAsyncTaskResponse]:
+        return await self._retry_with_reconnect(self._videoBackgroundRemoval, requestVideoBackgroundRemoval)
 
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(
-                lambda: self._requestVideoBackgroundRemoval(requestVideoBackgroundRemoval)
-            )
-        except Exception as e:
-            raise e
+    async def _videoBackgroundRemoval(self, requestVideoBackgroundRemoval: IVideoBackgroundRemoval) -> Union[List[IVideo], IAsyncTaskResponse]:
+        await self.ensureConnection()
+        return await self._requestVideoBackgroundRemoval(requestVideoBackgroundRemoval)
 
     async def _requestVideoBackgroundRemoval(
         self, requestVideoBackgroundRemoval: IVideoBackgroundRemoval
@@ -736,13 +830,11 @@ class RunwareBase:
         )
 
     async def videoUpscale(self, requestVideoUpscale: IVideoUpscale) -> Union[List[IVideo], IAsyncTaskResponse]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(
-                lambda: self._requestVideoUpscale(requestVideoUpscale)
-            )
-        except Exception as e:
-            raise e
+        return await self._retry_with_reconnect(self._videoUpscale, requestVideoUpscale)
+
+    async def _videoUpscale(self, requestVideoUpscale: IVideoUpscale) -> Union[List[IVideo], IAsyncTaskResponse]:
+        await self.ensureConnection()
+        return await self._requestVideoUpscale(requestVideoUpscale)
 
     async def _requestVideoUpscale(
         self, requestVideoUpscale: IVideoUpscale
@@ -890,9 +982,7 @@ class RunwareBase:
 
         lis["destroy"]()
 
-        if "code" in response:
-            # This indicates an error response
-            raise RunwareAPIError(response)
+        self._handle_error_response(response)
 
         image = createImageFromResponse(response)
         image_list: List[IImage] = [image]
@@ -900,11 +990,11 @@ class RunwareBase:
         return image_list
 
     async def imageUpscale(self, upscaleGanPayload: IImageUpscale) -> Union[List[IImage], IAsyncTaskResponse]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(lambda: self._upscaleGan(upscaleGanPayload))
-        except Exception as e:
-            raise e
+        return await self._retry_with_reconnect(self._imageUpscale, upscaleGanPayload)
+
+    async def _imageUpscale(self, upscaleGanPayload: IImageUpscale) -> Union[List[IImage], IAsyncTaskResponse]:
+        await self.ensureConnection()
+        return await self._upscaleGan(upscaleGanPayload)
 
     async def _upscaleGan(self, upscaleGanPayload: IImageUpscale) -> Union[List[IImage], IAsyncTaskResponse]:
         # Support both inputImage (legacy) and inputs.image (new format)
@@ -1006,20 +1096,18 @@ class RunwareBase:
 
         lis["destroy"]()
 
-        if "code" in response:
-            # This indicates an error response
-            raise RunwareAPIError(response)
+        self._handle_error_response(response)
 
         image = createImageFromResponse(response)
         image_list: List[IImage] = [image]
         return image_list
 
     async def imageVectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(lambda: self._vectorize(vectorizePayload))
-        except Exception as e:
-            raise e
+        return await self._retry_with_reconnect(self._imageVectorize, vectorizePayload)
+
+    async def _imageVectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
+        await self.ensureConnection()
+        return await self._vectorize(vectorizePayload)
 
     async def _vectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
         # Process the image from inputs
@@ -1180,15 +1268,14 @@ class RunwareBase:
         return list(set(enhanced_prompts))
 
     async def uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(lambda: self._uploadImage(file))
-        except Exception as e:
-            raise e
+        return await self._retry_with_reconnect(self._uploadImage, file)
 
     async def _uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
+        await self.ensureConnection()
+        
         task_uuid = getUUID()
         local_file = True
+        
         if isinstance(file, str):
             if os.path.exists(file):
                 local_file = True
@@ -1208,14 +1295,15 @@ class RunwareBase:
                     taskUUID=task_uuid,
                 )
 
-            file = await fileToBase64(file)
+        # Convert file to base64 (handles both File objects and string paths)
+        file_data = await fileToBase64(file)
 
         await self.send(
             [
                 {
                     "taskType": ETaskType.IMAGE_UPLOAD.value,
                     "taskUUID": task_uuid,
-                    "image": file,
+                    "image": file_data,
                 }
             ]
         )
@@ -1244,9 +1332,7 @@ class RunwareBase:
 
         lis["destroy"]()
 
-        if "code" in response:
-            # This indicates an error response
-            raise RunwareAPIError(response)
+        self._handle_error_response(response)
 
         if response:
             image = UploadImageType(
@@ -1259,23 +1345,21 @@ class RunwareBase:
         return image
 
     async def uploadMedia(self, media_url: str) -> Optional[MediaStorageType]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(lambda: self._uploadMedia(media_url))
-        except Exception as e:
-            raise e
+        return await self._retry_with_reconnect(self._uploadMedia, media_url)
 
     async def _uploadMedia(self, media_url: str) -> Optional[MediaStorageType]:
+        await self.ensureConnection()
+        
         task_uuid = getUUID()
-        local_file = True
+        media_data = media_url
         
         if isinstance(media_url, str):
             if os.path.exists(media_url):
                 # Local file - convert to base64
-                media_url = await fileToBase64(media_url)
+                media_data = await fileToBase64(media_url)
                 # Strip the data URI prefix for media storage API
-                if media_url.startswith("data:"):
-                    media_url = media_url.split(",", 1)[1]
+                if media_data.startswith("data:"):
+                    media_data = media_data.split(",", 1)[1]
             # For URLs and base64 strings, send them directly to the API
         
         await self.send(
@@ -1284,7 +1368,7 @@ class RunwareBase:
                     "taskType": ETaskType.MEDIA_STORAGE.value,
                     "taskUUID": task_uuid,
                     "operation": "upload",
-                    "media": media_url,
+                    "media": media_data,
                 }
             ]
         )
@@ -1312,9 +1396,7 @@ class RunwareBase:
 
         lis["destroy"]()
 
-        if "code" in response:
-            # This indicates an error response
-            raise RunwareAPIError(response)
+        self._handle_error_response(response)
 
         if response:
             media = MediaStorageType(
@@ -1553,6 +1635,14 @@ class RunwareBase:
                 reject: Callable[[IError], None],
                 intervalId: Any,
         ) -> Optional[bool]:
+            # Check if connection is currently lost
+            if not self.connected() or not self.isWebsocketReadyState():
+                reject(ConnectionError(
+                    f"Connection lost while waiting for images | "
+                    f"TaskUUIDs: {taskUUIDs}"
+                ))
+                return True
+            
             async with self._images_lock:
                 logger.debug(f"Check # Global images: {self._globalImages}")
                 imagesWithSimilarTask = [
@@ -1608,6 +1698,8 @@ class RunwareBase:
     async def _modelUpload(
         self, requestModel: IUploadModelBaseType
     ) -> Optional[IUploadModelResponse]:
+        await self.ensureConnection()
+        
         task_uuid = getUUID()
         base_fields = {
             "taskType": ETaskType.MODEL_UPLOAD.value,
@@ -1663,7 +1755,7 @@ class RunwareBase:
 
                 for uploaded_model in uploaded_model_list:
                     if uploaded_model.get("code"):
-                        raise RunwareAPIError(uploaded_model)
+                        self._handle_error_response(uploaded_model)
 
                     status = uploaded_model.get("status")
 
@@ -1672,7 +1764,7 @@ class RunwareBase:
                         unique_statuses.add(status)
 
                     if status is not None and "error" in status:
-                        raise RunwareAPIError(uploaded_model)
+                        self._handle_error_response(uploaded_model)
 
                     if status == "ready":
                         uploaded_model_list.remove(uploaded_model)
@@ -1691,9 +1783,8 @@ class RunwareBase:
 
         lis["destroy"]()
 
-        if "code" in response:
-            # This indicates an error response
-            raise RunwareAPIError(response)
+        if isinstance(response, dict):
+            self._handle_error_response(response)
 
         if response:
             if not isinstance(response, list):
@@ -1717,13 +1808,12 @@ class RunwareBase:
     async def modelUpload(
         self, requestModel: IUploadModelBaseType
     ) -> Optional[IUploadModelResponse]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(lambda: self._modelUpload(requestModel))
-        except Exception as e:
-            raise e
+        return await self._retry_with_reconnect(self._modelUpload, requestModel)
 
     async def modelSearch(self, payload: IModelSearch) -> IModelSearchResponse:
+        return await self._retry_with_reconnect(self._modelSearch, payload)
+
+    async def _modelSearch(self, payload: IModelSearch) -> IModelSearchResponse:
         try:
             await self.ensureConnection()
             task_uuid = getUUID()
@@ -1764,9 +1854,7 @@ class RunwareBase:
 
             listener["destroy"]()
 
-            if "code" in response:
-                # This indicates an error response
-                raise RunwareAPIError(response)
+            self._handle_error_response(response)
 
             return instantiateDataclass(IModelSearchResponse, response)
 
@@ -1777,10 +1865,20 @@ class RunwareBase:
             raise RunwareAPIError({"message": str(e)})
 
     async def videoInference(self, requestVideo: IVideoInference) -> Union[List[IVideo], IAsyncTaskResponse]:
+        return await self._retry_with_reconnect(self._videoInference, requestVideo)
+
+    async def _videoInference(self, requestVideo: IVideoInference) -> Union[List[IVideo], IAsyncTaskResponse]:
         await self.ensureConnection()
-        return await asyncRetry(lambda: self._requestVideo(requestVideo))
+        return await self._requestVideo(requestVideo)
 
     async def getResponse(
+        self,
+        taskUUID: str,
+        numberResults: Optional[int] = 1,
+    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage]]:
+        return await self._retry_with_reconnect(self._getResponse, taskUUID, numberResults)
+
+    async def _getResponse(
         self,
         taskUUID: str,
         numberResults: Optional[int] = 1,
@@ -1796,6 +1894,7 @@ class RunwareBase:
         await self._processVideoImages(requestVideo)
         requestVideo.taskUUID = requestVideo.taskUUID or getUUID()
         request_object = self._buildVideoRequest(requestVideo)
+        
 
         if requestVideo.webhookURL:
             request_object["webhookURL"] = requestVideo.webhookURL
@@ -2067,8 +2166,7 @@ class RunwareBase:
 
                 response = response_list[0] if isinstance(response_list, list) else response_list
 
-                if response.get("code"):
-                    raise RunwareAPIError(response)
+                self._handle_error_response(response)
 
                 if isinstance(response, dict) and response.get("error"):
                     reject(response)
@@ -2089,8 +2187,8 @@ class RunwareBase:
         finally:
             lis["destroy"]()
 
-        if isinstance(response, dict) and "code" in response:
-            raise RunwareAPIError(response)
+        if isinstance(response, dict):
+            self._handle_error_response(response)
 
         return response
 
@@ -2099,6 +2197,15 @@ class RunwareBase:
         delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(delivery_method)
 
         async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
+            # Check if connection was lost during the wait
+            if not self.connected() or not self.isWebsocketReadyState():
+                reject(ConnectionError(
+                    f"Connection lost while waiting for video response | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Delivery method: {delivery_method_enum}"
+                ))
+                return True
+            
             async with self._messages_lock:
                 response_list = self._globalMessages.get(task_uuid, [])
 
@@ -2107,7 +2214,8 @@ class RunwareBase:
 
                 response = response_list[0]
 
-                if response.get("code"):
+                if self._is_error_response(response):
+                    del self._globalMessages[task_uuid]
                     raise RunwareAPIError(response)
 
                 if response.get("status") == "success" or response.get("videoUUID") is not None or response.get("mediaUUID") is not None:
@@ -2129,35 +2237,34 @@ class RunwareBase:
                 debugKey=debug_key,
                 timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else VIDEO_INITIAL_TIMEOUT
             )
+        except RunwareAPIError:
+            raise
         except Exception as e:
+            # Check if connection was lost during the wait
+            if not self.connected() or not self.isWebsocketReadyState():
+                raise ConnectionError(
+                    f"Connection lost while waiting for video response | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Delivery method: {delivery_method_enum}"
+                )
             if delivery_method_enum is EDeliveryMethod.SYNC:
+                # Raise ConnectionError so _retry_with_reconnect can retry the request
                 error_msg = (
                     f"Timeout waiting for video generation | "
                     f"TaskUUID: {task_uuid} | "
                     f"Timeout: {TIMEOUT_DURATION}ms | "
                     f"Original error: {str(e)}"
                 )
-                raise Exception(error_msg)
+                raise ConnectionError(error_msg)
             initial_response = None
         finally:
             lis["destroy"]()
 
         if not initial_response or len(initial_response) == 0:
-            if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
-                
-                return createAsyncTaskResponse({
-                    "taskUUID": task_uuid,
-                    "taskType": ETaskType.VIDEO_INFERENCE.value
-                })
-            else:
-                # For sync delivery method, raise an error if no initial response is received
-                raise RunwareError(
-                    IError(
-                        error=True,
-                        error_message=f"No initial response received for video generation | delivery_method={delivery_method_enum}",
-                        task_uuid=task_uuid
-                    )
-                )
+            # No response from server means connection was lost during request
+            raise ConnectionError(
+                f"No initial response received for video generation | delivery_method={delivery_method_enum} | taskUUID={task_uuid}"
+            )
         
         if isinstance(initial_response[0], IAsyncTaskResponse):
             return initial_response[0]
@@ -2176,6 +2283,15 @@ class RunwareBase:
         delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(delivery_method)
 
         async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
+            # Check if connection was lost during the wait
+            if not self.connected() or not self.isWebsocketReadyState():
+                reject(ConnectionError(
+                    f"Connection lost while waiting for image response | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Delivery method: {delivery_method_enum}"
+                ))
+                return True
+            
             async with self._messages_lock:
                 response_list = self._globalMessages.get(task_uuid, [])
 
@@ -2184,7 +2300,8 @@ class RunwareBase:
 
                 response = response_list[0]
 
-                if response.get("code"):
+                if self._is_error_response(response):
+                    del self._globalMessages[task_uuid]
                     raise RunwareAPIError(response)
 
                 if response.get("status") == "success" or response.get("imageUUID") is not None:
@@ -2201,41 +2318,39 @@ class RunwareBase:
                 return False
 
         try:
-
             initial_response = await getIntervalWithPromise(
                 check_initial_response,
                 debugKey=debug_key,
                 timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else IMAGE_INITIAL_TIMEOUT
             )
+        except RunwareAPIError:
+            raise
         except Exception as e:
+            # Check if connection was lost during the wait
+            if not self.connected() or not self.isWebsocketReadyState():
+                raise ConnectionError(
+                    f"Connection lost while waiting for image response | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Delivery method: {delivery_method_enum}"
+                )
             if delivery_method_enum is EDeliveryMethod.SYNC:
+                # Raise ConnectionError so _retry_with_reconnect can retry the request
                 error_msg = (
                     f"Timeout waiting for image generation | "
                     f"TaskUUID: {task_uuid} | "
                     f"Timeout: {TIMEOUT_DURATION}ms | "
                     f"Original error: {str(e)}"
                 )
-                raise Exception(error_msg)
+                raise ConnectionError(error_msg)
             initial_response = None
         finally:
             lis["destroy"]()
 
         if not initial_response or len(initial_response) == 0:
-            if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
-                
-                return createAsyncTaskResponse({
-                    "taskUUID": task_uuid,
-                    "taskType": ETaskType.IMAGE_INFERENCE.value
-                })
-            else:
-                # For sync delivery method, raise an error if no initial response is received
-                raise RunwareError(
-                    IError(
-                        error=True,
-                        error_message=f"No initial response received for image inference | delivery_method={delivery_method_enum}",
-                        task_uuid=task_uuid
-                    )
-                )
+            # No response from server means connection was lost during request
+            raise ConnectionError(
+                f"No initial response received for image inference | delivery_method={delivery_method_enum} | taskUUID={task_uuid}"
+            )
         
         if isinstance(initial_response[0], IAsyncTaskResponse):
             return initial_response[0]
@@ -2272,8 +2387,11 @@ class RunwareBase:
         return any(response.get("status") == "processing" for response in responses)
 
     async def audioInference(self, requestAudio: IAudioInference) -> Union[List[IAudio], IAsyncTaskResponse]:
+        return await self._retry_with_reconnect(self._audioInference, requestAudio)
+
+    async def _audioInference(self, requestAudio: IAudioInference) -> Union[List[IAudio], IAsyncTaskResponse]:
         await self.ensureConnection()
-        return await asyncRetry(lambda: self._requestAudio(requestAudio))
+        return await self._requestAudio(requestAudio)
 
     async def _requestAudio(self, requestAudio: IAudioInference) -> Union[List[IAudio], IAsyncTaskResponse]:
         requestAudio.taskUUID = requestAudio.taskUUID or getUUID()
@@ -2342,6 +2460,15 @@ class RunwareBase:
         delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(delivery_method)
 
         async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
+            # Check if connection was lost during the wait
+            if not self.connected() or not self.isWebsocketReadyState():
+                reject(ConnectionError(
+                    f"Connection lost while waiting for audio response | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Delivery method: {delivery_method_enum}"
+                ))
+                return True
+            
             async with self._messages_lock:
                 response_list = self._globalMessages.get(task_uuid, [])
 
@@ -2350,7 +2477,8 @@ class RunwareBase:
 
                 response = response_list[0]
 
-                if response.get("code"):
+                if self._is_error_response(response):
+                    del self._globalMessages[task_uuid]
                     raise RunwareAPIError(response)
 
                 if response.get("status") == "success" or response.get("audioUUID") is not None:
@@ -2373,36 +2501,34 @@ class RunwareBase:
                 debugKey=debug_key,
                 timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else AUDIO_INITIAL_TIMEOUT
             )
+        except RunwareAPIError:
+            raise
         except Exception as e:
+            # Check if connection was lost during the wait
+            if not self.connected() or not self.isWebsocketReadyState():
+                raise ConnectionError(
+                    f"Connection lost while waiting for audio response | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Delivery method: {delivery_method_enum}"
+                )
             if delivery_method_enum is EDeliveryMethod.SYNC:
-                lis["destroy"]()
+                # Raise ConnectionError so _retry_with_reconnect can retry the request
                 error_msg = (
                     f"Timeout waiting for audio generation | "
                     f"TaskUUID: {task_uuid} | "
                     f"Timeout: {TIMEOUT_DURATION}ms | "
                     f"Original error: {str(e)}"
                 )
-                raise Exception(error_msg)
+                raise ConnectionError(error_msg)
             initial_response = None
         finally:
             lis["destroy"]()
 
         if not initial_response or len(initial_response) == 0:
-            if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
-                
-                return createAsyncTaskResponse({
-                    "taskUUID": task_uuid,
-                    "taskType": ETaskType.AUDIO_INFERENCE.value
-                })
-            else:
-                # For sync delivery method, raise an error if no initial response is received
-                raise RunwareError(
-                    IError(
-                        error=True,
-                        error_message=f"No initial response received for audio inference | delivery_method={delivery_method_enum}",
-                        task_uuid=task_uuid
-                    )
-                )
+            # No response from server means connection was lost during request
+            raise ConnectionError(
+                f"No initial response received for audio inference | delivery_method={delivery_method_enum} | taskUUID={task_uuid}"
+            )
         
         if isinstance(initial_response[0], IAsyncTaskResponse):
             return initial_response[0]
@@ -2437,8 +2563,7 @@ class RunwareBase:
             )
             lis["destroy"]()
 
-            if "code" in response:
-                raise RunwareAPIError(response)
+            self._handle_error_response(response)
 
             return self._createAudioFromResponse(response) if response else None
         except Exception as e:
@@ -2449,8 +2574,7 @@ class RunwareBase:
         completed_results: List[Dict[str, Any]] = []
 
         for response in responses:
-            if response.get("code"):
-                raise RunwareAPIError(response)
+            self._handle_error_response(response)
 
             if response.get("status") == "success":
                 completed_results.append(response)
@@ -2521,8 +2645,7 @@ class RunwareBase:
                     responses = await self._sendPollRequest(task_uuid, poll_count)
 
                     for response in responses:
-                        if response.get("code"):
-                            raise RunwareAPIError(response)
+                        self._handle_error_response(response)
 
                     if task_type is None:
                         for resp in responses:
@@ -2581,3 +2704,17 @@ class RunwareBase:
         :return: True if the connection is active and authenticated, False otherwise.
         """
         return self.isWebsocketReadyState() and self._connectionSessionUUID is not None
+
+    def _is_error_response(self, response: Dict[str, Any]) -> bool:
+        """Check if response indicates an error via 'code', 'error', or 'errorId' fields."""
+        if not response or not isinstance(response, dict):
+            return False
+
+        if response.get("code"):
+            return True
+        if response.get("error"):
+            return True
+        if response.get("errorId"):
+            return True
+
+        return False

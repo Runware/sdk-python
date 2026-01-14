@@ -90,6 +90,7 @@ class RunwareServer(RunwareBase):
                         self._connectionSessionUUID = m["data"][0].get("connectionSessionUUID")
                         self._invalidAPIkey = None
                         self._reconnection_manager.on_connection_success()
+                        self.logger.info(f"Authentication successful. connectionSessionUUID: {self._connectionSessionUUID}")
                         self._connection_session_uuid_event.set()
 
                 if not self._loginListener:
@@ -111,9 +112,6 @@ class RunwareServer(RunwareBase):
                         check=pong_check, lis=pong_lis
                     )
 
-                if self._reconnecting_task:
-                    self._reconnecting_task.cancel()
-                    self._tasks.pop("Task_Reconnecting", None)
 
                 if self._connectionSessionUUID and self.isWebsocketReadyState():
                     self.logger.info(
@@ -140,6 +138,16 @@ class RunwareServer(RunwareBase):
                     )
 
                 if self.isWebsocketReadyState():
+                    # Cancel existing heartbeat task to prevent duplicates
+                    if self._heartbeat_task and not self._heartbeat_task.done():
+                        self.logger.info("Cancelling existing heartbeat task")
+                        self._heartbeat_task.cancel()
+                        try:
+                            await self._heartbeat_task
+                        except asyncio.CancelledError:
+                            # Expected when cancelling the previous heartbeat task; safe to ignore.
+                            pass
+                    
                     self.logger.info("Starting heartbeat task")
                     self._heartbeat_task = asyncio.create_task(
                         self.heartBeat(), name="Task_Heartbeat"
@@ -351,6 +359,10 @@ class RunwareServer(RunwareBase):
                     break
 
                 try:
+                    
+                    self._connectionSessionUUID = None
+                    self._invalidAPIkey = None
+                    
                     await self.connect()
                     if self.isWebsocketReadyState():
                         self.logger.info("Reconnected successfully")
