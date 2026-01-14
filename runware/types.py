@@ -588,6 +588,15 @@ class IBlackForestLabsProviderSettings(BaseProviderSettings):
         return "bfl"
 
 
+@dataclass
+class IMireloProviderSettings(BaseProviderSettings):
+    startOffset: Optional[int] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "mirelo"
+
+
 ImageProviderSettings = (
     IOpenAIProviderSettings
     | IBriaProviderSettings
@@ -1265,7 +1274,7 @@ class ISyncProviderSettings(BaseProviderSettings):
         return result
 
 
-AudioProviderSettings = IElevenLabsProviderSettings | IKlingAIProviderSettings
+AudioProviderSettings = IElevenLabsProviderSettings | IKlingAIProviderSettings | IMireloProviderSettings
 VideoProviderSettings = (
     IKlingAIProviderSettings
     | IGoogleProviderSettings
@@ -1320,6 +1329,7 @@ class IVideoInference:
 @dataclass
 class IAudioInputs(SerializableMixin):
     video: Optional[str] = None
+    videos: Optional[List[str]] = None
 
     @property
     def request_key(self) -> str:
@@ -1366,6 +1376,9 @@ class IAudio:
     audioURL: Optional[str] = None
     audioBase64Data: Optional[str] = None
     audioDataURI: Optional[str] = None
+    videoUUID: Optional[str] = None
+    videoURL: Optional[str] = None
+    seed: Optional[int] = None
     cost: Optional[float] = None
 
 
