@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.40]
+
+### Added
+- Added `_retry_with_reconnect()` method that wraps all public API methods for automatic reconnection on authentication errors (up to 10 retries)
+- Added `MAX_RETRY_ATTEMPTS` constant in `runware/utils.py` for retry mechanism configuration
+- Added `IMireloProviderSettings` with `startOffset: Optional[int] = None` parameter
+- Added `ISettings.layers: Optional[int] = None` parameter
+- Added `ISettings.trueCFGScale: Optional[float] = None` parameter
+- Added `IAudio.videoUUID: Optional[str] = None` field
+- Added `IAudio.videoURL: Optional[str] = None` field
+- Added `IAudio.seed: Optional[int] = None` field
+
+### Fixed
+- Fixed duplicate heartbeat tasks by cancelling existing task before creating new one in `runware/server.py`
+- Fixed connection loss detection during request waits with session UUID tracking
+- Fixed `conflictTaskUUID` error handling to extract `taskType` and `deliveryMethod` from error context instead of relying on global message state
+
+
+### Changed
+- Refactored retry logic: Removed redundant `asyncRetry` calls from 9 methods and them wrapped with `_retry_with_reconnect`
+
 ## [0.4.39]
 
 ### Added
