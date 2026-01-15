@@ -1,6 +1,5 @@
 import asyncio
 import inspect
-import json
 import logging
 import os
 import re
@@ -2362,13 +2361,10 @@ class RunwareBase:
         lis = self.globalListener(taskUUID=task_uuid)
 
         try:
-            poll_request = [{
+            await self.send([{
                 "taskType": ETaskType.GET_RESPONSE.value,
                 "taskUUID": task_uuid
-            }]
-            print(f"\n[DEBUG getResponse] Poll #{poll_count} - SENDING REQUEST:", flush=True)
-            print(json.dumps(poll_request, indent=2), flush=True)
-            await self.send(poll_request)
+            }])
 
             async def check_poll_response(resolve: callable, reject: callable, *args: Any) -> bool:
                 async with self._messages_lock:
@@ -2379,14 +2375,11 @@ class RunwareBase:
                         return True
                 return False
 
-            responses = await getIntervalWithPromise(
+            return await getIntervalWithPromise(
                 check_poll_response,
                 debugKey=f"poll-{poll_count}",
                 timeOutDuration=VIDEO_INITIAL_TIMEOUT
             )
-            print(f"\n[DEBUG getResponse] Poll #{poll_count} - RECEIVED RESPONSE:", flush=True)
-            print(json.dumps(responses, indent=2), flush=True)
-            return responses
         finally:
             lis["destroy"]()
 
@@ -2580,25 +2573,12 @@ class RunwareBase:
     def _processPollingResponse(self, responses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         completed_results: List[Dict[str, Any]] = []
 
-        print(f"\n[DEBUG getResponse] _processPollingResponse - Processing {len(responses)} response(s):", flush=True)
-        for idx, response in enumerate(responses):
-            print(f"\n[DEBUG getResponse] Response #{idx}:", flush=True)
-            print(json.dumps(response, indent=2), flush=True)
-            print(f"[DEBUG getResponse] Response #{idx} - status: {response.get('status')}", flush=True)
-            print(f"[DEBUG getResponse] Response #{idx} - imageUUID: {response.get('imageUUID')}", flush=True)
-            print(f"[DEBUG getResponse] Response #{idx} - videoUUID: {response.get('videoUUID')}", flush=True)
-            print(f"[DEBUG getResponse] Response #{idx} - audioUUID: {response.get('audioUUID')}", flush=True)
-            print(f"[DEBUG getResponse] Response #{idx} - mediaUUID: {response.get('mediaUUID')}", flush=True)
-            
+        for response in responses:
             self._handle_error_response(response)
 
             if response.get("status") == "success":
-                print(f"[DEBUG getResponse] Response #{idx} - MARKED AS COMPLETE (status == 'success')", flush=True)
                 completed_results.append(response)
-            else:
-                print(f"[DEBUG getResponse] Response #{idx} - NOT marked as complete (status != 'success')", flush=True)
 
-        print(f"\n[DEBUG getResponse] _processPollingResponse - Returning {len(completed_results)} completed result(s)", flush=True)
         return completed_results
 
     async def _pollResults(
@@ -2679,16 +2659,11 @@ class RunwareBase:
                     processed_responses = self._processPollingResponse(responses)
                     completed_results.extend(processed_responses)
 
-                    print(f"\n[DEBUG getResponse] Poll #{poll_count} - completed_results count: {len(completed_results)}, number_results needed: {number_results}", flush=True)
-                    
                     if len(completed_results) >= number_results:
-                        print(f"\n[DEBUG getResponse] Poll #{poll_count} - SUFFICIENT RESULTS, RETURNING", flush=True)
                         return instantiateDataclassList(
                             response_cls,
                             completed_results[:number_results]
                         )
-                    else:
-                        print(f"\n[DEBUG getResponse] Poll #{poll_count} - INSUFFICIENT RESULTS, CONTINUING POLLING", flush=True)
 
                     if not processed_responses and not self._hasPendingResults(responses):
                         raise RunwareAPIError({"message": f"Unexpected polling response at poll {poll_count}"})
