@@ -533,8 +533,8 @@ class IBriaProviderSettings(BaseProviderSettings):
     refinePrompt: Optional[bool] = None
     originalQuality: Optional[bool] = None
     forceBackgroundDetection: Optional[bool] = None
-    preserveAudio: Optional[bool] = True
-    autoTrim: Optional[bool] = False
+    preserveAudio: Optional[bool] = None
+    autoTrim: Optional[bool] = None
     mask: Optional[IBriaMaskSettings] = None
 
     @property
