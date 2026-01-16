@@ -958,6 +958,7 @@ class IUploadModelBaseType:
     format: str
     private: bool
     category: str
+    taskUUID: Optional[str] = None
     heroImageURL: Optional[str] = None
     tags: Optional[List[str]] = field(default_factory=list)
     shortDescription: Optional[str] = None
