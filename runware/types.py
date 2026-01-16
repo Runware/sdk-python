@@ -533,8 +533,8 @@ class IBriaProviderSettings(BaseProviderSettings):
     refinePrompt: Optional[bool] = None
     originalQuality: Optional[bool] = None
     forceBackgroundDetection: Optional[bool] = None
-    preserveAudio: Optional[bool] = True
-    autoTrim: Optional[bool] = False
+    preserveAudio: Optional[bool] = None
+    autoTrim: Optional[bool] = None
     mask: Optional[IBriaMaskSettings] = None
 
     @property
@@ -958,6 +958,7 @@ class IUploadModelBaseType:
     format: str
     private: bool
     category: str
+    taskUUID: Optional[str] = None
     heroImageURL: Optional[str] = None
     tags: Optional[List[str]] = field(default_factory=list)
     shortDescription: Optional[str] = None

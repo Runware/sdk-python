@@ -1700,7 +1700,7 @@ class RunwareBase:
     ) -> Optional[IUploadModelResponse]:
         await self.ensureConnection()
         
-        task_uuid = getUUID()
+        task_uuid = requestModel.taskUUID or getUUID()
         base_fields = {
             "taskType": ETaskType.MODEL_UPLOAD.value,
             "taskUUID": task_uuid,
