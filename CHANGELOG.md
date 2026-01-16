@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.41]
+
+### Changed
+- Updated `IBriaProviderSettings.preserveAudio` default from `Optional[bool] = True` to `None`
+- Updated `IBriaProviderSettings.autoTrim` default from `Optional[bool] = False` to `None`
+
+### Added
+- Added `taskUUID` attribute to `IUploadModelBaseType` to allow passing `taskUUID` from user in `modelUpload()` method
+
 ## [0.4.40]
 
 ### Added
