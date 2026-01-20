@@ -3,9 +3,9 @@ import inspect
 import logging
 import os
 import re
-import uuid
 from asyncio import gather
 from dataclasses import asdict
+from random import uniform
 from typing import List, Optional, Union, Callable, Any, Dict
 
 from websockets.protocol import State
@@ -86,9 +86,8 @@ from .utils import (
     AUDIO_INFERENCE_TIMEOUT,
     AUDIO_POLLING_DELAY,
     MAX_POLLS,
-    MAX_POLLS_VIDEO_GENERATION,
-    MAX_POLLS_AUDIO_GENERATION,
     MAX_RETRY_ATTEMPTS,
+    MAX_CONCURRENT_REQUESTS,
 )
 
 # Configure logging
@@ -129,12 +128,167 @@ class RunwareBase:
         self._listener_tasks = set()
         self._reconnection_manager = ReconnectionManager(logger=self.logger)
         self._reconnect_lock = asyncio.Lock()
+        self._pending_operations: Dict[str, Dict[str, Any]] = {}
+        self._request_semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
+    def _register_pending_operation(
+            self,
+            task_uuid: str,
+            expected_results: int = 1,
+            on_partial: "Optional[Callable[[List[Any], Optional[IError]], None]]" = None,
+            complete_predicate: "Optional[Callable[[Dict[str, Any]], bool]]" = None,
+            result_filter: "Optional[Callable[[Dict[str, Any]], bool]]" = None
+    ) -> "asyncio.Future":
+        """
+        Register a pending operation for event-driven result collection.
+
+        Creates an asyncio.Future that will be resolved when expected results arrive
+        or an error occurs. Enables O(1) message routing by taskUUID.
+
+        Args:
+            task_uuid: Unique identifier for the operation. Must match server response.
+            expected_results: Number of results to collect before resolving Future.
+                             Ignored if complete_predicate is provided.
+            on_partial: Callback invoked for each valid result (after filtering).
+                       Signature: (results: List[Any], error: Optional[IError]) -> None
+                       Called synchronously within message handler.
+            complete_predicate: Custom completion check. If provided, called for each
+                               result item. Return True to resolve Future immediately.
+                               Signature: (item: Dict[str, Any]) -> bool
+            result_filter: Filter function applied before adding to results.
+                          Return True to include item, False to skip.
+                          Signature: (item: Dict[str, Any]) -> bool
+        """
+        if task_uuid in self._pending_operations:
+            existing_op = self._pending_operations[task_uuid]
+            existing_future = existing_op.get("future")
+            if existing_future and not existing_future.done():
+                self.logger.warning(f"Task {task_uuid} already registered, cancelling previous operation")
+                existing_future.set_exception(RunwareAPIError({
+                    "code": "taskUUIDConflict",
+                    "message": f"Task {task_uuid} was superseded by new registration"
+                }))
+            del self._pending_operations[task_uuid]
+
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        self._pending_operations[task_uuid] = {
+            "future": future,
+            "expected": expected_results,
+            "results": [],
+            "on_partial": on_partial,
+            "complete_predicate": complete_predicate,
+            "result_filter": result_filter
+        }
+        return future
+
+    def _unregister_pending_operation(self, task_uuid: str) -> "Optional[List[Dict[str, Any]]]":
+        """
+        Remove pending operation and return collected results.
+
+        Must be called in finally block to prevent memory leaks.
+        Safe to call multiple times or with non-existent task_uuid.
+        """
+
+        op = self._pending_operations.pop(task_uuid, None)
+        if op:
+            return op["results"]
+        return None
+
+    def _handle_pending_operation_message(self, item: "Dict[str, Any]") -> bool:
+        """
+        Route incoming message to registered pending operation.
+        Called by on_message for each item in response data array.
+        """
+        task_uuid = item.get("taskUUID")
+        if not task_uuid:
+            return False
+
+        op = self._pending_operations.get(task_uuid)
+        if op is None:
+            return False
+
+        future = op["future"]
+
+        if future.done():
+            return True
+
+        if self._is_error_response(item):
+            if not future.done():
+                future.set_exception(RunwareAPIError(item))
+            return True
+
+        result_filter = op.get("result_filter")
+        if result_filter is not None:
+            if not result_filter(item):
+                return True
+
+        op["results"].append(item)
+
+        if op["on_partial"]:
+            try:
+                if item.get("imageUUID"):
+                    partial_images = [createImageFromResponse(item)]
+                    op["on_partial"](partial_images, None)
+                elif item.get("videoUUID") or item.get("mediaUUID"):
+                    op["on_partial"]([item], None)
+                elif item.get("audioUUID"):
+                    op["on_partial"]([item], None)
+            except Exception as e:
+                logger.error(f"Error in on_partial callback: {e}")
+
+        if op["complete_predicate"]:
+            is_complete = op["complete_predicate"](item)
+        else:
+            is_complete = len(op["results"]) >= op["expected"]
+
+        if is_complete and not future.done():
+            logger.debug(f"Completing pending operation: {task_uuid}, results: {len(op['results'])}")
+            future.set_result(op["results"])
+
+        return True
+
+    def _handle_pending_operation_error(self, error: "Dict[str, Any]") -> bool:
+        """
+        Route error message to registered pending operation.
+
+        Called by on_message for each item in errors array.
+        Rejects the Future with RunwareAPIError and invokes on_partial
+        with error information.
+        """
+        task_uuid = error.get("taskUUID")
+        if not task_uuid or task_uuid not in self._pending_operations:
+            return False
+
+        op = self._pending_operations.get(task_uuid)
+        if op is None:
+            return False
+
+        future = op["future"]
+
+        if future.done():
+            return True
+
+        if op["on_partial"]:
+            try:
+                error_obj = IError(
+                    error=True,
+                    error_message=error.get("message", "Unknown error"),
+                    task_uuid=task_uuid,
+                    error_code=error.get("code"),
+                    error_type=error.get("type"),
+                    parameter=error.get("parameter"),
+                    documentation=error.get("documentation"),
+                )
+                op["on_partial"]([], error_obj)
+            except Exception as e:
+                logger.error(f"Error in on_partial error callback: {e}")
+
+        if not future.done():
+            future.set_exception(RunwareAPIError(error))
+        return True
 
     async def _retry_with_reconnect(self, func, *args, **kwargs):
-
-        last_error = None
-        
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
                 result = await func(*args, **kwargs)
@@ -149,7 +303,6 @@ class RunwareBase:
                     if attempt == 0:
                         raise
                     else:
-                        #
                         context = e.error_data.get("context", {})
                         task_type = context.get("taskType")
                         task_uuid = context.get("taskUUID") or e.error_data.get("taskUUID")
@@ -182,6 +335,8 @@ class RunwareBase:
                     # Check if already connected (another concurrent task may have reconnected)
                     if self.connected() and self._connectionSessionUUID is not None:
                         self.logger.info("Connection already re-established by another task, retrying request")
+                        jitter = uniform(0.1, 0.5) * (attempt + 1)
+                        await asyncio.sleep(jitter)
                         continue
                     
                     should_open_circuit = self._reconnection_manager.on_auth_failure()
@@ -218,20 +373,21 @@ class RunwareBase:
         """
         if not self._is_error_response(response):
             return
-            
+
         # If an authentication error, raise ConnectionError to trigger retry
         if response.get("taskType") == "authentication" or response.get("code") == "missingApiKey":
             error_message = response.get("message", "Authentication error")
             self.logger.warning(f"Authentication error detected: {error_message}")
             raise ConnectionError(error_message)
-        
-        # For all other errors 
+
+        # For all other errors
         raise RunwareAPIError(response)
-    
+
     def _create_safe_async_listener(self, async_func):
         def wrapper(m):
             task = asyncio.create_task(async_func(m))
             self._listener_tasks.add(task)
+
             def handle_task_exception(t):
                 self._listener_tasks.discard(t)
                 if not t.cancelled():
@@ -321,316 +477,272 @@ class RunwareBase:
             else:
                 self._invalidAPIkey = "Error connection"
             return
-        
+
         self._connectionSessionUUID = m.get("newConnectionSessionUUID", {}).get(
             "connectionSessionUUID"
         )
         self._invalidAPIkey = None
 
-    async def photoMaker(self, requestPhotoMaker: IPhotoMaker) -> Union[List[IImage], IAsyncTaskResponse]:
-        return await self._retry_with_reconnect(self._photoMaker, requestPhotoMaker)
+    async def photoMaker(self, requestPhotoMaker: "IPhotoMaker") -> "Union[List[IImage], IAsyncTaskResponse]":
+        async with self._request_semaphore:
+            return await self._retry_with_reconnect(self._photoMaker, requestPhotoMaker)
 
-    async def _photoMaker(self, requestPhotoMaker: IPhotoMaker) -> Union[List[IImage], IAsyncTaskResponse]:
-        retry_count = 0
+    async def _photoMaker(self, requestPhotoMaker: "IPhotoMaker") -> "Union[List[IImage], IAsyncTaskResponse]":
+        await self.ensureConnection()
 
-        try:
-            await self.ensureConnection()
+        task_uuid = requestPhotoMaker.taskUUID or getUUID()
+        requestPhotoMaker.taskUUID = task_uuid
 
-            task_uuid = requestPhotoMaker.taskUUID or getUUID()
-            requestPhotoMaker.taskUUID = task_uuid
+        for i, image in enumerate(requestPhotoMaker.inputImages):
+            if isLocalFile(image) and not str(image).startswith("http"):
+                requestPhotoMaker.inputImages[i] = await fileToBase64(image)
 
-            for i, image in enumerate(requestPhotoMaker.inputImages):
-                if isLocalFile(image) and not str(image).startswith("http"):
-                    requestPhotoMaker.inputImages[i] = await fileToBase64(image)
-
-            prompt = f"{requestPhotoMaker.positivePrompt}".strip()
-            request_object = {
-                "taskUUID": requestPhotoMaker.taskUUID,
-                "model": requestPhotoMaker.model,
-                "positivePrompt": prompt,
-                "numberResults": requestPhotoMaker.numberResults,
-                "height": requestPhotoMaker.height,
-                "width": requestPhotoMaker.width,
-                "taskType": ETaskType.PHOTO_MAKER.value,
-                "style": requestPhotoMaker.style,
-                "strength": requestPhotoMaker.strength,
-                **(
-                    {"inputImages": requestPhotoMaker.inputImages}
-                    if requestPhotoMaker.inputImages
-                    else {}
-                ),
-                **(
-                    {"steps": requestPhotoMaker.steps}
-                    if requestPhotoMaker.steps
-                    else {}
-                ),
-            }
-
-            if requestPhotoMaker.outputFormat is not None:
-                request_object["outputFormat"] = requestPhotoMaker.outputFormat
-            if requestPhotoMaker.includeCost:
-                request_object["includeCost"] = requestPhotoMaker.includeCost
-            if requestPhotoMaker.outputType:
-                request_object["outputType"] = requestPhotoMaker.outputType
-            if requestPhotoMaker.webhookURL:
-                request_object["webhookURL"] = requestPhotoMaker.webhookURL
-
-            await self.send([request_object])
-
-            if requestPhotoMaker.webhookURL:
-                return await self._handleWebhookAcknowledgment(
-                    task_uuid=task_uuid,
-                    task_type="photoMaker",
-                    debug_key="photo-maker-webhook"
-                )
-
-            lis = self.globalListener(
-                taskUUID=task_uuid,
-            )
-
-            numberOfResults = requestPhotoMaker.numberResults
-
-            async def check(resolve: callable, reject: callable, *args: Any) -> bool:
-                async with self._messages_lock:
-                    photo_maker_list = self._globalMessages.get(task_uuid, [])
-                    unique_results = {}
-
-                    for made_photo in photo_maker_list:
-                        if made_photo.get("code"):
-                            raise RunwareAPIError(made_photo)
-
-                        if made_photo.get("taskType") != "photoMaker":
-                            continue
-
-                        image_uuid = made_photo.get("imageUUID")
-                        if image_uuid not in unique_results:
-                            unique_results[image_uuid] = made_photo
-
-                    if 0 < numberOfResults <= len(unique_results):
-                        del self._globalMessages[task_uuid]
-                        resolve(list(unique_results.values()))
-                        return True
-
-                return False
-
-            response = await getIntervalWithPromise(check, debugKey="photo-maker", timeOutDuration=IMAGE_INFERENCE_TIMEOUT)
-
-            lis["destroy"]()
-
-            if isinstance(response, dict):
-                self._handle_error_response(response)
-
-            if response:
-                if not isinstance(response, list):
-                    response = [response]
-
-            return instantiateDataclassList(IImage, response)
-
-        except Exception as e:
-            if retry_count >= 2:
-                logger.error(f"Error in photoMaker request:", exc_info=e)
-                raise RunwareAPIError({"message": f"PhotoMaker failed after retries: {str(e)}"})
-            else:
-                raise e
-
-    async def imageInference(
-        self, requestImage: IImageInference
-    ) -> Union[List[IImage], IAsyncTaskResponse]:
-        return await self._retry_with_reconnect(self._imageInference, requestImage)
-
-    async def _imageInference(
-        self, requestImage: IImageInference
-    ) -> Union[List[IImage], IAsyncTaskResponse]:
-        let_lis: Optional[Any] = None
-        request_object: Optional[Dict[str, Any]] = None
-        task_uuids: List[str] = []
-        retry_count = 0
-        try:
-            await self.ensureConnection()
-            control_net_data: List[IControlNet] = []
-            requestImage.taskUUID = requestImage.taskUUID or getUUID()
-            requestImage.maskImage = await process_image(requestImage.maskImage)
-            requestImage.seedImage = await process_image(requestImage.seedImage)
-            if requestImage.referenceImages:
-                requestImage.referenceImages = await process_image(
-                    requestImage.referenceImages
-                )
-            if requestImage.controlNet:
-                for control_data in requestImage.controlNet:
-                    image_uploaded = await self.uploadImage(control_data.guideImage)
-                    if not image_uploaded:
-                        return []
-                    if hasattr(control_data, "preprocessor"):
-                        control_data.preprocessor = control_data.preprocessor.value
-                    control_data.guideImage = image_uploaded.imageUUID
-                    control_net_data.append(control_data)
-            prompt = requestImage.positivePrompt.strip() if requestImage.positivePrompt else None
-
-            control_net_data_dicts = [asdict(item) for item in control_net_data]
-
-            instant_id_data = {}
-            if requestImage.instantID:
-                instant_id_data = {
-                    k: v
-                    for k, v in vars(requestImage.instantID).items()
-                    if v is not None
-                }
-
-                if "inputImage" in instant_id_data:
-                    instant_id_data["inputImage"] = await process_image(
-                        instant_id_data["inputImage"]
-                    )
-
-                if "poseImage" in instant_id_data:
-                    instant_id_data["poseImage"] = await process_image(
-                        instant_id_data["poseImage"]
-                    )
-
-            ip_adapters_data = []
-            if requestImage.ipAdapters:
-                for ip_adapter in requestImage.ipAdapters:
-                    ip_adapter_data = {
-                        k: v for k, v in vars(ip_adapter).items() if v is not None
-                    }
-                    if "guideImage" in ip_adapter_data:
-                        ip_adapter_data["guideImage"] = await process_image(
-                            ip_adapter_data["guideImage"]
-                        )
-
-                    ip_adapters_data.append(ip_adapter_data)
-
-            ace_plus_plus_data = {}
-            if requestImage.acePlusPlus:
-                ace_plus_plus_data = {
-                    "inputImages": [],
-                    "repaintingScale": requestImage.acePlusPlus.repaintingScale,
-                    "type": requestImage.acePlusPlus.taskType,
-                }
-                if requestImage.acePlusPlus.inputImages:
-                    ace_plus_plus_data["inputImages"] = await process_image(
-                        requestImage.acePlusPlus.inputImages
-                    )
-                if requestImage.acePlusPlus.inputMasks:
-                    ace_plus_plus_data["inputMasks"] = await process_image(
-                        requestImage.acePlusPlus.inputMasks
-                    )
-
-            pulid_data = {}
-            if requestImage.puLID:
-                pulid_data = {
-                    "inputImages": [],
-                    "idWeight": requestImage.puLID.idWeight,
-                    "trueCFGScale": requestImage.puLID.trueCFGScale,
-                    "CFGStartStep": requestImage.puLID.CFGStartStep,
-                    "CFGStartStepPercentage": requestImage.puLID.CFGStartStepPercentage,
-                }
-                if requestImage.puLID.inputImages:
-                    pulid_data["inputImages"] = await process_image(
-                        requestImage.puLID.inputImages
-                    )
-
-            request_object = self._buildImageRequest(requestImage, prompt, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
-
-            delivery_method_enum = EDeliveryMethod(requestImage.deliveryMethod) if isinstance(requestImage.deliveryMethod, str) else requestImage.deliveryMethod
-            
-            if delivery_method_enum is EDeliveryMethod.ASYNC:
-                if requestImage.webhookURL:
-                    request_object["webhookURL"] = requestImage.webhookURL
-                
-                await self.send([request_object])
-                
-                return await self._handleInitialImageResponse(
-                    requestImage.taskUUID,
-                    requestImage.numberResults,
-                    requestImage.deliveryMethod,
-                    request_object.get("webhookURL"),
-                    "image-inference-initial"
-                )
-            
-            return await self._requestImages(
-                request_object=request_object,
-                task_uuids=task_uuids,
-                let_lis=let_lis,
-                retry_count=retry_count,
-                number_of_images=requestImage.numberResults,
-                on_partial_images=requestImage.onPartialImages,
-            )
-        except Exception as e:
-            if let_lis:
-                let_lis["destroy"]()
-            raise e
-
-    async def _requestImages(
-        self,
-        request_object: Dict[str, Any],
-        task_uuids: List[str],
-        let_lis: Optional[Any],
-        retry_count: int,
-        number_of_images: int,
-        on_partial_images: Optional[Callable[[List[IImage], Optional[IError]], None]],
-    ) -> Union[List[IImage], IAsyncTaskResponse]:
-        retry_count += 1
-        if let_lis:
-            let_lis["destroy"]()
-        images_with_similar_task = [
-            img for img in self._globalImages if img.get("taskUUID") in task_uuids
-        ]
-
-        task_uuid = request_object.get("taskUUID")
-        if task_uuid is None:
-            task_uuid = getUUID()
-
-        task_uuids.append(task_uuid)
-
-        image_remaining = number_of_images - len(images_with_similar_task)
-        new_request_object = {
-            **request_object,
-            "taskUUID": task_uuid,
-            "numberResults": image_remaining,
+        prompt = f"{requestPhotoMaker.positivePrompt}".strip()
+        request_object = {
+            "taskUUID": requestPhotoMaker.taskUUID,
+            "model": requestPhotoMaker.model,
+            "positivePrompt": prompt,
+            "numberResults": requestPhotoMaker.numberResults,
+            "height": requestPhotoMaker.height,
+            "width": requestPhotoMaker.width,
+            "taskType": ETaskType.PHOTO_MAKER.value,
+            "style": requestPhotoMaker.style,
+            "strength": requestPhotoMaker.strength,
+            **(
+                {"inputImages": requestPhotoMaker.inputImages}
+                if requestPhotoMaker.inputImages
+                else {}
+            ),
+            **(
+                {"steps": requestPhotoMaker.steps}
+                if requestPhotoMaker.steps
+                else {}
+            ),
         }
 
-        await self.send([new_request_object])
-
-        if new_request_object.get("webhookURL"):
-            return await self._handleWebhookAcknowledgment(
+        if requestPhotoMaker.outputFormat is not None:
+            request_object["outputFormat"] = requestPhotoMaker.outputFormat
+        if requestPhotoMaker.includeCost:
+            request_object["includeCost"] = requestPhotoMaker.includeCost
+        if requestPhotoMaker.outputType:
+            request_object["outputType"] = requestPhotoMaker.outputType
+        if requestPhotoMaker.webhookURL:
+            request_object["webhookURL"] = requestPhotoMaker.webhookURL
+            return await self._handleWebhookRequest(
+                request_object=request_object,
                 task_uuid=task_uuid,
-                task_type="imageInference",
-                debug_key="image-inference-webhook"
+                task_type="photoMaker",
+                debug_key="photo-maker-webhook"
             )
 
-        let_lis = await self.listenToImages(
-            onPartialImages=on_partial_images,
-            taskUUID=task_uuid,
-            groupKey=LISTEN_TO_IMAGES_KEY.REQUEST_IMAGES,
-        )
-        images = await self.getSimililarImage(
-            taskUUID=task_uuids,
-            numberOfImages=number_of_images,
-            shouldThrowError=True,
-            lis=let_lis,
+        numberOfResults = requestPhotoMaker.numberResults
+
+        future = self._register_pending_operation(
+            task_uuid,
+            expected_results=numberOfResults,
+            complete_predicate=None,
+            result_filter=lambda r: r.get("imageUUID") is not None
         )
 
-        let_lis["destroy"]()
-        # TODO: NameError("name 'image_path' is not defined"). I think I remove the images when I have onPartialImages
-        if images:
-            if "code" in images:
-                # This indicates an error response
-                raise RunwareAPIError(images)
+        try:
+            await self.send([request_object])
+            results = await asyncio.wait_for(future, timeout=IMAGE_INFERENCE_TIMEOUT / 1000)
 
-            return instantiateDataclassList(IImage, images)
+            unique_results = {}
+            for made_photo in results:
+                image_uuid = made_photo.get("imageUUID")
+                if image_uuid and image_uuid not in unique_results:
+                    unique_results[image_uuid] = made_photo
 
-        # return images
+            if not unique_results:
+                raise Exception(f"No valid photoMaker results received | TaskUUID: {task_uuid}")
 
-    async def imageCaption(self, requestImageToText: IImageCaption) -> Union[IImageToText, IAsyncTaskResponse]:
-        return await self._retry_with_reconnect(self._imageCaption, requestImageToText)
+            return instantiateDataclassList(IImage, list(unique_results.values()))
+
+        except asyncio.TimeoutError:
+            op = self._pending_operations.get(task_uuid)
+            partial_count = len(op["results"]) if op else 0
+            raise Exception(
+                f"Timeout waiting for photoMaker | TaskUUID: {task_uuid} | "
+                f"Expected: {numberOfResults} | Received: {partial_count} | "
+                f"Timeout: {IMAGE_INFERENCE_TIMEOUT}ms"
+            )
+        except RunwareAPIError:
+            raise
+        finally:
+            self._unregister_pending_operation(task_uuid)
+
+    async def imageInference(
+            self, requestImage: "IImageInference"
+    ) -> "Union[List[IImage], IAsyncTaskResponse]":
+        async with self._request_semaphore:
+            return await self._retry_with_reconnect(self._imageInference, requestImage)
+
+    async def _imageInference(
+            self, requestImage: "IImageInference"
+    ) -> "Union[List[IImage], IAsyncTaskResponse]":
+        await self.ensureConnection()
+
+        control_net_data: "List[IControlNet]" = []
+        requestImage.taskUUID = requestImage.taskUUID or getUUID()
+        requestImage.maskImage = await process_image(requestImage.maskImage)
+        requestImage.seedImage = await process_image(requestImage.seedImage)
+
+        if requestImage.referenceImages:
+            requestImage.referenceImages = await process_image(requestImage.referenceImages)
+
+        if requestImage.controlNet:
+            for control_data in requestImage.controlNet:
+                image_uploaded = await self.uploadImage(control_data.guideImage)
+                if not image_uploaded:
+                    return []
+                if hasattr(control_data, "preprocessor"):
+                    control_data.preprocessor = control_data.preprocessor.value
+                control_data.guideImage = image_uploaded.imageUUID
+                control_net_data.append(control_data)
+
+        prompt = requestImage.positivePrompt.strip() if requestImage.positivePrompt else None
+        control_net_data_dicts = [asdict(item) for item in control_net_data]
+
+        instant_id_data = {}
+        if requestImage.instantID:
+            instant_id_data = {
+                k: v
+                for k, v in vars(requestImage.instantID).items()
+                if v is not None
+            }
+            if "inputImage" in instant_id_data:
+                instant_id_data["inputImage"] = await process_image(instant_id_data["inputImage"])
+            if "poseImage" in instant_id_data:
+                instant_id_data["poseImage"] = await process_image(instant_id_data["poseImage"])
+
+        ip_adapters_data = []
+        if requestImage.ipAdapters:
+            for ip_adapter in requestImage.ipAdapters:
+                ip_adapter_data = {
+                    k: v for k, v in vars(ip_adapter).items() if v is not None
+                }
+                if "guideImage" in ip_adapter_data:
+                    ip_adapter_data["guideImage"] = await process_image(ip_adapter_data["guideImage"])
+                ip_adapters_data.append(ip_adapter_data)
+
+        ace_plus_plus_data = {}
+        if requestImage.acePlusPlus:
+            ace_plus_plus_data = {
+                "inputImages": [],
+                "repaintingScale": requestImage.acePlusPlus.repaintingScale,
+                "type": requestImage.acePlusPlus.taskType,
+            }
+            if requestImage.acePlusPlus.inputImages:
+                ace_plus_plus_data["inputImages"] = await process_image(requestImage.acePlusPlus.inputImages)
+            if requestImage.acePlusPlus.inputMasks:
+                ace_plus_plus_data["inputMasks"] = await process_image(requestImage.acePlusPlus.inputMasks)
+
+        pulid_data = {}
+        if requestImage.puLID:
+            pulid_data = {
+                "inputImages": [],
+                "idWeight": requestImage.puLID.idWeight,
+                "trueCFGScale": requestImage.puLID.trueCFGScale,
+                "CFGStartStep": requestImage.puLID.CFGStartStep,
+                "CFGStartStepPercentage": requestImage.puLID.CFGStartStepPercentage,
+            }
+            if requestImage.puLID.inputImages:
+                pulid_data["inputImages"] = await process_image(requestImage.puLID.inputImages)
+
+        request_object = self._buildImageRequest(
+            requestImage, prompt, control_net_data_dicts,
+            instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data
+        )
+
+        delivery_method_enum = EDeliveryMethod(requestImage.deliveryMethod) if isinstance(requestImage.deliveryMethod,
+                                                                                          str) else requestImage.deliveryMethod
+        task_uuid = requestImage.taskUUID
+        number_results = requestImage.numberResults or 1
+
+        if delivery_method_enum is EDeliveryMethod.ASYNC:
+            if requestImage.webhookURL:
+                request_object["webhookURL"] = requestImage.webhookURL
+                return await self._handleWebhookRequest(
+                    request_object=request_object,
+                    task_uuid=task_uuid,
+                    task_type="imageInference",
+                    debug_key="image-inference-webhook"
+                )
+
+            future = self._register_pending_operation(
+                task_uuid,
+                expected_results=1,
+                complete_predicate=lambda r: True
+            )
+
+            try:
+                await self.send([request_object])
+                results = await asyncio.wait_for(future, timeout=IMAGE_INITIAL_TIMEOUT / 1000)
+                response = results[0]
+                self._handle_error_response(response)
+
+                if response.get("status") == "success" or response.get("imageUUID") is not None:
+                    return instantiateDataclassList(IImage, results)
+
+                return createAsyncTaskResponse(response)
+            except asyncio.TimeoutError:
+                raise ConnectionError(
+                    f"Timeout waiting for async acknowledgment | TaskUUID: {task_uuid} | "
+                    f"Timeout: {IMAGE_INITIAL_TIMEOUT}ms"
+                )
+            finally:
+                self._unregister_pending_operation(task_uuid)
+
+        future = self._register_pending_operation(
+            task_uuid,
+            expected_results=number_results,
+            on_partial=requestImage.onPartialImages,
+            complete_predicate=None,
+            result_filter=lambda r: r.get("imageUUID") is not None
+        )
+
+        try:
+            await self.send([request_object])
+            results = await asyncio.wait_for(future, timeout=IMAGE_INFERENCE_TIMEOUT / 1000)
+
+            if not results:
+                raise Exception(f"No results received | TaskUUID: {task_uuid}")
+
+            return instantiateDataclassList(IImage, results)
+
+        except asyncio.TimeoutError:
+            op = self._pending_operations.get(task_uuid)
+            partial_count = len(op["results"]) if op else 0
+
+            if op and op["results"]:
+                self.logger.warning(
+                    f"Timeout but returning {partial_count} partial results | "
+                    f"TaskUUID: {task_uuid} | Expected: {number_results}"
+                )
+                return instantiateDataclassList(IImage, op["results"])
+
+            raise Exception(
+                f"Timeout waiting for image inference | TaskUUID: {task_uuid} | "
+                f"Expected: {number_results} | Received: {partial_count} | "
+                f"Timeout: {IMAGE_INFERENCE_TIMEOUT}ms"
+            )
+        except RunwareAPIError:
+            raise
+        finally:
+            self._unregister_pending_operation(task_uuid)
+
+    async def imageCaption(self, requestImageToText: "IImageCaption") -> "Union[IImageToText, IAsyncTaskResponse]":
+        async with self._request_semaphore:
+            return await self._retry_with_reconnect(self._imageCaption, requestImageToText)
 
     async def _imageCaption(self, requestImageToText: IImageCaption) -> Union[IImageToText, IAsyncTaskResponse]:
         await self.ensureConnection()
         return await self._requestImageToText(requestImageToText)
 
     async def _requestImageToText(
-        self, requestImageToText: IImageCaption
-    ) -> Union[IImageToText, IAsyncTaskResponse]:
+        self, requestImageToText: "IImageCaption"
+    ) -> "Union[IImageToText, IAsyncTaskResponse]":
         # Prepare image list - inputImages is primary, inputImage is convenience
         if requestImageToText.inputImages is not None:
             images_to_process = requestImageToText.inputImages
@@ -684,62 +796,43 @@ class RunwareBase:
             task_params["includeCost"] = requestImageToText.includeCost
         if requestImageToText.webhookURL:
             task_params["webhookURL"] = requestImageToText.webhookURL
-
-        await self.send([task_params])
-
-        if requestImageToText.webhookURL:
-            return await self._handleWebhookAcknowledgment(
+            return await self._handleWebhookRequest(
+                request_object=task_params,
                 task_uuid=taskUUID,
                 task_type="imageCaption",
                 debug_key="image-caption-webhook"
             )
 
-        lis = self.globalListener(
-            taskUUID=taskUUID,
+        future = self._register_pending_operation(
+            taskUUID,
+            expected_results=1,
+            complete_predicate=lambda r: True
         )
 
-        async def check(resolve: callable, reject: callable, *args: Any) -> bool:
-            async with self._messages_lock:
-                response = self._globalMessages.get(taskUUID)
-                if response:
-                    image_to_text = response[0]
-                else:
-                    image_to_text = response
-                if image_to_text and image_to_text.get("error"):
-                    reject(image_to_text)
-                    return True
-
-                if image_to_text:
-                    del self._globalMessages[taskUUID]
-                    resolve(image_to_text)
-                    return True
-
-            return False
-
-        response = await getIntervalWithPromise(
-            check, debugKey="image-to-text", timeOutDuration=IMAGE_OPERATION_TIMEOUT
-        )
-
-
-        lis["destroy"]()
-
-        self._handle_error_response(response)
-
-        if response:
+        try:
+            await self.send([task_params])
+            results = await asyncio.wait_for(future, timeout=IMAGE_OPERATION_TIMEOUT / 1000)
+            response = results[0]
+            self._handle_error_response(response)
             return createImageToTextFromResponse(response)
-        else:
-            return None
+        except asyncio.TimeoutError:
+            raise Exception(
+                f"Timeout waiting for image caption | TaskUUID: {taskUUID} | "
+                f"Timeout: {IMAGE_OPERATION_TIMEOUT}ms"
+            )
+        except RunwareAPIError:
+            raise
+        finally:
+            self._unregister_pending_operation(taskUUID)
 
-    async def videoCaption(self, requestVideoCaption: IVideoCaption) -> Union[List[IVideoToText], IAsyncTaskResponse]:
-        return await self._retry_with_reconnect(self._videoCaption, requestVideoCaption)
-
-    async def _videoCaption(self, requestVideoCaption: IVideoCaption) -> Union[List[IVideoToText], IAsyncTaskResponse]:
-        await self.ensureConnection()
-        return await self._requestVideoCaption(requestVideoCaption)
+    async def videoCaption(self, requestVideoCaption: "IVideoCaption") -> "Union[List[IVideoToText], IAsyncTaskResponse]":
+        async with self._request_semaphore:
+            return await self._retry_with_reconnect(self._requestVideoCaption, requestVideoCaption)
 
     async def _requestVideoCaption(
-        self, requestVideoCaption: IVideoCaption
-    ) -> Union[List[IVideoToText], IAsyncTaskResponse]:
+            self, requestVideoCaption: "IVideoCaption"
+    ) -> "Union[List[IVideoToText], IAsyncTaskResponse]":
+        await self.ensureConnection()
         taskUUID = requestVideoCaption.taskUUID or getUUID()
 
         # Create the request object
@@ -758,31 +851,29 @@ class RunwareBase:
             task_params["includeCost"] = requestVideoCaption.includeCost
         if requestVideoCaption.webhookURL:
             task_params["webhookURL"] = requestVideoCaption.webhookURL
-
-        await self.send([task_params])
-
-        if requestVideoCaption.webhookURL:
-            return await self._handleWebhookAcknowledgment(
+            return await self._handleWebhookRequest(
+                request_object=task_params,
                 task_uuid=taskUUID,
                 task_type="caption",
                 debug_key="video-caption-webhook"
             )
+
+        await self.send([task_params])
 
         return await self._pollResults(
             task_uuid=taskUUID,
             number_results=1,
         )
 
-    async def videoBackgroundRemoval(self, requestVideoBackgroundRemoval: IVideoBackgroundRemoval) -> Union[List[IVideo], IAsyncTaskResponse]:
-        return await self._retry_with_reconnect(self._videoBackgroundRemoval, requestVideoBackgroundRemoval)
-
-    async def _videoBackgroundRemoval(self, requestVideoBackgroundRemoval: IVideoBackgroundRemoval) -> Union[List[IVideo], IAsyncTaskResponse]:
-        await self.ensureConnection()
-        return await self._requestVideoBackgroundRemoval(requestVideoBackgroundRemoval)
+    async def videoBackgroundRemoval(self,
+                                     requestVideoBackgroundRemoval: "IVideoBackgroundRemoval") -> "Union[List[IVideo], IAsyncTaskResponse]":
+        async with self._request_semaphore:
+            return await self._retry_with_reconnect(self._requestVideoBackgroundRemoval, requestVideoBackgroundRemoval)
 
     async def _requestVideoBackgroundRemoval(
-        self, requestVideoBackgroundRemoval: IVideoBackgroundRemoval
-    ) -> Union[List[IVideo], IAsyncTaskResponse]:
+            self, requestVideoBackgroundRemoval: "IVideoBackgroundRemoval"
+    ) -> "Union[List[IVideo], IAsyncTaskResponse]":
+        await self.ensureConnection()
         taskUUID = requestVideoBackgroundRemoval.taskUUID or getUUID()
 
         # Create the request object
@@ -812,33 +903,29 @@ class RunwareBase:
             }
             task_params["settings"] = settings_dict
 
-        await self.send([task_params])
-
         if requestVideoBackgroundRemoval.webhookURL:
-            return await self._handleWebhookAcknowledgment(
+            return await self._handleWebhookRequest(
+                request_object=task_params,
                 task_uuid=taskUUID,
                 task_type="removeBackground",
                 debug_key="video-background-removal-webhook"
             )
 
         return await self._handleInitialVideoResponse(
-            taskUUID,
-            1,
-            requestVideoBackgroundRemoval.deliveryMethod,
-            task_params.get("webhookURL"),
-            "video-background-removal-initial"
+            request_object=task_params,
+            task_uuid=taskUUID,
+            number_results=1,
+            delivery_method=requestVideoBackgroundRemoval.deliveryMethod,
+            webhook_url=None,
+            debug_key="video-background-removal-initial"
         )
 
-    async def videoUpscale(self, requestVideoUpscale: IVideoUpscale) -> Union[List[IVideo], IAsyncTaskResponse]:
-        return await self._retry_with_reconnect(self._videoUpscale, requestVideoUpscale)
+    async def videoUpscale(self, requestVideoUpscale: "IVideoUpscale") -> "Union[List[IVideo], IAsyncTaskResponse]":
+        async with self._request_semaphore:
+            return await self._retry_with_reconnect(self._requestVideoUpscale, requestVideoUpscale)
 
-    async def _videoUpscale(self, requestVideoUpscale: IVideoUpscale) -> Union[List[IVideo], IAsyncTaskResponse]:
+    async def _requestVideoUpscale(self, requestVideoUpscale: "IVideoUpscale") -> "Union[List[IVideo], IAsyncTaskResponse]":
         await self.ensureConnection()
-        return await self._requestVideoUpscale(requestVideoUpscale)
-
-    async def _requestVideoUpscale(
-        self, requestVideoUpscale: IVideoUpscale
-    ) -> Union[List[IVideo], IAsyncTaskResponse]:
         taskUUID = requestVideoUpscale.taskUUID or getUUID()
 
         # Create the request object
@@ -864,43 +951,40 @@ class RunwareBase:
         if requestVideoUpscale.webhookURL:
             task_params["webhookURL"] = requestVideoUpscale.webhookURL
 
-        await self.send([task_params])
-
         if requestVideoUpscale.webhookURL:
-            return await self._handleWebhookAcknowledgment(
+            return await self._handleWebhookRequest(
+                request_object=task_params,
                 task_uuid=taskUUID,
                 task_type="upscale",
                 debug_key="video-upscale-webhook"
             )
 
         return await self._handleInitialVideoResponse(
-            taskUUID,
-            1,
-            requestVideoUpscale.deliveryMethod,
-            task_params.get("webhookURL"),
-            "video-upscale-initial"
+            request_object=task_params,
+            task_uuid=taskUUID,
+            number_results=1,
+            delivery_method=requestVideoUpscale.deliveryMethod,
+            webhook_url=None,
+            debug_key="video-upscale-initial"
         )
 
     async def imageBackgroundRemoval(
-        self, removeImageBackgroundPayload: IImageBackgroundRemoval
-    ) -> Union[List[IImage], IAsyncTaskResponse]:
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(
-                lambda: self._removeImageBackground(removeImageBackgroundPayload)
-            )
-        except Exception as e:
-            raise e
+        self, removeImageBackgroundPayload: "IImageBackgroundRemoval"
+    ) -> "Union[List[IImage], IAsyncTaskResponse]":
+        async with self._request_semaphore:
+            return await self._retry_with_reconnect(self._removeImageBackground, removeImageBackgroundPayload)
 
     async def _removeImageBackground(
-        self, removeImageBackgroundPayload: IImageBackgroundRemoval
-    ) -> Union[List[IImage], IAsyncTaskResponse]:
+        self, removeImageBackgroundPayload: "IImageBackgroundRemoval"
+    ) -> "Union[List[IImage], IAsyncTaskResponse]":
+        await self.ensureConnection()
         inputImage = removeImageBackgroundPayload.inputImage
 
         image_uploaded = await self.uploadImage(inputImage)
 
         if not image_uploaded or not image_uploaded.imageUUID:
             return []
+
         if removeImageBackgroundPayload.taskUUID is not None:
             taskUUID = removeImageBackgroundPayload.taskUUID
         else:
@@ -935,77 +1019,63 @@ class RunwareBase:
                 if v is not None
             }
             task_params.update(settings_dict)
-        
+
         # Add provider settings if provided
         if removeImageBackgroundPayload.providerSettings:
             self._addImageProviderSettings(task_params, removeImageBackgroundPayload)
-        
+
         # Add safety settings if provided
         if removeImageBackgroundPayload.safety:
             self._addSafetySettings(task_params, removeImageBackgroundPayload.safety)
 
-        # Send the task with all applicable parameters
-        await self.send([task_params])
-
         if removeImageBackgroundPayload.webhookURL:
-            return await self._handleWebhookAcknowledgment(
+            return await self._handleWebhookRequest(
+                request_object=task_params,
                 task_uuid=taskUUID,
                 task_type="imageBackgroundRemoval",
                 debug_key="image-background-removal-webhook"
             )
 
-        lis = self.globalListener(
-            taskUUID=taskUUID,
+        future = self._register_pending_operation(
+            taskUUID,
+            expected_results=1,
+            complete_predicate=None,
+            result_filter=lambda r: r.get("imageUUID") is not None
         )
 
-        async def check(resolve: callable, reject: callable, *args: Any) -> bool:
-            async with self._messages_lock:
-                response = self._globalMessages.get(taskUUID)
-                if response:
-                    new_remove_background = response[0]
-                else:
-                    new_remove_background = response
-                if new_remove_background and new_remove_background.get("error"):
-                    reject(new_remove_background)
-                    return True
+        try:
+            await self.send([task_params])
+            results = await asyncio.wait_for(future, timeout=IMAGE_OPERATION_TIMEOUT / 1000)
+            response = results[0]
+            self._handle_error_response(response)
+            image = createImageFromResponse(response)
+            return [image]
+        except asyncio.TimeoutError:
+            raise Exception(
+                f"Timeout waiting for background removal | TaskUUID: {taskUUID} | "
+                f"Timeout: {IMAGE_OPERATION_TIMEOUT}ms"
+            )
+        except RunwareAPIError:
+            raise
+        finally:
+            self._unregister_pending_operation(taskUUID)
 
-                if new_remove_background:
-                    del self._globalMessages[taskUUID]
-                    resolve(new_remove_background)
-                    return True
-
-            return False
-
-        response = await getIntervalWithPromise(
-            check, debugKey="remove-image-background", timeOutDuration=IMAGE_OPERATION_TIMEOUT
-        )
-
-        lis["destroy"]()
-
-        self._handle_error_response(response)
-
-        image = createImageFromResponse(response)
-        image_list: List[IImage] = [image]
-
-        return image_list
-
-    async def imageUpscale(self, upscaleGanPayload: IImageUpscale) -> Union[List[IImage], IAsyncTaskResponse]:
-        return await self._retry_with_reconnect(self._imageUpscale, upscaleGanPayload)
+    async def imageUpscale(self, upscaleGanPayload: "IImageUpscale") -> "Union[List[IImage], IAsyncTaskResponse]":
+        async with self._request_semaphore:
+            return await self._retry_with_reconnect(self._imageUpscale, upscaleGanPayload)
 
     async def _imageUpscale(self, upscaleGanPayload: IImageUpscale) -> Union[List[IImage], IAsyncTaskResponse]:
         await self.ensureConnection()
         return await self._upscaleGan(upscaleGanPayload)
 
-    async def _upscaleGan(self, upscaleGanPayload: IImageUpscale) -> Union[List[IImage], IAsyncTaskResponse]:
+    async def _upscaleGan(self, upscaleGanPayload: "IImageUpscale") -> "Union[List[IImage], IAsyncTaskResponse]":
         # Support both inputImage (legacy) and inputs.image (new format)
         inputImage = upscaleGanPayload.inputImage
         if not inputImage and upscaleGanPayload.inputs and upscaleGanPayload.inputs.image:
             inputImage = upscaleGanPayload.inputs.image
-        
+
         if not inputImage:
             raise ValueError("Either inputImage or inputs.image must be provided")
-        
-        upscaleFactor = upscaleGanPayload.upscaleFactor
 
         image_uploaded = await self.uploadImage(inputImage)
 
@@ -1020,7 +1090,7 @@ class RunwareBase:
             "taskUUID": taskUUID,
             "upscaleFactor": upscaleGanPayload.upscaleFactor,
         }
-        
+
         # Use inputs.image format if inputs is provided, otherwise use inputImage (legacy)
         if upscaleGanPayload.inputs and upscaleGanPayload.inputs.image:
             task_params["inputs"] = {"image": image_uploaded.imageUUID}
@@ -1048,82 +1118,67 @@ class RunwareBase:
             task_params["includeCost"] = upscaleGanPayload.includeCost
         if upscaleGanPayload.webhookURL:
             task_params["webhookURL"] = upscaleGanPayload.webhookURL
-        
+
         # Add provider settings if provided
         if upscaleGanPayload.providerSettings:
             self._addImageProviderSettings(task_params, upscaleGanPayload)
-        
+
         # Add safety settings if provided
         if upscaleGanPayload.safety:
             self._addSafetySettings(task_params, upscaleGanPayload.safety)
 
-        # Send the task with all applicable parameters
-
-        await self.send([task_params])
-
         if upscaleGanPayload.webhookURL:
-            return await self._handleWebhookAcknowledgment(
+            return await self._handleWebhookRequest(
+                request_object=task_params,
                 task_uuid=taskUUID,
                 task_type="imageUpscale",
                 debug_key="image-upscale-webhook"
             )
 
-        lis = self.globalListener(
-            taskUUID=taskUUID,
+        future = self._register_pending_operation(
+            taskUUID,
+            expected_results=1,
+            complete_predicate=None,
+            result_filter=lambda r: r.get("imageUUID") is not None
         )
 
-        async def check(resolve: callable, reject: callable, *args: Any) -> bool:
-            async with self._messages_lock:
-                response = self._globalMessages.get(taskUUID)
-                if response:
-                    upscaled_image = response[0]
-                else:
-                    upscaled_image = response
-                if upscaled_image and upscaled_image.get("error"):
-                    reject(upscaled_image)
-                    return True
+        try:
+            await self.send([task_params])
+            results = await asyncio.wait_for(future, timeout=IMAGE_OPERATION_TIMEOUT / 1000)
+            response = results[0]
+            self._handle_error_response(response)
+            image = createImageFromResponse(response)
+            return [image]
+        except asyncio.TimeoutError:
+            raise Exception(
+                f"Timeout waiting for image upscale | TaskUUID: {taskUUID} | "
+                f"Timeout: {IMAGE_OPERATION_TIMEOUT}ms"
+            )
+        except RunwareAPIError:
+            raise
+        finally:
+            self._unregister_pending_operation(taskUUID)
 
-                if upscaled_image:
-                    del self._globalMessages[taskUUID]
-                    resolve(upscaled_image)
-                    return True
+    async def imageVectorize(self, vectorizePayload: "IVectorize") -> "Union[List[IImage], IAsyncTaskResponse]":
+        async with self._request_semaphore:
+            return await self._retry_with_reconnect(self._vectorize, vectorizePayload)
 
-            return False
-
-        response = await getIntervalWithPromise(
-            check, debugKey="upscale-gan", timeOutDuration=IMAGE_OPERATION_TIMEOUT
-        )
-
-        lis["destroy"]()
-
-        self._handle_error_response(response)
-
-        image = createImageFromResponse(response)
-        image_list: List[IImage] = [image]
-        return image_list
-
-    async def imageVectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
-        return await self._retry_with_reconnect(self._imageVectorize, vectorizePayload)
-
-    async def _imageVectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
+    async def _vectorize(self, vectorizePayload: "IVectorize") -> Union[List["IImage"], "IAsyncTaskResponse"]:
         await self.ensureConnection()
-        return await self._vectorize(vectorizePayload)
-
-    async def _vectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
         # Process the image from inputs
         input_image = vectorizePayload.inputs.image
-        
+
         if not input_image:
             raise ValueError("Image is required in inputs for vectorize task")
-        
+
         # Upload the image if it's a local file
         image_uploaded = await self.uploadImage(input_image)
-        
+
         if not image_uploaded or not image_uploaded.imageUUID:
             return []
-        
+
         taskUUID = getUUID()
-        
+
         # Create a dictionary with mandatory parameters
         task_params = {
             "taskType": ETaskType.IMAGE_VECTORIZE.value,
@@ -1132,7 +1187,7 @@ class RunwareBase:
                 "image": image_uploaded.imageUUID
             }
         }
-        
+
         # Add optional parameters if they are provided
         if vectorizePayload.model is not None:
             task_params["model"] = vectorizePayload.model
@@ -1144,41 +1199,46 @@ class RunwareBase:
             task_params["includeCost"] = vectorizePayload.includeCost
         if vectorizePayload.webhookURL:
             task_params["webhookURL"] = vectorizePayload.webhookURL
-        
-        # Send the task with all applicable parameters
-        await self.send([task_params])
-        
-        if vectorizePayload.webhookURL:
-            return await self._handleWebhookAcknowledgment(
+            return await self._handleWebhookRequest(
+                request_object=task_params,
                 task_uuid=taskUUID,
                 task_type="vectorize",
                 debug_key="image-vectorize-webhook"
             )
-        
-        let_lis = await self.listenToImages(
-            onPartialImages=None,
-            taskUUID=taskUUID,
-            groupKey=LISTEN_TO_IMAGES_KEY.REQUEST_IMAGES,
+
+        future = self._register_pending_operation(
+            taskUUID,
+            expected_results=1,
+            complete_predicate=None,
+            result_filter=lambda r: r.get("imageUUID") is not None
         )
-        
-        images = await self.getSimililarImage(
-            taskUUID=taskUUID,
-            numberOfImages=1,
-            shouldThrowError=True,
-            lis=let_lis,
-        )
-        
-        let_lis["destroy"]()
-        
-        if "code" in images or "errors" in images:
-            # This indicates an error response
-            raise RunwareAPIError(images)
-        
-        return instantiateDataclassList(IImage, images)
+
+        try:
+            await self.send([task_params])
+            results = await asyncio.wait_for(future, timeout=IMAGE_OPERATION_TIMEOUT / 1000)
+
+            if not results:
+                raise Exception(f"No results received | TaskUUID: {taskUUID}")
+
+            for result in results:
+                if "code" in result or "errors" in result:
+                    raise RunwareAPIError(result)
+
+            return instantiateDataclassList(IImage, results)
+
+        except asyncio.TimeoutError:
+            raise Exception(
+                f"Timeout waiting for vectorize | TaskUUID: {taskUUID} | "
+                f"Timeout: {IMAGE_OPERATION_TIMEOUT}ms"
+            )
+        except RunwareAPIError:
+            raise
+        finally:
+            self._unregister_pending_operation(taskUUID)
 
     async def promptEnhance(
-        self, promptEnhancer: IPromptEnhance
-    ) -> Union[List[IEnhancedPrompt], IAsyncTaskResponse]:
+        self, promptEnhancer: "IPromptEnhance"
+    ) -> "Union[List[IEnhancedPrompt], IAsyncTaskResponse]":
         """
         Enhance the given prompt by generating multiple versions of it.
 
@@ -1186,21 +1246,16 @@ class RunwareBase:
         :return: A list of IEnhancedPrompt objects representing the enhanced versions of the prompt.
         :raises: Any error that occurs during the enhancement process.
         """
-        try:
-            await self.ensureConnection()
-            return await asyncRetry(lambda: self._enhancePrompt(promptEnhancer))
-        except Exception as e:
-            raise e
+        async with self._request_semaphore:
+            try:
+                await self.ensureConnection()
+                return await asyncRetry(lambda: self._enhancePrompt(promptEnhancer))
+            except Exception as e:
+                raise e
 
     async def _enhancePrompt(
-        self, promptEnhancer: IPromptEnhance
-    ) -> Union[List[IEnhancedPrompt], IAsyncTaskResponse]:
-        """
-        Internal method to perform the actual prompt enhancement.
-
-        :param promptEnhancer: An IPromptEnhancer object containing the prompt details.
-        :return: A list of IEnhancedPrompt objects representing the enhanced versions of the prompt.
-        """
+        self, promptEnhancer: "IPromptEnhance"
+    ) -> "Union[List[IEnhancedPrompt], IAsyncTaskResponse]":
         prompt = promptEnhancer.prompt
         promptMaxLength = getattr(promptEnhancer, "promptMaxLength", 380)
 
@@ -1221,61 +1276,60 @@ class RunwareBase:
         if promptEnhancer.includeCost:
             task_params["includeCost"] = promptEnhancer.includeCost
 
-        has_webhook = promptEnhancer.webhookURL
-        if has_webhook:
+        if promptEnhancer.webhookURL:
             task_params["webhookURL"] = promptEnhancer.webhookURL
-
-        # Send the task with all applicable parameters
-        await self.send([task_params])
-
-        if has_webhook:
-            return await self._handleWebhookAcknowledgment(
+            return await self._handleWebhookRequest(
+                request_object=task_params,
                 task_uuid=taskUUID,
                 task_type="promptEnhance",
                 debug_key="prompt-enhance-webhook"
             )
 
-        lis = self.globalListener(
-            taskUUID=taskUUID,
+        future = self._register_pending_operation(
+            taskUUID,
+            expected_results=promptVersions,
+            complete_predicate=None,
+            result_filter=lambda r: r.get("text") is not None
         )
 
-        async def check(resolve: Any, reject: Any, *args: Any) -> bool:
-            async with self._messages_lock:
-                response = self._globalMessages.get(taskUUID)
-                if isinstance(response, dict) and response.get("error"):
-                    reject(response)
-                    return True
-                if response:
-                    del self._globalMessages[taskUUID]
-                    resolve(response)
-                    return True
+        try:
+            await self.send([task_params])
+            results = await asyncio.wait_for(future, timeout=PROMPT_ENHANCE_TIMEOUT / 1000)
 
-            return False
+            if not results:
+                raise Exception(f"No results received | TaskUUID: {taskUUID}")
 
-        response = await getIntervalWithPromise(
-            check, debugKey="enhance-prompt", timeOutDuration=PROMPT_ENHANCE_TIMEOUT
-        )
+            for result in results:
+                if "code" in result:
+                    raise RunwareAPIError(result)
 
-        lis["destroy"]()
+            # Transform the response to a list of IEnhancedPrompt objects
+            enhanced_prompts = createEnhancedPromptsFromResponse(results)
+            return list(set(enhanced_prompts))
 
-        if "code" in response[0]:
-            # This indicates an error response
-            raise RunwareAPIError(response[0])
-
-        # Transform the response to a list of IEnhancedPrompt objects
-        enhanced_prompts = createEnhancedPromptsFromResponse(response)
-
-        return list(set(enhanced_prompts))
+        except asyncio.TimeoutError:
+            op = self._pending_operations.get(taskUUID)
+            partial_count = len(op["results"]) if op else 0
+            raise Exception(
+                f"Timeout waiting for prompt enhance | TaskUUID: {taskUUID} | "
+                f"Expected: {promptVersions} | Received: {partial_count} | "
+                f"Timeout: {PROMPT_ENHANCE_TIMEOUT}ms"
+            )
+        except RunwareAPIError:
+            raise
+        finally:
+            self._unregister_pending_operation(taskUUID)
 
     async def uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
-        return await self._retry_with_reconnect(self._uploadImage, file)
+        async with self._request_semaphore:
+            return await self._retry_with_reconnect(self._uploadImage, file)
 
-    async def _uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
+    async def _uploadImage(self, file: "Union[File, str]") -> "Optional[UploadImageType]":
         await self.ensureConnection()
-        
+
         task_uuid = getUUID()
         local_file = True
-        
+
         if isinstance(file, str):
             if os.path.exists(file):
                 local_file = True
@@ -1288,6 +1342,7 @@ class RunwareBase:
                 ):
                     # Assume it's a base64 string (with or without data URI prefix)
                     local_file = False
+
             if not local_file:
                 return UploadImageType(
                     imageUUID=file,
@@ -1298,61 +1353,50 @@ class RunwareBase:
         # Convert file to base64 (handles both File objects and string paths)
         file_data = await fileToBase64(file)
 
-        await self.send(
-            [
+        future = self._register_pending_operation(
+            task_uuid,
+            expected_results=1,
+            complete_predicate=lambda r: True
+        )
+
+        try:
+            await self.send([
                 {
                     "taskType": ETaskType.IMAGE_UPLOAD.value,
                     "taskUUID": task_uuid,
                     "image": file_data,
                 }
-            ]
-        )
+            ])
 
-        lis = self.globalListener(taskUUID=task_uuid)
+            results = await asyncio.wait_for(future, timeout=IMAGE_UPLOAD_TIMEOUT / 1000)
+            response = results[0]
+            self._handle_error_response(response)
 
-        async def check(resolve: callable, reject: callable, *args: Any) -> bool:
-            async with self._messages_lock:
-                uploaded_image_list = self._globalMessages.get(task_uuid)
-                uploaded_image = uploaded_image_list[0] if uploaded_image_list else None
-
-                if uploaded_image and uploaded_image.get("error"):
-                    reject(uploaded_image)
-                    return True
-
-                if uploaded_image:
-                    del self._globalMessages[task_uuid]
-                    resolve(uploaded_image)
-                    return True
-
-            return False
-
-        response = await getIntervalWithPromise(
-            check, debugKey="upload-image", timeOutDuration=IMAGE_UPLOAD_TIMEOUT
-        )
-
-        lis["destroy"]()
-
-        self._handle_error_response(response)
-
-        if response:
-            image = UploadImageType(
+            return UploadImageType(
                 imageUUID=response["imageUUID"],
                 imageURL=response["imageURL"],
                 taskUUID=response["taskUUID"],
             )
-        else:
-            image = None
-        return image
+        except asyncio.TimeoutError:
+            raise Exception(
+                f"Timeout waiting for image upload | TaskUUID: {task_uuid} | "
+                f"Timeout: {IMAGE_UPLOAD_TIMEOUT}ms"
+            )
+        except RunwareAPIError:
+            raise
+        finally:
+            self._unregister_pending_operation(task_uuid)
 
-    async def uploadMedia(self, media_url: str) -> Optional[MediaStorageType]:
-        return await self._retry_with_reconnect(self._uploadMedia, media_url)
+    async def uploadMedia(self, media_url: str) -> "Optional[MediaStorageType]":
+        async with self._request_semaphore:
+            return await self._retry_with_reconnect(self._uploadMedia, media_url)
 
-    async def _uploadMedia(self, media_url: str) -> Optional[MediaStorageType]:
+    async def _uploadMedia(self, media_url: str) -> "Optional[MediaStorageType]":
         await self.ensureConnection()
-        
+
         task_uuid = getUUID()
         media_data = media_url
-        
+
         if isinstance(media_url, str):
             if os.path.exists(media_url):
                 # Local file - convert to base64
@@ -1361,70 +1405,46 @@ class RunwareBase:
                 if media_data.startswith("data:"):
                     media_data = media_data.split(",", 1)[1]
             # For URLs and base64 strings, send them directly to the API
-        
-        await self.send(
-            [
-                {
-                    "taskType": ETaskType.MEDIA_STORAGE.value,
-                    "taskUUID": task_uuid,
-                    "operation": "upload",
-                    "media": media_data,
-                }
-            ]
+
+        future = self._register_pending_operation(
+            task_uuid,
+            expected_results=1,
+            complete_predicate=lambda r: r.get("mediaUUID") is not None
         )
 
-        lis = self.globalListener(taskUUID=task_uuid)
-
-        def check(resolve: callable, reject: callable, *args: Any) -> bool:
-            uploaded_media_list = self._globalMessages.get(task_uuid)
-            uploaded_media = uploaded_media_list[0] if uploaded_media_list else None
-
-            if uploaded_media and uploaded_media.get("error"):
-                reject(uploaded_media)
-                return True
-
-            if uploaded_media:
-                del self._globalMessages[task_uuid]
-                resolve(uploaded_media)
-                return True
-
-            return False
-
-        response = await getIntervalWithPromise(
-            check, debugKey="upload-media", timeOutDuration=self._timeout
-        )
-
-        lis["destroy"]()
-
-        self._handle_error_response(response)
-
-        if response:
-            media = MediaStorageType(
-                mediaUUID=response["mediaUUID"],
-                taskUUID=response["taskUUID"],
+        try:
+            await self.send(
+                [
+                    {
+                        "taskType": ETaskType.MEDIA_STORAGE.value,
+                        "taskUUID": task_uuid,
+                        "operation": "upload",
+                        "media": media_data,
+                    }
+                ]
             )
-        else:
-            media = None
-        return media
 
-    async def uploadUnprocessedImage(
-        self,
-        file: Union[File, str],
-        preProcessorType: EPreProcessorGroup,
-        width: int = None,
-        height: int = None,
-        lowThresholdCanny: int = None,
-        highThresholdCanny: int = None,
-        includeHandsAndFaceOpenPose: bool = True,
-    ) -> Optional[UploadImageType]:
-        # Create a dummy UploadImageType object
-        uploaded_unprocessed_image = UploadImageType(
-            imageUUID=str(uuid.uuid4()),
-            imageURL="https://example.com/uploaded_unprocessed_image.jpg",
-            taskUUID=str(uuid.uuid4()),
-        )
+            results = await asyncio.wait_for(future, timeout=self._timeout / 1000)
+            response = results[0]
 
-        return uploaded_unprocessed_image
+            self._handle_error_response(response)
+
+            if response:
+                return MediaStorageType(
+                    mediaUUID=response["mediaUUID"],
+                    taskUUID=response["taskUUID"],
+                )
+            return None
+
+        except asyncio.TimeoutError:
+            raise Exception(
+                f"Timeout waiting for media upload | TaskUUID: {task_uuid} | "
+                f"Timeout: {self._timeout}ms"
+            )
+        except RunwareAPIError:
+            raise
+        finally:
+            self._unregister_pending_operation(task_uuid)
 
     async def listenToImages(
         self,
@@ -1556,29 +1576,6 @@ class RunwareBase:
 
         return temp_listener
 
-    async def handleIncompleteImages(
-        self, taskUUIDs: List[str], error: Any
-    ) -> Optional[List[IImage]]:
-        """
-        Handle scenarios where the requested number of images is not fully received.
-
-        :param taskUUIDs: A list of task UUIDs to filter the images.
-        :param error: The error object to raise if there are no or only one image.
-        :return: A list of available images if there are more than one, otherwise None.
-        :raises: The provided error if there are no or only one image.
-        """
-        async with self._images_lock:
-            imagesWithSimilarTask = [
-                img for img in self._globalImages if img["taskUUID"] in taskUUIDs
-            ]
-            if len(imagesWithSimilarTask) > 1:
-                self._globalImages = [
-                    img for img in self._globalImages if img["taskUUID"] not in taskUUIDs
-                ]
-                return imagesWithSimilarTask
-            else:
-                raise error
-
     async def ensureConnection(self) -> None:
         """
         Ensure that a connection is established with the server.
@@ -1642,7 +1639,7 @@ class RunwareBase:
                     f"TaskUUIDs: {taskUUIDs}"
                 ))
                 return True
-            
+
             async with self._images_lock:
                 logger.debug(f"Check # Global images: {self._globalImages}")
                 imagesWithSimilarTask = [
@@ -1696,10 +1693,10 @@ class RunwareBase:
             raise Exception(error_msg) from e
 
     async def _modelUpload(
-        self, requestModel: IUploadModelBaseType
-    ) -> Optional[IUploadModelResponse]:
+        self, requestModel: "IUploadModelBaseType"
+    ) -> "Optional[IUploadModelResponse]":
         await self.ensureConnection()
-        
+
         task_uuid = requestModel.taskUUID or getUUID()
         base_fields = {
             "taskType": ETaskType.MODEL_UPLOAD.value,
@@ -1741,57 +1738,38 @@ class RunwareBase:
             },
         }
 
-        await self.send([request_object])
+        def is_ready(item: "Dict[str, Any]") -> bool:
+            return item.get("status") == "ready"
 
-        lis = self.globalListener(
-            taskUUID=task_uuid,
+        future = self._register_pending_operation(
+            task_uuid,
+            expected_results=1,
+            complete_predicate=is_ready,
+            result_filter=lambda r: r.get("status") is not None
         )
 
-        async def check(resolve: callable, reject: callable, *args: Any) -> bool:
-            async with self._messages_lock:
-                uploaded_model_list = self._globalMessages.get(task_uuid, [])
-                unique_statuses = set()
-                all_models = []
+        try:
+            await self.send([request_object])
+            results = await asyncio.wait_for(future, timeout=MODEL_UPLOAD_TIMEOUT / 1000)
 
-                for uploaded_model in uploaded_model_list:
-                    if uploaded_model.get("code"):
-                        self._handle_error_response(uploaded_model)
+            unique_statuses = set()
+            all_models = []
 
-                    status = uploaded_model.get("status")
+            for uploaded_model in results:
+                if uploaded_model.get("code"):
+                    self._handle_error_response(uploaded_model)
 
-                    if status not in unique_statuses:
-                        all_models.append(uploaded_model)
-                        unique_statuses.add(status)
+                status = uploaded_model.get("status")
 
-                    if status is not None and "error" in status:
-                        self._handle_error_response(uploaded_model)
+                if status is not None and "error" in status:
+                    self._handle_error_response(uploaded_model)
 
-                    if status == "ready":
-                        uploaded_model_list.remove(uploaded_model)
-                        if not uploaded_model_list:
-                            del self._globalMessages[task_uuid]
-                        else:
-                            self._globalMessages[task_uuid] = uploaded_model_list
-                        resolve(all_models)
-                        return True
-
-            return False
-
-        response = await getIntervalWithPromise(
-            check, debugKey="upload-model", timeOutDuration=MODEL_UPLOAD_TIMEOUT
-        )
-
-        lis["destroy"]()
-
-        if isinstance(response, dict):
-            self._handle_error_response(response)
-
-        if response:
-            if not isinstance(response, list):
-                response = [response]
+                if status not in unique_statuses:
+                    all_models.append(uploaded_model)
+                    unique_statuses.add(status)
 
             models = []
-            for item in response:
+            for item in all_models:
                 models.append(
                     {
                         "taskType": item.get("taskType"),
@@ -1801,19 +1779,33 @@ class RunwareBase:
                         "air": item.get("air"),
                     }
                 )
-        else:
-            models = None
-        return models
+
+            return models
+
+        except asyncio.TimeoutError:
+            op = self._pending_operations.get(task_uuid)
+            partial_count = len(op["results"]) if op else 0
+            raise Exception(
+                f"Timeout waiting for model upload | TaskUUID: {task_uuid} | "
+                f"Received: {partial_count} status updates | "
+                f"Timeout: {MODEL_UPLOAD_TIMEOUT}ms"
+            )
+        except RunwareAPIError:
+            raise
+        finally:
+            self._unregister_pending_operation(task_uuid)
 
     async def modelUpload(
-        self, requestModel: IUploadModelBaseType
-    ) -> Optional[IUploadModelResponse]:
-        return await self._retry_with_reconnect(self._modelUpload, requestModel)
+            self, requestModel: "IUploadModelBaseType"
+    ) -> "Optional[IUploadModelResponse]":
+        async with self._request_semaphore:
+            return await self._retry_with_reconnect(self._modelUpload, requestModel)
 
-    async def modelSearch(self, payload: IModelSearch) -> IModelSearchResponse:
-        return await self._retry_with_reconnect(self._modelSearch, payload)
+    async def modelSearch(self, payload: "IModelSearch") -> "IModelSearchResponse":
+        async with self._request_semaphore:
+            return await self._retry_with_reconnect(self._modelSearch, payload)
 
-    async def _modelSearch(self, payload: IModelSearch) -> IModelSearchResponse:
+    async def _modelSearch(self, payload: "IModelSearch") -> "IModelSearchResponse":
         try:
             await self.ensureConnection()
             task_uuid = getUUID()
@@ -1832,40 +1824,36 @@ class RunwareBase:
                 }
             )
 
-            await self.send([request_object])
-
-            listener = self.globalListener(taskUUID=task_uuid)
-
-            async def check(resolve: Callable, reject: Callable, *args: Any) -> bool:
-                async with self._messages_lock:
-                    response = self._globalMessages.get(task_uuid)
-                    if response:
-                        if response[0].get("error"):
-                            reject(response[0])
-                            return True
-                        del self._globalMessages[task_uuid]
-                        resolve(response[0])
-                        return True
-                return False
-
-            response = await getIntervalWithPromise(
-                check, debugKey="model-search", timeOutDuration=self._timeout
+            future = self._register_pending_operation(
+                task_uuid,
+                expected_results=1,
+                complete_predicate=lambda r: True
             )
 
-            listener["destroy"]()
+            try:
+                await self.send([request_object])
+                results = await asyncio.wait_for(future, timeout=self._timeout / 1000)
+                response = results[0]
+                self._handle_error_response(response)
+                return instantiateDataclass(IModelSearchResponse, response)
+            except asyncio.TimeoutError:
+                raise Exception(
+                    f"Timeout waiting for model search | TaskUUID: {task_uuid} | "
+                    f"Timeout: {self._timeout}ms"
+                )
+            finally:
+                self._unregister_pending_operation(task_uuid)
 
-            self._handle_error_response(response)
-
-            return instantiateDataclass(IModelSearchResponse, response)
-
+        except RunwareAPIError:
+            raise
         except Exception as e:
             if isinstance(e, RunwareAPIError):
                 raise
-
             raise RunwareAPIError({"message": str(e)})
 
-    async def videoInference(self, requestVideo: IVideoInference) -> Union[List[IVideo], IAsyncTaskResponse]:
-        return await self._retry_with_reconnect(self._videoInference, requestVideo)
+    async def videoInference(self, requestVideo: "IVideoInference") -> "Union[List[IVideo], IAsyncTaskResponse]":
+        async with self._request_semaphore:
+            return await self._retry_with_reconnect(self._videoInference, requestVideo)
 
     async def _videoInference(self, requestVideo: IVideoInference) -> Union[List[IVideo], IAsyncTaskResponse]:
         await self.ensureConnection()
@@ -1874,9 +1862,10 @@ class RunwareBase:
     async def getResponse(
         self,
         taskUUID: str,
-        numberResults: Optional[int] = 1,
-    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage]]:
-        return await self._retry_with_reconnect(self._getResponse, taskUUID, numberResults)
+        numberResults: "Optional[int]" = 1,
+    ) -> "Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage]]":
+        async with self._request_semaphore:
+            return await self._retry_with_reconnect(self._getResponse, taskUUID, numberResults)
 
     async def _getResponse(
         self,
@@ -1890,29 +1879,28 @@ class RunwareBase:
             number_results=numberResults,
         )
 
-    async def _requestVideo(self, requestVideo: IVideoInference) -> Union[List[IVideo], IAsyncTaskResponse]:
+    async def _requestVideo(self, requestVideo: "IVideoInference") -> "Union[List[IVideo], IAsyncTaskResponse]":
         await self._processVideoImages(requestVideo)
         requestVideo.taskUUID = requestVideo.taskUUID or getUUID()
         request_object = self._buildVideoRequest(requestVideo)
-        
 
         if requestVideo.webhookURL:
             request_object["webhookURL"] = requestVideo.webhookURL
 
-        await self.send([request_object])
-
         if requestVideo.skipResponse:
+            await self.send([request_object])
             return IAsyncTaskResponse(
                 taskType=ETaskType.VIDEO_INFERENCE.value,
                 taskUUID=requestVideo.taskUUID
             )
 
         return await self._handleInitialVideoResponse(
-            requestVideo.taskUUID,
-            requestVideo.numberResults,
-            requestVideo.deliveryMethod,
-            request_object.get("webhookURL"),
-            "video-inference-initial"
+            request_object=request_object,
+            task_uuid=requestVideo.taskUUID,
+            number_results=requestVideo.numberResults,
+            delivery_method=requestVideo.deliveryMethod,
+            webhook_url=request_object.get("webhookURL"),
+            debug_key="video-inference-initial"
         )
 
     async def _processVideoImages(self, requestVideo: IVideoInference) -> None:
@@ -1955,11 +1943,11 @@ class RunwareBase:
             "taskUUID": requestVideo.taskUUID,
             "model": requestVideo.model,
         }
-        
+
         # Only add numberResults if it's not None
         if requestVideo.numberResults is not None:
             request_object["numberResults"] = requestVideo.numberResults
-        
+
         # Only add positivePrompt if it's not None
         if requestVideo.positivePrompt is not None:
             request_object["positivePrompt"] = requestVideo.positivePrompt.strip()
@@ -1996,7 +1984,7 @@ class RunwareBase:
 
         if requestVideo.referenceImages:
             request_object["referenceImages"] = requestVideo.referenceImages
-        
+
         # Add lora if present
         if requestVideo.lora:
             request_object["lora"] = [
@@ -2013,14 +2001,14 @@ class RunwareBase:
         }
         if prompt:
             request_object["positivePrompt"] = prompt
-        
+
         self._addOptionalImageFields(request_object, requestImage)
         self._addImageSpecialFields(request_object, requestImage, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
         self._addOptionalField(request_object, requestImage.inputs)
         self._addImageProviderSettings(request_object, requestImage)
         self._addOptionalField(request_object, requestImage.safety)
         self._addOptionalField(request_object, requestImage.settings)
-        
+
 
         return request_object
 
@@ -2032,7 +2020,7 @@ class RunwareBase:
             "clipSkip", "promptWeighting", "maskMargin", "vae", "webhookURL", "acceleration",
             "useCache", "ttl", "resolution"
         ]
-        
+
         for field in optional_fields:
             value = getattr(requestImage, field, None)
             if value is not None:
@@ -2046,28 +2034,28 @@ class RunwareBase:
         # Add controlNet if present
         if control_net_data_dicts:
             request_object["controlNet"] = control_net_data_dicts
-            
+
         # Add lora if present
         if requestImage.lora:
             request_object["lora"] = [
                 {"model": lora.model, "weight": lora.weight}
                 for lora in requestImage.lora
             ]
-            
+
         # Add lycoris if present
         if requestImage.lycoris:
             request_object["lycoris"] = [
                 {"model": lycoris.model, "weight": lycoris.weight}
                 for lycoris in requestImage.lycoris
             ]
-            
+
         # Add embeddings if present
         if requestImage.embeddings:
             request_object["embeddings"] = [
                 {"model": embedding.model}
                 for embedding in requestImage.embeddings
             ]
-            
+
         # Add refiner if present
         if requestImage.refiner:
             refiner_dict = {"model": requestImage.refiner.model}
@@ -2076,11 +2064,11 @@ class RunwareBase:
             if requestImage.refiner.startStepPercentage is not None:
                 refiner_dict["startStepPercentage"] = requestImage.refiner.startStepPercentage
             request_object["refiner"] = refiner_dict
-            
+
         # Add instantID if present
         if instant_id_data:
             request_object["instantID"] = instant_id_data
-            
+
         # Add outpaint if present
         if requestImage.outpaint:
             outpaint_dict = {
@@ -2089,26 +2077,26 @@ class RunwareBase:
                 if v is not None
             }
             request_object["outpaint"] = outpaint_dict
-            
+
         # Add ipAdapters if present
         if ip_adapters_data:
             request_object["ipAdapters"] = ip_adapters_data
-            
+
         # Add acePlusPlus if present
         if ace_plus_plus_data:
             request_object["acePlusPlus"] = ace_plus_plus_data
-            
+
         # Add puLID if present
         if pulid_data:
             request_object["puLID"] = pulid_data
-            
+
         # Add referenceImages if present
         if requestImage.referenceImages:
             request_object["referenceImages"] = requestImage.referenceImages
-            
+
         # Add acceleratorOptions if present
         self._addOptionalField(request_object, requestImage.acceleratorOptions)
-            
+
         # Add advancedFeatures if present
         if requestImage.advancedFeatures:
             pipeline_options_dict = {
@@ -2117,7 +2105,7 @@ class RunwareBase:
                 if v is not None
             }
             request_object["advancedFeatures"] = pipeline_options_dict
-            
+
         # Add extraArgs if present
         if hasattr(requestImage, "extraArgs") and isinstance(requestImage.extraArgs, dict):
             request_object.update(requestImage.extraArgs)
@@ -2149,216 +2137,112 @@ class RunwareBase:
         if obj_dict:
             request_object.update(obj_dict)
 
-    async def _handleWebhookAcknowledgment(
+    async def _handleWebhookRequest(
         self,
+        request_object: "Dict[str, Any]",
         task_uuid: str,
         task_type: str,
         debug_key: str,
-    ) -> IAsyncTaskResponse:
-        lis = self.globalListener(taskUUID=task_uuid)
+    ) -> "IAsyncTaskResponse":
+        future = self._register_pending_operation(
+            task_uuid,
+            expected_results=1,
+            complete_predicate=lambda r: r.get("taskType") == task_type or r.get("taskUUID") == task_uuid
+        )
 
-        async def check_webhook_ack(resolve: callable, reject: callable, *args: Any) -> bool:
-            async with self._messages_lock:
-                response_list = self._globalMessages.get(task_uuid, [])
+        try:
+            await self.send([request_object])
+            results = await asyncio.wait_for(future, timeout=WEBHOOK_TIMEOUT / 1000)
+            response = results[0]
+            self._handle_error_response(response)
+            return createAsyncTaskResponse(response)
+        except asyncio.TimeoutError:
+            raise Exception(
+                f"Timeout waiting for webhook acknowledgment | TaskUUID: {task_uuid} | "
+                f"TaskType: {task_type} | Timeout: {WEBHOOK_TIMEOUT}ms"
+            )
+        except RunwareAPIError:
+            raise
+        finally:
+            self._unregister_pending_operation(task_uuid)
 
-                if not response_list:
-                    return False
+    async def _handleInitialVideoResponse(
+            self,
+            request_object: "Dict[str, Any]",
+            task_uuid: str,
+            number_results: int,
+            delivery_method: "Union[str, EDeliveryMethod]" = None,
+            webhook_url: "Optional[str]" = None,
+            debug_key: str = "video-inference-initial"
+    ) -> "Union[List[IVideo], IAsyncTaskResponse]":
+        if delivery_method is None:
+            delivery_method = EDeliveryMethod.ASYNC
+        delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(
+            delivery_method)
 
-                response = response_list[0] if isinstance(response_list, list) else response_list
-
-                self._handle_error_response(response)
-
-                if isinstance(response, dict) and response.get("error"):
-                    reject(response)
-                    return True
-
-                if response.get("taskType") == task_type:
-                    del self._globalMessages[task_uuid]
-                    async_response = createAsyncTaskResponse(response)
-                    resolve(async_response)
-                    return True
-
+        def is_video_complete(r: "Dict[str, Any]") -> bool:
+            if r.get("status") == "success":
+                return True
+            if r.get("videoUUID") is not None or r.get("mediaUUID") is not None:
+                return True
+            if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
+                return True
             return False
 
-        try:
-            response = await getIntervalWithPromise(
-                check_webhook_ack, debugKey=debug_key, timeOutDuration=WEBHOOK_TIMEOUT
-            )
-        finally:
-            lis["destroy"]()
+        future = self._register_pending_operation(
+            task_uuid,
+            expected_results=1,
+            complete_predicate=is_video_complete
+        )
 
-        if isinstance(response, dict):
+        timeout = TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else VIDEO_INITIAL_TIMEOUT
+
+        try:
+            await self.send([request_object])
+            results = await asyncio.wait_for(future, timeout=timeout / 1000)
+
+            if not results:
+                raise ConnectionError(
+                    f"No initial response received for video generation | "
+                    f"delivery_method={delivery_method_enum} | taskUUID={task_uuid}"
+                )
+
+            response = results[0]
             self._handle_error_response(response)
 
-        return response
+            if response.get("status") == "success" or response.get("videoUUID") is not None or response.get(
+                    "mediaUUID") is not None:
+                return instantiateDataclassList(IVideo, results)
 
-    async def _handleInitialVideoResponse(self, task_uuid: str, number_results: int, delivery_method: Union[str, EDeliveryMethod] = EDeliveryMethod.ASYNC, webhook_url: Optional[str] = None, debug_key: str = "video-inference-initial") -> Union[List[IVideo], IAsyncTaskResponse]:
-        lis = self.globalListener(taskUUID=task_uuid)
-        delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(delivery_method)
+            if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
+                return createAsyncTaskResponse(response)
 
-        async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
-            # Check if connection was lost during the wait
-            if not self.connected() or not self.isWebsocketReadyState():
-                reject(ConnectionError(
-                    f"Connection lost while waiting for video response | "
-                    f"TaskUUID: {task_uuid} | "
-                    f"Delivery method: {delivery_method_enum}"
-                ))
-                return True
-            
-            async with self._messages_lock:
-                response_list = self._globalMessages.get(task_uuid, [])
+            return instantiateDataclassList(IVideo, results)
 
-                if not response_list:
-                    return False
-
-                response = response_list[0]
-
-                if self._is_error_response(response):
-                    del self._globalMessages[task_uuid]
-                    raise RunwareAPIError(response)
-
-                if response.get("status") == "success" or response.get("videoUUID") is not None or response.get("mediaUUID") is not None:
-                    del self._globalMessages[task_uuid]
-                    resolve([response])
-                    return True
-
-                if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
-                    del self._globalMessages[task_uuid]
-                    async_response = createAsyncTaskResponse(response)
-                    resolve([async_response])
-                    return True
-
-                return False
-
-        try:
-            initial_response = await getIntervalWithPromise(
-                check_initial_response,
-                debugKey=debug_key,
-                timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else VIDEO_INITIAL_TIMEOUT
-            )
-        except RunwareAPIError:
-            raise
-        except Exception as e:
-            # Check if connection was lost during the wait
+        except asyncio.TimeoutError:
             if not self.connected() or not self.isWebsocketReadyState():
                 raise ConnectionError(
                     f"Connection lost while waiting for video response | "
-                    f"TaskUUID: {task_uuid} | "
-                    f"Delivery method: {delivery_method_enum}"
+                    f"TaskUUID: {task_uuid} | Delivery method: {delivery_method_enum}"
                 )
+
             if delivery_method_enum is EDeliveryMethod.SYNC:
-                # Raise ConnectionError so _retry_with_reconnect can retry the request
-                error_msg = (
-                    f"Timeout waiting for video generation | "
-                    f"TaskUUID: {task_uuid} | "
-                    f"Timeout: {TIMEOUT_DURATION}ms | "
-                    f"Original error: {str(e)}"
+                raise ConnectionError(
+                    f"Timeout waiting for video generation | TaskUUID: {task_uuid} | "
+                    f"Timeout: {timeout}ms"
                 )
-                raise ConnectionError(error_msg)
-            initial_response = None
-        finally:
-            lis["destroy"]()
-
-        if not initial_response or len(initial_response) == 0:
-            # No response from server means connection was lost during request
-            raise ConnectionError(
-                f"No initial response received for video generation | delivery_method={delivery_method_enum} | taskUUID={task_uuid}"
-            )
-        
-        if isinstance(initial_response[0], IAsyncTaskResponse):
-            return initial_response[0]
-        
-        return instantiateDataclassList(IVideo, initial_response)
-
-    async def _handleInitialImageResponse(
-        self,
-        task_uuid: str,
-        number_results: int,
-        delivery_method: Union[str, EDeliveryMethod] = EDeliveryMethod.ASYNC,
-        webhook_url: Optional[str] = None,
-        debug_key: str = "image-inference-initial"
-    ) -> Union[List[IImage], IAsyncTaskResponse]:
-        lis = self.globalListener(taskUUID=task_uuid)
-        delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(delivery_method)
-
-        async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
-            # Check if connection was lost during the wait
-            if not self.connected() or not self.isWebsocketReadyState():
-                reject(ConnectionError(
-                    f"Connection lost while waiting for image response | "
-                    f"TaskUUID: {task_uuid} | "
-                    f"Delivery method: {delivery_method_enum}"
-                ))
-                return True
-            
-            async with self._messages_lock:
-                response_list = self._globalMessages.get(task_uuid, [])
-
-                if not response_list:
-                    return False
-
-                response = response_list[0]
-
-                if self._is_error_response(response):
-                    del self._globalMessages[task_uuid]
-                    raise RunwareAPIError(response)
-
-                if response.get("status") == "success" or response.get("imageUUID") is not None:
-                    del self._globalMessages[task_uuid]
-                    resolve([response])
-                    return True
-
-                if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
-                    del self._globalMessages[task_uuid]
-                    async_response = createAsyncTaskResponse(response)
-                    resolve([async_response])
-                    return True
-
-                return False
-
-        try:
-            initial_response = await getIntervalWithPromise(
-                check_initial_response,
-                debugKey=debug_key,
-                timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else IMAGE_INITIAL_TIMEOUT
-            )
+            raise
         except RunwareAPIError:
             raise
-        except Exception as e:
-            # Check if connection was lost during the wait
-            if not self.connected() or not self.isWebsocketReadyState():
-                raise ConnectionError(
-                    f"Connection lost while waiting for image response | "
-                    f"TaskUUID: {task_uuid} | "
-                    f"Delivery method: {delivery_method_enum}"
-                )
-            if delivery_method_enum is EDeliveryMethod.SYNC:
-                # Raise ConnectionError so _retry_with_reconnect can retry the request
-                error_msg = (
-                    f"Timeout waiting for image generation | "
-                    f"TaskUUID: {task_uuid} | "
-                    f"Timeout: {TIMEOUT_DURATION}ms | "
-                    f"Original error: {str(e)}"
-                )
-                raise ConnectionError(error_msg)
-            initial_response = None
         finally:
-            lis["destroy"]()
+            self._unregister_pending_operation(task_uuid)
 
-        if not initial_response or len(initial_response) == 0:
-            # No response from server means connection was lost during request
-            raise ConnectionError(
-                f"No initial response received for image inference | delivery_method={delivery_method_enum} | taskUUID={task_uuid}"
-            )
-        
-        if isinstance(initial_response[0], IAsyncTaskResponse):
-            return initial_response[0]
-        
-        return instantiateDataclassList(IImage, initial_response)
-
-    async def _sendPollRequest(self, task_uuid: str, poll_count: int) -> List[Dict[str, Any]]:
-        lis = self.globalListener(taskUUID=task_uuid)
+    async def _sendPollRequest(self, task_uuid: str, poll_count: int) -> "List[Dict[str, Any]]":
+        future = self._register_pending_operation(
+            task_uuid,
+            expected_results=1,
+            complete_predicate=lambda r: True
+        )
 
         try:
             await self.send([{
@@ -2366,44 +2250,39 @@ class RunwareBase:
                 "taskUUID": task_uuid
             }])
 
-            async def check_poll_response(resolve: callable, reject: callable, *args: Any) -> bool:
-                async with self._messages_lock:
-                    response_list = self._globalMessages.get(task_uuid, [])
-                    if response_list:
-                        del self._globalMessages[task_uuid]
-                        resolve(response_list)
-                        return True
-                return False
+            results = await asyncio.wait_for(future, timeout=VIDEO_INITIAL_TIMEOUT / 1000)
+            return results
 
-            return await getIntervalWithPromise(
-                check_poll_response,
-                debugKey=f"poll-{poll_count}",
-                timeOutDuration=VIDEO_INITIAL_TIMEOUT
+        except asyncio.TimeoutError:
+            op = self._pending_operations.get(task_uuid)
+            if op and op["results"]:
+                return op["results"]
+            raise Exception(
+                f"Timeout waiting for poll response | TaskUUID: {task_uuid} | "
+                f"Poll: {poll_count} | Timeout: {VIDEO_INITIAL_TIMEOUT}ms"
             )
         finally:
-            lis["destroy"]()
+            self._unregister_pending_operation(task_uuid)
 
     def _hasPendingResults(self, responses: List[Dict[str, Any]]) -> bool:
         return any(response.get("status") == "processing" for response in responses)
 
-    async def audioInference(self, requestAudio: IAudioInference) -> Union[List[IAudio], IAsyncTaskResponse]:
-        return await self._retry_with_reconnect(self._audioInference, requestAudio)
+    async def audioInference(self, requestAudio: "IAudioInference") -> "Union[List[IAudio], IAsyncTaskResponse]":
+        async with self._request_semaphore:
+            return await self._retry_with_reconnect(self._requestAudio, requestAudio)
 
-    async def _audioInference(self, requestAudio: IAudioInference) -> Union[List[IAudio], IAsyncTaskResponse]:
+    async def _requestAudio(self, requestAudio: "IAudioInference") -> Union[List["IAudio"], "IAsyncTaskResponse"]:
         await self.ensureConnection()
-        return await self._requestAudio(requestAudio)
-
-    async def _requestAudio(self, requestAudio: IAudioInference) -> Union[List[IAudio], IAsyncTaskResponse]:
         requestAudio.taskUUID = requestAudio.taskUUID or getUUID()
         request_object = self._buildAudioRequest(requestAudio)
 
-        await self.send([request_object])
         return await self._handleInitialAudioResponse(
-            requestAudio.taskUUID,
-            requestAudio.numberResults,
-            requestAudio.deliveryMethod,
-            request_object.get("webhookURL"),
-            "audio-inference-initial"
+            request_object=request_object,
+            task_uuid=requestAudio.taskUUID,
+            number_results=requestAudio.numberResults,
+            delivery_method=requestAudio.deliveryMethod,
+            webhook_url=request_object.get("webhookURL"),
+            debug_key="audio-inference-initial"
         )
 
     def _buildAudioRequest(self, requestAudio: IAudioInference) -> Dict[str, Any]:
@@ -2414,20 +2293,20 @@ class RunwareBase:
             "model": requestAudio.model,
             "numberResults": requestAudio.numberResults,
         }
-        
+
         # Only add positivePrompt if it's provided
         if requestAudio.positivePrompt is not None:
             request_object["positivePrompt"] = requestAudio.positivePrompt.strip()
-        
+
         # Only add duration if it's provided and not using composition plan
         if requestAudio.duration is not None:
-                request_object["duration"] = requestAudio.duration
-        
+            request_object["duration"] = requestAudio.duration
+
         self._addOptionalAudioFields(request_object, requestAudio)
         self._addOptionalField(request_object, requestAudio.audioSettings)
         self._addAudioProviderSettings(request_object, requestAudio)
         self._addOptionalField(request_object, requestAudio.inputs)
-        
+
         return request_object
 
     def _addOptionalAudioFields(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
@@ -2449,126 +2328,99 @@ class RunwareBase:
             request_object["providerSettings"] = provider_dict
 
     async def _handleInitialAudioResponse(
-        self,
-        task_uuid: str,
-        number_results: int,
-        delivery_method: Union[str, EDeliveryMethod] = EDeliveryMethod.SYNC,
-        webhook_url: Optional[str] = None,
-        debug_key: str = "audio-inference-initial"
-    ) -> Union[List[IAudio], IAsyncTaskResponse]:
-        lis = self.globalListener(taskUUID=task_uuid)
-        delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(delivery_method)
+            self,
+            request_object: "Dict[str, Any]",
+            task_uuid: str,
+            number_results: int,
+            delivery_method: "Union[str, EDeliveryMethod]" = None,
+            webhook_url: "Optional[str]" = None,
+            debug_key: str = "audio-inference-initial"
+    ) -> "Union[List[IAudio], IAsyncTaskResponse]":
+        if delivery_method is None:
+            delivery_method = EDeliveryMethod.SYNC
+        delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(
+            delivery_method)
 
-        async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
-            # Check if connection was lost during the wait
-            if not self.connected() or not self.isWebsocketReadyState():
-                reject(ConnectionError(
-                    f"Connection lost while waiting for audio response | "
-                    f"TaskUUID: {task_uuid} | "
-                    f"Delivery method: {delivery_method_enum}"
-                ))
+        def is_audio_complete(r: "Dict[str, Any]") -> bool:
+            if r.get("status") == "success":
                 return True
-            
-            async with self._messages_lock:
-                response_list = self._globalMessages.get(task_uuid, [])
+            if r.get("audioUUID") is not None:
+                return True
+            if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
+                return True
+            return False
 
-                if not response_list:
-                    return False
+        future = self._register_pending_operation(
+            task_uuid,
+            expected_results=1,
+            complete_predicate=is_audio_complete
+        )
 
-                response = response_list[0]
-
-                if self._is_error_response(response):
-                    del self._globalMessages[task_uuid]
-                    raise RunwareAPIError(response)
-
-                if response.get("status") == "success" or response.get("audioUUID") is not None:
-                
-                    del self._globalMessages[task_uuid]
-                    resolve([response])
-                    return True
-
-                if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
-                    del self._globalMessages[task_uuid]
-                    async_response = createAsyncTaskResponse(response)
-                    resolve([async_response])
-                    return True
-
-                return False
+        timeout = TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else AUDIO_INITIAL_TIMEOUT
 
         try:
-            initial_response = await getIntervalWithPromise(
-                check_initial_response,
-                debugKey=debug_key,
-                timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else AUDIO_INITIAL_TIMEOUT
-            )
-        except RunwareAPIError:
-            raise
-        except Exception as e:
-            # Check if connection was lost during the wait
+            await self.send([request_object])
+            results = await asyncio.wait_for(future, timeout=timeout / 1000)
+
+            if not results:
+                raise ConnectionError(
+                    f"No initial response received for audio inference | "
+                    f"delivery_method={delivery_method_enum} | taskUUID={task_uuid}"
+                )
+
+            response = results[0]
+            self._handle_error_response(response)
+
+            if response.get("status") == "success" or response.get("audioUUID") is not None:
+                return instantiateDataclassList(IAudio, results)
+
+            if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
+                return createAsyncTaskResponse(response)
+
+            return instantiateDataclassList(IAudio, results)
+
+        except asyncio.TimeoutError:
             if not self.connected() or not self.isWebsocketReadyState():
                 raise ConnectionError(
                     f"Connection lost while waiting for audio response | "
-                    f"TaskUUID: {task_uuid} | "
-                    f"Delivery method: {delivery_method_enum}"
+                    f"TaskUUID: {task_uuid} | Delivery method: {delivery_method_enum}"
                 )
+
             if delivery_method_enum is EDeliveryMethod.SYNC:
-                # Raise ConnectionError so _retry_with_reconnect can retry the request
-                error_msg = (
-                    f"Timeout waiting for audio generation | "
-                    f"TaskUUID: {task_uuid} | "
-                    f"Timeout: {TIMEOUT_DURATION}ms | "
-                    f"Original error: {str(e)}"
+                raise ConnectionError(
+                    f"Timeout waiting for audio generation | TaskUUID: {task_uuid} | "
+                    f"Timeout: {timeout}ms"
                 )
-                raise ConnectionError(error_msg)
-            initial_response = None
+            raise
+        except RunwareAPIError:
+            raise
         finally:
-            lis["destroy"]()
+            self._unregister_pending_operation(task_uuid)
 
-        if not initial_response or len(initial_response) == 0:
-            # No response from server means connection was lost during request
-            raise ConnectionError(
-                f"No initial response received for audio inference | delivery_method={delivery_method_enum} | taskUUID={task_uuid}"
-            )
-        
-        if isinstance(initial_response[0], IAsyncTaskResponse):
-            return initial_response[0]
-
-        return instantiateDataclassList(IAudio, initial_response)
-
-    async def _waitForAudioCompletion(self, task_uuid: str) -> Optional[IAudio]:
-        lis = self.globalListener(taskUUID=task_uuid)
-
-        async def check(resolve: Callable, reject: Callable, *args: Any) -> bool:
-            async with self._messages_lock:
-                response = self._globalMessages.get(task_uuid)
-                if response:
-                    audio_response = response[0] if isinstance(response, list) else response
-                else:
-                    audio_response = response
-
-                if audio_response and audio_response.get("error"):
-                    reject(audio_response)
-                    return True
-
-                if audio_response:
-                    del self._globalMessages[task_uuid]
-                    resolve(audio_response)
-                    return True
-
-            return False
+    async def _waitForAudioCompletion(self, task_uuid: str) -> "Optional[IAudio]":
+        future = self._register_pending_operation(
+            task_uuid,
+            expected_results=1,
+            complete_predicate=lambda r: r.get("audioUUID") is not None or r.get("status") == "success"
+        )
 
         try:
-            response = await getIntervalWithPromise(
-                check, debugKey="audio-inference", timeOutDuration=AUDIO_INFERENCE_TIMEOUT
-            )
-            lis["destroy"]()
+            results = await asyncio.wait_for(future, timeout=AUDIO_INFERENCE_TIMEOUT / 1000)
+            response = results[0]
 
             self._handle_error_response(response)
 
             return self._createAudioFromResponse(response) if response else None
-        except Exception as e:
-            lis["destroy"]()
-            raise e
+
+        except asyncio.TimeoutError:
+            raise Exception(
+                f"Timeout waiting for audio completion | TaskUUID: {task_uuid} | "
+                f"Timeout: {AUDIO_INFERENCE_TIMEOUT}ms"
+            )
+        except RunwareAPIError:
+            raise
+        finally:
+            self._unregister_pending_operation(task_uuid)
 
     def _processPollingResponse(self, responses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         completed_results: List[Dict[str, Any]] = []
@@ -2582,62 +2434,60 @@ class RunwareBase:
         return completed_results
 
     async def _pollResults(
-        self,
-        task_uuid: str,
-        number_results: Optional[int],
-    ) -> Union[List[IVideo], List[IVideoToText], List[IAudio], List[IImage]]:
+            self,
+            task_uuid: str,
+            number_results: "Optional[int]",
+    ) -> "Union[List[IVideo], List[IVideoToText], List[IAudio], List[IImage]]":
         # Default to 1 if number_results is None
         if number_results is None:
             number_results = 1
-            
-        completed_results: List[Dict[str, Any]] = []
-        lis = self.globalListener(taskUUID=task_uuid)
+
+        completed_results: "List[Dict[str, Any]]" = []
 
         task_type = None
-        response_cls: Optional[Union[IVideo, IVideoToText, IAudio, IImage]] = None
+        response_cls = None
         max_polls: int = MAX_POLLS
         polling_delay: int = VIDEO_POLLING_DELAY
         timeout_message: str = f"Polling timeout after {MAX_POLLS} polls"
 
-        def configure_from_task_type(task_type: Optional[str]) -> Optional[tuple]:
-            if not task_type:
+        def configure_from_task_type(task_type_val: "Optional[str]"):
+            if not task_type_val:
                 return None
 
-            match task_type:
-                case ETaskType.AUDIO_INFERENCE.value:
-                    return (
-                        IAudio,
-                        MAX_POLLS,
-                        AUDIO_POLLING_DELAY,
-                        f"Audio generation timeout after {MAX_POLLS} polls"
-                    )
-                case ETaskType.VIDEO_CAPTION.value:
-                    return (
-                        IVideoToText,
-                        MAX_POLLS,
-                        VIDEO_POLLING_DELAY,
-                        f"Video caption generation timeout after {MAX_POLLS} polls"
-                    )
-                case ETaskType.IMAGE_INFERENCE.value:
-                    return (
-                        IImage,
-                        MAX_POLLS,
-                        IMAGE_POLLING_DELAY,
-                        f"Image generation timeout after {MAX_POLLS} polls"
-                    )
-                case (
-                    ETaskType.VIDEO_INFERENCE.value
-                    | ETaskType.VIDEO_BACKGROUND_REMOVAL.value
-                    | ETaskType.VIDEO_UPSCALE.value
-                ):
-                    return (
-                        IVideo,
-                        MAX_POLLS,
-                        VIDEO_POLLING_DELAY,
-                        f"Video generation timeout after {MAX_POLLS} polls"
-                    )
-                case _:
-                    raise ValueError(f"Unsupported task type for polling: {task_type}")
+            if task_type_val == ETaskType.AUDIO_INFERENCE.value:
+                return (
+                    IAudio,
+                    MAX_POLLS,
+                    AUDIO_POLLING_DELAY,
+                    f"Audio generation timeout after {MAX_POLLS} polls"
+                )
+            elif task_type_val == ETaskType.VIDEO_CAPTION.value:
+                return (
+                    IVideoToText,
+                    MAX_POLLS,
+                    VIDEO_POLLING_DELAY,
+                    f"Video caption generation timeout after {MAX_POLLS} polls"
+                )
+            elif task_type_val == ETaskType.IMAGE_INFERENCE.value:
+                return (
+                    IImage,
+                    MAX_POLLS,
+                    IMAGE_POLLING_DELAY,
+                    f"Image generation timeout after {MAX_POLLS} polls"
+                )
+            elif task_type_val in (
+                    ETaskType.VIDEO_INFERENCE.value,
+                    ETaskType.VIDEO_BACKGROUND_REMOVAL.value,
+                    ETaskType.VIDEO_UPSCALE.value
+            ):
+                return (
+                    IVideo,
+                    MAX_POLLS,
+                    VIDEO_POLLING_DELAY,
+                    f"Video generation timeout after {MAX_POLLS} polls"
+                )
+            else:
+                return None
 
         try:
             for poll_count in range(MAX_POLLS):
@@ -2661,11 +2511,21 @@ class RunwareBase:
 
                     if len(completed_results) >= number_results:
                         return instantiateDataclassList(
-                            response_cls,
+                            response_cls or IVideo,
                             completed_results[:number_results]
                         )
 
-                    if not processed_responses and not self._hasPendingResults(responses):
+                    has_pending = self._hasPendingResults(responses)
+                    has_queued = any(
+                        response.get("status") in ("queued", "pending", "scheduled", "waiting")
+                        for response in responses
+                    )
+
+                    if not processed_responses and not has_pending and not has_queued:
+                        has_task_response = any(r.get("taskUUID") == task_uuid for r in responses)
+                        if has_task_response:
+                            logger.warning(f"Received response for {task_uuid} but status unclear, continuing poll")
+                            continue
                         raise RunwareAPIError({"message": f"Unexpected polling response at poll {poll_count}"})
 
                 except RunwareAPIError:
@@ -2679,11 +2539,13 @@ class RunwareBase:
 
                 await asyncio.sleep(polling_delay / 1000)
 
-        finally:
-            lis["destroy"]()
-            async with self._messages_lock:
-                if task_uuid in self._globalMessages:
-                    del self._globalMessages[task_uuid]
+            if completed_results:
+                return instantiateDataclassList(response_cls or IVideo, completed_results[:number_results])
+            return []
+
+        except Exception:
+            self._unregister_pending_operation(task_uuid)
+            raise
 
     def _createAudioFromResponse(self, response: Dict[str, Any]) -> IAudio:
         return IAudio(

@@ -51,7 +51,7 @@ RETRY_SDK_COUNTS = {
 # WebSocket connection health check timeout (milliseconds)
 # Maximum time to wait for pong response after sending ping
 # Used in: server.heartBeat() to detect connection loss
-PING_TIMEOUT_DURATION = 10000
+PING_TIMEOUT_DURATION = 30000
 
 # WebSocket ping interval (milliseconds)
 # How often to send ping messages to keep connection alive
@@ -184,6 +184,7 @@ MAX_POLLS_AUDIO_GENERATION = int(os.environ.get("RUNWARE_MAX_POLLS_AUDIO_GENERAT
 
 
 MAX_POLLS = int(os.environ.get("RUNWARE_MAX_POLLS", 480))
+MAX_CONCURRENT_REQUESTS = int(os.environ.get("RUNWARE_MAX_CONCURRENT_REQUESTS", "15"))
 
 class LISTEN_TO_IMAGES_KEY:
     REQUEST_IMAGES = "REQUEST_IMAGES"

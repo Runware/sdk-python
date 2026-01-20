@@ -214,6 +214,44 @@ class RunwareServer(RunwareBase):
             self.logger.error(f"Failed to parse JSON message:", exc_info=e)
             return
 
+        handled_task_uuids = set()
+
+        if self._pending_operations:
+            if "data" in m and isinstance(m["data"], list):
+                for item in m["data"]:
+                    task_uuid = item.get("taskUUID")
+                    if task_uuid and self._handle_pending_operation_message(item):
+                        handled_task_uuids.add(task_uuid)
+
+            if "errors" in m and isinstance(m["errors"], list):
+                for error in m["errors"]:
+                    task_uuid = error.get("taskUUID")
+                    if task_uuid and self._handle_pending_operation_error(error):
+                        handled_task_uuids.add(task_uuid)
+
+            if handled_task_uuids:
+                remaining_data = [
+                    item for item in m.get("data", [])
+                    if item.get("taskUUID") not in handled_task_uuids
+                ]
+                remaining_errors = [
+                    err for err in m.get("errors", [])
+                    if err.get("taskUUID") not in handled_task_uuids
+                ]
+
+                if not remaining_data and not remaining_errors:
+                    return
+
+                m = dict(m)
+                if remaining_data:
+                    m["data"] = remaining_data
+                elif "data" in m:
+                    del m["data"]
+                if remaining_errors:
+                    m["errors"] = remaining_errors
+                elif "errors" in m:
+                    del m["errors"]
+
         listeners_snapshot = list(self._listeners)
 
         async_tasks = []
@@ -311,6 +349,8 @@ class RunwareServer(RunwareBase):
     async def handleClose(self):
         self.logger.debug("Handling close")
 
+        self._cancel_pending_operations("Connection lost during operation")
+
         reconnecting_task = self._tasks.get("Task_Reconnecting")
         if reconnecting_task is not None:
             if not reconnecting_task.done() and not reconnecting_task.cancelled():
@@ -379,6 +419,22 @@ class RunwareServer(RunwareBase):
                 reconnect(), name="Task_Reconnecting"
             )
             self._tasks["Task_Reconnecting"] = self._reconnecting_task
+
+    def _cancel_pending_operations(self, reason: str = "Connection closed"):
+        """
+        Cancel all pending operations when connection is lost.
+
+        Called by handleClose() before reconnection attempt.
+        Sets ConnectionError on all pending Futures so awaiting coroutines
+        can handle the disconnection gracefully.
+        """
+        for task_uuid, op in list(self._pending_operations.items()):
+            future = op.get("future")
+            if future and not future.done():
+                future.set_exception(ConnectionError(
+                    f"{reason} | TaskUUID: {task_uuid}"
+                ))
+        self._pending_operations.clear()
 
     async def heartBeat(self):
         if self._last_pong_time == 0.0:
