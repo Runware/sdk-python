@@ -49,7 +49,7 @@ from .types import (
     IAudioInference,
     IFrameImage,
     IAsyncTaskResponse,
-    IVectorize,
+    IVectorize, OperationState,
 )
 from .types import IImage, IError, SdkType, ListenerType
 from .utils import (
@@ -138,7 +138,7 @@ class RunwareBase:
             on_partial: "Optional[Callable[[List[Any], Optional[IError]], None]]" = None,
             complete_predicate: "Optional[Callable[[Dict[str, Any]], bool]]" = None,
             result_filter: "Optional[Callable[[Dict[str, Any]], bool]]" = None
-    ) -> "asyncio.Future":
+    ) -> "Tuple[asyncio.Future, bool]":
         """
         Register a pending operation for event-driven result collection.
 
@@ -158,17 +158,44 @@ class RunwareBase:
             result_filter: Filter function applied before adding to results.
                           Return True to include item, False to skip.
                           Signature: (item: Dict[str, Any]) -> bool
+
+        Returns:
+            Tuple of (future, should_send):
+            - future: asyncio.Future to await for results
+            - should_send: True if request should be sent, False if already sent (retry)
         """
         if task_uuid in self._pending_operations:
             existing_op = self._pending_operations[task_uuid]
+            existing_state = existing_op.get("state")
             existing_future = existing_op.get("future")
-            if existing_future and not existing_future.done():
-                self.logger.warning(f"Task {task_uuid} already registered, cancelling previous operation")
-                existing_future.set_exception(RunwareAPIError({
-                    "code": "taskUUIDConflict",
-                    "message": f"Task {task_uuid} was superseded by new registration"
-                }))
-            del self._pending_operations[task_uuid]
+
+            if existing_state == OperationState.REGISTERED:
+                duplicated_exc_body = {
+                    "code": "duplicateTaskUUID",
+                    "message": f"Task {task_uuid} already has a pending request. "
+                               f"Use unique taskUUID for each concurrent request."
+                }
+                if existing_future and not existing_future.done():
+                    existing_future.set_exception(RunwareAPIError(duplicated_exc_body))
+                raise RunwareAPIError(duplicated_exc_body)
+
+            if existing_state in (OperationState.SENT, OperationState.DISCONNECTED):
+                self.logger.info(
+                    f"Reusing pending operation for retry | TaskUUID: {task_uuid} | "
+                    f"Previous state: {existing_state.value} | "
+                    f"Partial results: {len(existing_op.get('results', []))}"
+                )
+                loop = asyncio.get_running_loop()
+                new_future = loop.create_future()
+                existing_op["future"] = new_future
+                existing_op["state"] = OperationState.SENT
+                if on_partial is not None:
+                    existing_op["on_partial"] = on_partial
+                if complete_predicate is not None:
+                    existing_op["complete_predicate"] = complete_predicate
+                if result_filter is not None:
+                    existing_op["result_filter"] = result_filter
+                return new_future, False
 
         loop = asyncio.get_running_loop()
         future = loop.create_future()
@@ -176,11 +203,21 @@ class RunwareBase:
             "future": future,
             "expected": expected_results,
             "results": [],
+            "state": OperationState.REGISTERED,
             "on_partial": on_partial,
             "complete_predicate": complete_predicate,
             "result_filter": result_filter
         }
-        return future
+        return future, True
+
+    def _mark_operation_sent(self, task_uuid: str) -> None:
+        """
+        Mark operation as sent after successful send().
+        Must be called immediately after send() for proper retry handling.
+        """
+        op = self._pending_operations.get(task_uuid)
+        if op and op.get("state") == OperationState.REGISTERED:
+            op["state"] = OperationState.SENT
 
     def _unregister_pending_operation(self, task_uuid: str) -> "Optional[List[Dict[str, Any]]]":
         """
@@ -188,12 +225,17 @@ class RunwareBase:
 
         Must be called in finally block to prevent memory leaks.
         Safe to call multiple times or with non-existent task_uuid.
-        """
 
-        op = self._pending_operations.pop(task_uuid, None)
-        if op:
-            return op["results"]
-        return None
+        Note: DISCONNECTED operations are preserved for potential retry.
+        """
+        op = self._pending_operations.get(task_uuid)
+        if not op:
+            return None
+
+        if op.get("state") == OperationState.DISCONNECTED:
+            return op.get("results", [])
+
+        return self._pending_operations.pop(task_uuid, {}).get("results")
 
     def _handle_pending_operation_message(self, item: "Dict[str, Any]") -> bool:
         """
@@ -580,7 +622,7 @@ class RunwareBase:
 
         numberOfResults = requestPhotoMaker.numberResults
 
-        future = self._register_pending_operation(
+        future, should_send = self._register_pending_operation(
             task_uuid,
             expected_results=numberOfResults,
             complete_predicate=None,
@@ -588,7 +630,9 @@ class RunwareBase:
         )
 
         try:
-            await self.send([request_object])
+            if should_send:
+                await self.send([request_object])
+                self._mark_operation_sent(task_uuid)
             results = await asyncio.wait_for(future, timeout=IMAGE_INFERENCE_TIMEOUT / 1000)
 
             unique_results = {}
@@ -717,14 +761,16 @@ class RunwareBase:
                     debug_key="image-inference-webhook"
                 )
 
-            future = self._register_pending_operation(
+            future, should_send = self._register_pending_operation(
                 task_uuid,
                 expected_results=1,
                 complete_predicate=lambda r: True
             )
 
             try:
-                await self.send([request_object])
+                if should_send:
+                    await self.send([request_object])
+                    self._mark_operation_sent(task_uuid)
                 results = await asyncio.wait_for(future, timeout=IMAGE_INITIAL_TIMEOUT / 1000)
                 response = results[0]
                 self._handle_error_response(response)
@@ -741,7 +787,7 @@ class RunwareBase:
             finally:
                 self._unregister_pending_operation(task_uuid)
 
-        future = self._register_pending_operation(
+        future, should_send = self._register_pending_operation(
             task_uuid,
             expected_results=number_results,
             on_partial=requestImage.onPartialImages,
@@ -750,7 +796,9 @@ class RunwareBase:
         )
 
         try:
-            await self.send([request_object])
+            if should_send:
+                await self.send([request_object])
+                self._mark_operation_sent(task_uuid)
             results = await asyncio.wait_for(future, timeout=IMAGE_INFERENCE_TIMEOUT / 1000)
 
             if not results:
@@ -850,14 +898,16 @@ class RunwareBase:
                 debug_key="image-caption-webhook"
             )
 
-        future = self._register_pending_operation(
+        future, should_send = self._register_pending_operation(
             taskUUID,
             expected_results=1,
             complete_predicate=lambda r: True
         )
 
         try:
-            await self.send([task_params])
+            if should_send:
+                await self.send([task_params])
+                self._mark_operation_sent(taskUUID)
             results = await asyncio.wait_for(future, timeout=IMAGE_OPERATION_TIMEOUT / 1000)
             response = results[0]
             self._handle_error_response(response)
@@ -1095,7 +1145,7 @@ class RunwareBase:
                 debug_key="image-background-removal-webhook"
             )
 
-        future = self._register_pending_operation(
+        future, should_send = self._register_pending_operation(
             taskUUID,
             expected_results=1,
             complete_predicate=None,
@@ -1103,7 +1153,9 @@ class RunwareBase:
         )
 
         try:
-            await self.send([task_params])
+            if should_send:
+                await self.send([task_params])
+                self._mark_operation_sent(taskUUID)
             results = await asyncio.wait_for(future, timeout=IMAGE_OPERATION_TIMEOUT / 1000)
             response = results[0]
             self._handle_error_response(response)
@@ -1194,7 +1246,7 @@ class RunwareBase:
                 debug_key="image-upscale-webhook"
             )
 
-        future = self._register_pending_operation(
+        future, should_send = self._register_pending_operation(
             taskUUID,
             expected_results=1,
             complete_predicate=None,
@@ -1202,7 +1254,9 @@ class RunwareBase:
         )
 
         try:
-            await self.send([task_params])
+            if should_send:
+                await self.send([task_params])
+                self._mark_operation_sent(taskUUID)
             results = await asyncio.wait_for(future, timeout=IMAGE_OPERATION_TIMEOUT / 1000)
             response = results[0]
             self._handle_error_response(response)
@@ -1265,7 +1319,7 @@ class RunwareBase:
                 debug_key="image-vectorize-webhook"
             )
 
-        future = self._register_pending_operation(
+        future, should_send = self._register_pending_operation(
             taskUUID,
             expected_results=1,
             complete_predicate=None,
@@ -1273,7 +1327,10 @@ class RunwareBase:
         )
 
         try:
-            await self.send([task_params])
+
+            if should_send:
+                await self.send([task_params])
+                self._mark_operation_sent(taskUUID)
             results = await asyncio.wait_for(future, timeout=IMAGE_OPERATION_TIMEOUT / 1000)
 
             if not results:
@@ -1344,7 +1401,7 @@ class RunwareBase:
                 debug_key="prompt-enhance-webhook"
             )
 
-        future = self._register_pending_operation(
+        future, should_send = self._register_pending_operation(
             taskUUID,
             expected_results=promptVersions,
             complete_predicate=None,
@@ -1352,7 +1409,9 @@ class RunwareBase:
         )
 
         try:
-            await self.send([task_params])
+            if should_send:
+                await self.send([task_params])
+                self._mark_operation_sent(taskUUID)
             results = await asyncio.wait_for(future, timeout=PROMPT_ENHANCE_TIMEOUT / 1000)
 
             if not results:
@@ -1412,20 +1471,22 @@ class RunwareBase:
         # Convert file to base64 (handles both File objects and string paths)
         file_data = await fileToBase64(file)
 
-        future = self._register_pending_operation(
+        future, should_send = self._register_pending_operation(
             task_uuid,
             expected_results=1,
             complete_predicate=lambda r: True
         )
 
         try:
-            await self.send([
-                {
-                    "taskType": ETaskType.IMAGE_UPLOAD.value,
-                    "taskUUID": task_uuid,
-                    "image": file_data,
-                }
-            ])
+            if should_send:
+                await self.send([
+                    {
+                        "taskType": ETaskType.IMAGE_UPLOAD.value,
+                        "taskUUID": task_uuid,
+                        "image": file_data,
+                    }
+                ])
+                self._mark_operation_sent(task_uuid)
 
             results = await asyncio.wait_for(future, timeout=IMAGE_UPLOAD_TIMEOUT / 1000)
             response = results[0]
@@ -1465,23 +1526,25 @@ class RunwareBase:
                     media_data = media_data.split(",", 1)[1]
             # For URLs and base64 strings, send them directly to the API
 
-        future = self._register_pending_operation(
+        future, should_send = self._register_pending_operation(
             task_uuid,
             expected_results=1,
             complete_predicate=lambda r: r.get("mediaUUID") is not None
         )
 
         try:
-            await self.send(
-                [
-                    {
-                        "taskType": ETaskType.MEDIA_STORAGE.value,
-                        "taskUUID": task_uuid,
-                        "operation": "upload",
-                        "media": media_data,
-                    }
-                ]
-            )
+            if should_send:
+                await self.send(
+                    [
+                        {
+                            "taskType": ETaskType.MEDIA_STORAGE.value,
+                            "taskUUID": task_uuid,
+                            "operation": "upload",
+                            "media": media_data,
+                        }
+                    ]
+                )
+                self._mark_operation_sent(task_uuid)
 
             results = await asyncio.wait_for(future, timeout=self._timeout / 1000)
             response = results[0]
@@ -1800,7 +1863,7 @@ class RunwareBase:
         def is_ready(item: "Dict[str, Any]") -> bool:
             return item.get("status") == "ready"
 
-        future = self._register_pending_operation(
+        future, should_send = self._register_pending_operation(
             task_uuid,
             expected_results=1,
             complete_predicate=is_ready,
@@ -1808,7 +1871,9 @@ class RunwareBase:
         )
 
         try:
-            await self.send([request_object])
+            if should_send:
+                await self.send([request_object])
+                self._mark_operation_sent(task_uuid)
             results = await asyncio.wait_for(future, timeout=MODEL_UPLOAD_TIMEOUT / 1000)
 
             unique_statuses = set()
@@ -1883,14 +1948,16 @@ class RunwareBase:
                 }
             )
 
-            future = self._register_pending_operation(
+            future, should_send = self._register_pending_operation(
                 task_uuid,
                 expected_results=1,
                 complete_predicate=lambda r: True
             )
 
             try:
-                await self.send([request_object])
+                if should_send:
+                    await self.send([request_object])
+                    self._mark_operation_sent(task_uuid)
                 results = await asyncio.wait_for(future, timeout=self._timeout / 1000)
                 response = results[0]
                 self._handle_error_response(response)
@@ -2207,14 +2274,16 @@ class RunwareBase:
         task_type: str,
         debug_key: str,
     ) -> "IAsyncTaskResponse":
-        future = self._register_pending_operation(
+        future, should_send = self._register_pending_operation(
             task_uuid,
             expected_results=1,
             complete_predicate=lambda r: r.get("taskType") == task_type or r.get("taskUUID") == task_uuid
         )
 
         try:
-            await self.send([request_object])
+            if should_send:
+                await self.send([request_object])
+                self._mark_operation_sent(task_uuid)
             results = await asyncio.wait_for(future, timeout=WEBHOOK_TIMEOUT / 1000)
             response = results[0]
             self._handle_error_response(response)
@@ -2252,7 +2321,7 @@ class RunwareBase:
                 return True
             return False
 
-        future = self._register_pending_operation(
+        future, should_send = self._register_pending_operation(
             task_uuid,
             expected_results=1,
             complete_predicate=is_video_complete
@@ -2261,7 +2330,9 @@ class RunwareBase:
         timeout = TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else VIDEO_INITIAL_TIMEOUT
 
         try:
-            await self.send([request_object])
+            if should_send:
+                await self.send([request_object])
+                self._mark_operation_sent(task_uuid)
             results = await asyncio.wait_for(future, timeout=timeout / 1000)
 
             if not results:
@@ -2301,17 +2372,18 @@ class RunwareBase:
             self._unregister_pending_operation(task_uuid)
 
     async def _sendPollRequest(self, task_uuid: str, poll_count: int) -> "List[Dict[str, Any]]":
-        future = self._register_pending_operation(
+        future, should_send = self._register_pending_operation(
             task_uuid,
             expected_results=1,
             complete_predicate=lambda r: True
         )
-
         try:
-            await self.send([{
-                "taskType": ETaskType.GET_RESPONSE.value,
-                "taskUUID": task_uuid
-            }])
+            if should_send:
+                await self.send([{
+                    "taskType": ETaskType.GET_RESPONSE.value,
+                    "taskUUID": task_uuid
+                }])
+                self._mark_operation_sent(task_uuid)
 
             results = await asyncio.wait_for(future, timeout=VIDEO_INITIAL_TIMEOUT / 1000)
             return results
@@ -2417,7 +2489,7 @@ class RunwareBase:
                 return True
             return False
 
-        future = self._register_pending_operation(
+        future, should_send = self._register_pending_operation(
             task_uuid,
             expected_results=1,
             complete_predicate=is_audio_complete
@@ -2426,7 +2498,9 @@ class RunwareBase:
         timeout = TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else AUDIO_INITIAL_TIMEOUT
 
         try:
-            await self.send([request_object])
+            if should_send:
+                await self.send([request_object])
+                self._mark_operation_sent(task_uuid)
             results = await asyncio.wait_for(future, timeout=timeout / 1000)
 
             if not results:
@@ -2459,31 +2533,6 @@ class RunwareBase:
                     f"Timeout: {timeout}ms"
                 )
             raise
-        except RunwareAPIError:
-            raise
-        finally:
-            self._unregister_pending_operation(task_uuid)
-
-    async def _waitForAudioCompletion(self, task_uuid: str) -> "Optional[IAudio]":
-        future = self._register_pending_operation(
-            task_uuid,
-            expected_results=1,
-            complete_predicate=lambda r: r.get("audioUUID") is not None or r.get("status") == "success"
-        )
-
-        try:
-            results = await asyncio.wait_for(future, timeout=AUDIO_INFERENCE_TIMEOUT / 1000)
-            response = results[0]
-
-            self._handle_error_response(response)
-
-            return self._createAudioFromResponse(response) if response else None
-
-        except asyncio.TimeoutError:
-            raise Exception(
-                f"Timeout waiting for audio completion | TaskUUID: {task_uuid} | "
-                f"Timeout: {AUDIO_INFERENCE_TIMEOUT}ms"
-            )
         except RunwareAPIError:
             raise
         finally:

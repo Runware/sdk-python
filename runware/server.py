@@ -9,7 +9,7 @@ import websockets
 from websockets.protocol import State
 from typing import Any, Dict, Optional
 
-from .types import SdkType
+from .types import SdkType, OperationState
 from .utils import (
     BASE_RUNWARE_URLS,
     PING_INTERVAL,
@@ -422,19 +422,33 @@ class RunwareServer(RunwareBase):
 
     def _cancel_pending_operations(self, reason: str = "Connection closed"):
         """
-        Cancel all pending operations when connection is lost.
+        Cancel pending operations when connection is lost.
 
-        Called by handleClose() before reconnection attempt.
-        Sets ConnectionError on all pending Futures so awaiting coroutines
-        can handle the disconnection gracefully.
+        - REGISTERED: cancelled and removed (request never reached server)
+        - SENT: marked DISCONNECTED for retry (request may be processing on server)
         """
-        for task_uuid, op in list(self._pending_operations.items()):
+        operations_to_remove = []
+
+        for task_uuid, op in self._pending_operations.items():
             future = op.get("future")
-            if future and not future.done():
-                future.set_exception(ConnectionError(
-                    f"{reason} | TaskUUID: {task_uuid}"
-                ))
-        self._pending_operations.clear()
+            state = op.get("state", OperationState.REGISTERED)
+
+            if state == OperationState.REGISTERED:
+                if future and not future.done():
+                    future.set_exception(ConnectionError(
+                        f"{reason} | TaskUUID: {task_uuid} | Request was not sent"
+                    ))
+                operations_to_remove.append(task_uuid)
+
+            elif state == OperationState.SENT:
+                op["state"] = OperationState.DISCONNECTED
+                if future and not future.done():
+                    future.set_exception(ConnectionError(
+                        f"{reason} | TaskUUID: {task_uuid}"
+                    ))
+
+        for task_uuid in operations_to_remove:
+            del self._pending_operations[task_uuid]
 
     async def heartBeat(self):
         if self._last_pong_time == 0.0:
