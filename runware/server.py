@@ -220,13 +220,13 @@ class RunwareServer(RunwareBase):
             if "data" in m and isinstance(m["data"], list):
                 for item in m["data"]:
                     task_uuid = item.get("taskUUID")
-                    if task_uuid and self._handle_pending_operation_message(item):
+                    if task_uuid and await self._handle_pending_operation_message(item):
                         handled_task_uuids.add(task_uuid)
 
             if "errors" in m and isinstance(m["errors"], list):
                 for error in m["errors"]:
                     task_uuid = error.get("taskUUID")
-                    if task_uuid and self._handle_pending_operation_error(error):
+                    if task_uuid and await self._handle_pending_operation_error(error):
                         handled_task_uuids.add(task_uuid)
 
             if handled_task_uuids:
@@ -349,7 +349,7 @@ class RunwareServer(RunwareBase):
     async def handleClose(self):
         self.logger.debug("Handling close")
 
-        self._cancel_pending_operations("Connection lost during operation")
+        await self._cancel_pending_operations("Connection lost during operation")
 
         reconnecting_task = self._tasks.get("Task_Reconnecting")
         if reconnecting_task is not None:
@@ -420,35 +420,30 @@ class RunwareServer(RunwareBase):
             )
             self._tasks["Task_Reconnecting"] = self._reconnecting_task
 
-    def _cancel_pending_operations(self, reason: str = "Connection closed"):
-        """
-        Cancel pending operations when connection is lost.
+    async def _cancel_pending_operations(self, reason: str = "Connection closed"):
+        async with self._operations_lock:
+            operations_to_remove = []
 
-        - REGISTERED: cancelled and removed (request never reached server)
-        - SENT: marked DISCONNECTED for retry (request may be processing on server)
-        """
-        operations_to_remove = []
+            for task_uuid, op in self._pending_operations.items():
+                future = op.get("future")
+                state = op.get("state", OperationState.REGISTERED)
 
-        for task_uuid, op in self._pending_operations.items():
-            future = op.get("future")
-            state = op.get("state", OperationState.REGISTERED)
+                if state == OperationState.REGISTERED:
+                    if future and not future.done():
+                        future.set_exception(ConnectionError(
+                            f"{reason} | TaskUUID: {task_uuid} | Request was not sent"
+                        ))
+                    operations_to_remove.append(task_uuid)
 
-            if state == OperationState.REGISTERED:
-                if future and not future.done():
-                    future.set_exception(ConnectionError(
-                        f"{reason} | TaskUUID: {task_uuid} | Request was not sent"
-                    ))
-                operations_to_remove.append(task_uuid)
+                elif state == OperationState.SENT:
+                    op["state"] = OperationState.DISCONNECTED
+                    if future and not future.done():
+                        future.set_exception(ConnectionError(
+                            f"{reason} | TaskUUID: {task_uuid}"
+                        ))
 
-            elif state == OperationState.SENT:
-                op["state"] = OperationState.DISCONNECTED
-                if future and not future.done():
-                    future.set_exception(ConnectionError(
-                        f"{reason} | TaskUUID: {task_uuid}"
-                    ))
-
-        for task_uuid in operations_to_remove:
-            del self._pending_operations[task_uuid]
+            for task_uuid in operations_to_remove:
+                del self._pending_operations[task_uuid]
 
     async def heartBeat(self):
         if self._last_pong_time == 0.0:

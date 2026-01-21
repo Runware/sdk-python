@@ -129,9 +129,10 @@ class RunwareBase:
         self._reconnection_manager = ReconnectionManager(logger=self.logger)
         self._reconnect_lock = asyncio.Lock()
         self._pending_operations: Dict[str, Dict[str, Any]] = {}
+        self._operations_lock = asyncio.Lock()
         self._request_semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
-    def _register_pending_operation(
+    async def _register_pending_operation(
             self,
             task_uuid: str,
             expected_results: int = 1,
@@ -139,196 +140,171 @@ class RunwareBase:
             complete_predicate: "Optional[Callable[[Dict[str, Any]], bool]]" = None,
             result_filter: "Optional[Callable[[Dict[str, Any]], bool]]" = None
     ) -> "Tuple[asyncio.Future, bool]":
-        """
-        Register a pending operation for event-driven result collection.
+        async with self._operations_lock:
+            if task_uuid in self._pending_operations:
+                existing_op = self._pending_operations[task_uuid]
+                existing_state = existing_op.get("state")
+                existing_future = existing_op.get("future")
 
-        Creates an asyncio.Future that will be resolved when expected results arrive
-        or an error occurs. Enables O(1) message routing by taskUUID.
+                if existing_state == OperationState.REGISTERED:
+                    duplicated_exc_body = {
+                        "code": "conflictTaskUUID",
+                        "message": f"Task {task_uuid} already has a pending request. "
+                                   f"Use unique taskUUID for each concurrent request."
+                    }
+                    if existing_future and not existing_future.done():
+                        existing_future.set_exception(RunwareAPIError(duplicated_exc_body))
+                    raise RunwareAPIError(duplicated_exc_body)
 
-        Args:
-            task_uuid: Unique identifier for the operation. Must match server response.
-            expected_results: Number of results to collect before resolving Future.
-                             Ignored if complete_predicate is provided.
-            on_partial: Callback invoked for each valid result (after filtering).
-                       Signature: (results: List[Any], error: Optional[IError]) -> None
-                       Called synchronously within message handler.
-            complete_predicate: Custom completion check. If provided, called for each
-                               result item. Return True to resolve Future immediately.
-                               Signature: (item: Dict[str, Any]) -> bool
-            result_filter: Filter function applied before adding to results.
-                          Return True to include item, False to skip.
-                          Signature: (item: Dict[str, Any]) -> bool
+                if existing_state == OperationState.SENT:
+                    self.logger.info(
+                        f"Reusing pending operation for retry | TaskUUID: {task_uuid} | "
+                        f"Previous state: {existing_state.value} | "
+                        f"Partial results: {len(existing_op.get('results', []))}"
+                    )
+                    loop = asyncio.get_running_loop()
+                    new_future = loop.create_future()
+                    existing_op["future"] = new_future
+                    existing_op["state"] = OperationState.SENT
+                    if on_partial is not None:
+                        existing_op["on_partial"] = on_partial
+                    if complete_predicate is not None:
+                        existing_op["complete_predicate"] = complete_predicate
+                    if result_filter is not None:
+                        existing_op["result_filter"] = result_filter
+                    return new_future, False
 
-        Returns:
-            Tuple of (future, should_send):
-            - future: asyncio.Future to await for results
-            - should_send: True if request should be sent, False if already sent (retry)
-        """
-        if task_uuid in self._pending_operations:
-            existing_op = self._pending_operations[task_uuid]
-            existing_state = existing_op.get("state")
-            existing_future = existing_op.get("future")
+                if existing_state == OperationState.DISCONNECTED:
+                    self.logger.info(
+                        f"Resending after disconnect | TaskUUID: {task_uuid} | "
+                        f"Clearing {len(existing_op.get('results', []))} partial results"
+                    )
+                    loop = asyncio.get_running_loop()
+                    new_future = loop.create_future()
+                    existing_op["future"] = new_future
+                    existing_op["results"] = []
+                    existing_op["state"] = OperationState.SENT
+                    if on_partial is not None:
+                        existing_op["on_partial"] = on_partial
+                    if complete_predicate is not None:
+                        existing_op["complete_predicate"] = complete_predicate
+                    if result_filter is not None:
+                        existing_op["result_filter"] = result_filter
+                    return new_future, True
 
-            if existing_state == OperationState.REGISTERED:
-                duplicated_exc_body = {
-                    "code": "duplicateTaskUUID",
-                    "message": f"Task {task_uuid} already has a pending request. "
-                               f"Use unique taskUUID for each concurrent request."
-                }
-                if existing_future and not existing_future.done():
-                    existing_future.set_exception(RunwareAPIError(duplicated_exc_body))
-                raise RunwareAPIError(duplicated_exc_body)
+            loop = asyncio.get_running_loop()
+            future = loop.create_future()
+            self._pending_operations[task_uuid] = {
+                "future": future,
+                "expected": expected_results,
+                "results": [],
+                "state": OperationState.REGISTERED,
+                "on_partial": on_partial,
+                "complete_predicate": complete_predicate,
+                "result_filter": result_filter
+            }
+            return future, True
 
-            if existing_state in (OperationState.SENT, OperationState.DISCONNECTED):
-                self.logger.info(
-                    f"Reusing pending operation for retry | TaskUUID: {task_uuid} | "
-                    f"Previous state: {existing_state.value} | "
-                    f"Partial results: {len(existing_op.get('results', []))}"
-                )
-                loop = asyncio.get_running_loop()
-                new_future = loop.create_future()
-                existing_op["future"] = new_future
-                existing_op["state"] = OperationState.SENT
-                if on_partial is not None:
-                    existing_op["on_partial"] = on_partial
-                if complete_predicate is not None:
-                    existing_op["complete_predicate"] = complete_predicate
-                if result_filter is not None:
-                    existing_op["result_filter"] = result_filter
-                return new_future, False
+    async def _mark_operation_sent(self, task_uuid: str) -> None:
+        async with self._operations_lock:
+            op = self._pending_operations.get(task_uuid)
+            if op and op.get("state") == OperationState.REGISTERED:
+                op["state"] = OperationState.SENT
 
-        loop = asyncio.get_running_loop()
-        future = loop.create_future()
-        self._pending_operations[task_uuid] = {
-            "future": future,
-            "expected": expected_results,
-            "results": [],
-            "state": OperationState.REGISTERED,
-            "on_partial": on_partial,
-            "complete_predicate": complete_predicate,
-            "result_filter": result_filter
-        }
-        return future, True
+    async def _unregister_pending_operation(self, task_uuid: str, force: bool = False) -> "Optional[List[Dict[str, Any]]]":
+        async with self._operations_lock:
+            op = self._pending_operations.get(task_uuid)
+            if not op:
+                return None
 
-    def _mark_operation_sent(self, task_uuid: str) -> None:
-        """
-        Mark operation as sent after successful send().
-        Must be called immediately after send() for proper retry handling.
-        """
-        op = self._pending_operations.get(task_uuid)
-        if op and op.get("state") == OperationState.REGISTERED:
-            op["state"] = OperationState.SENT
+            if not force and op.get("state") == OperationState.DISCONNECTED:
+                return op.get("results", [])
 
-    def _unregister_pending_operation(self, task_uuid: str) -> "Optional[List[Dict[str, Any]]]":
-        """
-        Remove pending operation and return collected results.
+            return self._pending_operations.pop(task_uuid, {}).get("results")
 
-        Must be called in finally block to prevent memory leaks.
-        Safe to call multiple times or with non-existent task_uuid.
-
-        Note: DISCONNECTED operations are preserved for potential retry.
-        """
-        op = self._pending_operations.get(task_uuid)
-        if not op:
-            return None
-
-        if op.get("state") == OperationState.DISCONNECTED:
-            return op.get("results", [])
-
-        return self._pending_operations.pop(task_uuid, {}).get("results")
-
-    def _handle_pending_operation_message(self, item: "Dict[str, Any]") -> bool:
-        """
-        Route incoming message to registered pending operation.
-        Called by on_message for each item in response data array.
-        """
+    async def _handle_pending_operation_message(self, item: "Dict[str, Any]") -> bool:
         task_uuid = item.get("taskUUID")
         if not task_uuid:
             return False
 
-        op = self._pending_operations.get(task_uuid)
-        if op is None:
-            return False
+        async with self._operations_lock:
+            op = self._pending_operations.get(task_uuid)
+            if op is None:
+                return False
 
-        future = op["future"]
+            future = op["future"]
 
-        if future.done():
-            return True
-
-        if self._is_error_response(item):
-            if not future.done():
-                future.set_exception(RunwareAPIError(item))
-            return True
-
-        result_filter = op.get("result_filter")
-        if result_filter is not None:
-            if not result_filter(item):
+            if future.done():
                 return True
 
-        op["results"].append(item)
+            if self._is_error_response(item):
+                if not future.done():
+                    future.set_exception(RunwareAPIError(item))
+                return True
 
-        if op["on_partial"]:
-            try:
-                if item.get("imageUUID"):
-                    partial_images = [createImageFromResponse(item)]
-                    op["on_partial"](partial_images, None)
-                elif item.get("videoUUID") or item.get("mediaUUID"):
-                    op["on_partial"]([item], None)
-                elif item.get("audioUUID"):
-                    op["on_partial"]([item], None)
-            except Exception as e:
-                logger.error(f"Error in on_partial callback: {e}")
+            result_filter = op.get("result_filter")
+            if result_filter is not None:
+                if not result_filter(item):
+                    return True
 
-        if op["complete_predicate"]:
-            is_complete = op["complete_predicate"](item)
-        else:
-            is_complete = len(op["results"]) >= op["expected"]
+            op["results"].append(item)
 
-        if is_complete and not future.done():
-            logger.debug(f"Completing pending operation: {task_uuid}, results: {len(op['results'])}")
-            future.set_result(op["results"])
+            if op["on_partial"]:
+                try:
+                    if item.get("imageUUID"):
+                        partial_images = [createImageFromResponse(item)]
+                        op["on_partial"](partial_images, None)
+                    elif item.get("videoUUID") or item.get("mediaUUID"):
+                        op["on_partial"]([item], None)
+                    elif item.get("audioUUID"):
+                        op["on_partial"]([item], None)
+                except Exception as e:
+                    logger.error(f"Error in on_partial callback: {e}")
 
-        return True
+            if op["complete_predicate"]:
+                is_complete = op["complete_predicate"](item)
+            else:
+                is_complete = len(op["results"]) >= op["expected"]
 
-    def _handle_pending_operation_error(self, error: "Dict[str, Any]") -> bool:
-        """
-        Route error message to registered pending operation.
+            if is_complete and not future.done():
+                logger.debug(f"Completing pending operation: {task_uuid}, results: {len(op['results'])}")
+                future.set_result(op["results"])
 
-        Called by on_message for each item in errors array.
-        Rejects the Future with RunwareAPIError and invokes on_partial
-        with error information.
-        """
-        task_uuid = error.get("taskUUID")
-        if not task_uuid or task_uuid not in self._pending_operations:
-            return False
-
-        op = self._pending_operations.get(task_uuid)
-        if op is None:
-            return False
-
-        future = op["future"]
-
-        if future.done():
             return True
 
-        if op["on_partial"]:
-            try:
-                error_obj = IError(
-                    error=True,
-                    error_message=error.get("message", "Unknown error"),
-                    task_uuid=task_uuid,
-                    error_code=error.get("code"),
-                    error_type=error.get("type"),
-                    parameter=error.get("parameter"),
-                    documentation=error.get("documentation"),
-                )
-                op["on_partial"]([], error_obj)
-            except Exception as e:
-                logger.error(f"Error in on_partial error callback: {e}")
+    async def _handle_pending_operation_error(self, error: "Dict[str, Any]") -> bool:
+        task_uuid = error.get("taskUUID")
+        if not task_uuid:
+            return False
 
-        if not future.done():
-            future.set_exception(RunwareAPIError(error))
-        return True
+        async with self._operations_lock:
+            op = self._pending_operations.get(task_uuid)
+            if op is None:
+                return False
+
+            future = op["future"]
+
+            if future.done():
+                return True
+
+            if op["on_partial"]:
+                try:
+                    error_obj = IError(
+                        error=True,
+                        error_message=error.get("message", "Unknown error"),
+                        task_uuid=task_uuid,
+                        error_code=error.get("code"),
+                        error_type=error.get("type"),
+                        parameter=error.get("parameter"),
+                        documentation=error.get("documentation"),
+                    )
+                    op["on_partial"]([], error_obj)
+                except Exception as e:
+                    logger.error(f"Error in on_partial error callback: {e}")
+
+            if not future.done():
+                future.set_exception(RunwareAPIError(error))
+            return True
 
     async def _do_reconnect(self, last_error: Optional[Exception] = None) -> bool:
         async with self._reconnect_lock:
@@ -364,92 +340,120 @@ class RunwareBase:
                 return False
 
     async def _retry_with_reconnect(self, func, request_model, **func_kwargs):
+        task_uuid = getattr(request_model, 'taskUUID', None)
         last_error = None
 
-        for attempt in range(MAX_RETRY_ATTEMPTS):
-            try:
-                result = await func(request_model, **func_kwargs)
-                self._reconnection_manager.on_connection_success()
-                return result
+        try:
+            for attempt in range(MAX_RETRY_ATTEMPTS):
+                try:
+                    result = await func(request_model, **func_kwargs)
+                    self._reconnection_manager.on_connection_success()
+                    return result
 
-            except Exception as e:
-                last_error = e
+                except Exception as e:
+                    last_error = e
 
-                if not isinstance(e, ConnectionError):
-                    raise
+                    if isinstance(e, RunwareAPIError) and e.code == "conflictTaskUUID":
+                        if attempt == 0:
+                            raise
+                        conflict_task_uuid = e.error_data.get("taskUUID") or getattr(request_model, 'taskUUID', None)
+                        if conflict_task_uuid:
+                            number_results = getattr(request_model, 'numberResults', 1) or 1
+                            return await self._pollResults(
+                                task_uuid=conflict_task_uuid,
+                                number_results=number_results
+                            )
+                        raise
 
-                if attempt >= MAX_RETRY_ATTEMPTS - 1:
-                    self.logger.error(f"Max retry attempts ({MAX_RETRY_ATTEMPTS}) exceeded")
-                    raise ConnectionError(
-                        f"Failed after {MAX_RETRY_ATTEMPTS} attempts. "
-                        f"Last error: {last_error}"
-                    )
+                    if not isinstance(e, ConnectionError):
+                        raise
 
-                reconnected = await self._do_reconnect(last_error)
+                    if attempt >= MAX_RETRY_ATTEMPTS - 1:
+                        self.logger.error(f"Max retry attempts ({MAX_RETRY_ATTEMPTS}) exceeded")
+                        raise ConnectionError(
+                            f"Failed after {MAX_RETRY_ATTEMPTS} attempts. "
+                            f"Last error: {last_error}"
+                        )
 
-                if reconnected:
-                    jitter = uniform(0.1, 0.5) * (attempt + 1)
-                    await asyncio.sleep(jitter)
-                else:
-                    delay = self._reconnection_manager.calculate_delay()
-                    await asyncio.sleep(delay)
+                    reconnected = await self._do_reconnect(last_error)
+
+                    if reconnected:
+                        jitter = uniform(0.1, 0.5) * (attempt + 1)
+                        await asyncio.sleep(jitter)
+                    else:
+                        delay = self._reconnection_manager.calculate_delay()
+                        await asyncio.sleep(delay)
+        finally:
+            if task_uuid:
+                await self._unregister_pending_operation(task_uuid, force=True)
 
     async def _retry_async_with_reconnect(self, func, request_model, task_type: str):
         task_uuid = getattr(request_model, 'taskUUID', None)
         delivery_method = getattr(request_model, 'deliveryMethod', None)
 
-        for attempt in range(MAX_RETRY_ATTEMPTS):
-            try:
-                result = await func(request_model)
-                self._reconnection_manager.on_connection_success()
-                return result
+        try:
+            for attempt in range(MAX_RETRY_ATTEMPTS):
+                try:
+                    result = await func(request_model)
+                    self._reconnection_manager.on_connection_success()
+                    return result
 
-            except Exception as e:
-                last_error = e
+                except Exception as e:
+                    last_error = e
 
-                # When conflictTaskUUID: raise on first attempt, return async response on retry
-                if isinstance(e, RunwareAPIError) and e.code == "conflictTaskUUID":
-                    if attempt == 0:
-                        raise
+                    if isinstance(e, RunwareAPIError) and e.code == "conflictTaskUUID":
+                        if attempt == 0:
+                            raise
 
-                    delivery_method_enum = None
-                    if delivery_method is not None:
-                        delivery_method_enum = (
-                            EDeliveryMethod(delivery_method)
-                            if isinstance(delivery_method, str)
-                            else delivery_method
-                        )
+                        delivery_method_enum = None
+                        if delivery_method is not None:
+                            delivery_method_enum = (
+                                EDeliveryMethod(delivery_method)
+                                if isinstance(delivery_method, str)
+                                else delivery_method
+                            )
 
-                    if task_type and task_uuid and delivery_method_enum is EDeliveryMethod.ASYNC:
-                        return createAsyncTaskResponse({
-                            "taskType": task_type,
+                        if task_type and task_uuid and delivery_method_enum is EDeliveryMethod.ASYNC:
+                            return createAsyncTaskResponse({
+                                "taskType": task_type,
+                                "taskUUID": task_uuid
+                            })
+
+                        conflict_task_uuid = e.error_data.get("taskUUID") or task_uuid
+                        if conflict_task_uuid:
+                            number_results = getattr(request_model, 'numberResults', 1) or 1
+                            return await self._pollResults(
+                                task_uuid=conflict_task_uuid,
+                                number_results=number_results
+                            )
+
+                        raise RunwareAPIError({
+                            "code": "conflictTaskUUIDDuringRetries",
+                            "message": "Lost connection during request submission",
                             "taskUUID": task_uuid
                         })
 
-                    raise RunwareAPIError({
-                        "code": "conflictTaskUUIDDuringRetries",
-                        "message": "Lost connection during request submission",
-                        "taskUUID": task_uuid
-                    })
+                    if not isinstance(e, ConnectionError):
+                        raise
 
-                if not isinstance(e, ConnectionError):
-                    raise
+                    if attempt >= MAX_RETRY_ATTEMPTS - 1:
+                        self.logger.error(f"Max retry attempts ({MAX_RETRY_ATTEMPTS}) exceeded")
+                        raise ConnectionError(
+                            f"Failed after {MAX_RETRY_ATTEMPTS} attempts. "
+                            f"Last error: {last_error}"
+                        )
 
-                if attempt >= MAX_RETRY_ATTEMPTS - 1:
-                    self.logger.error(f"Max retry attempts ({MAX_RETRY_ATTEMPTS}) exceeded")
-                    raise ConnectionError(
-                        f"Failed after {MAX_RETRY_ATTEMPTS} attempts. "
-                        f"Last error: {last_error}"
-                    )
+                    reconnected = await self._do_reconnect(last_error)
 
-                reconnected = await self._do_reconnect(last_error)
-
-                if reconnected:
-                    jitter = uniform(0.1, 0.5) * (attempt + 1)
-                    await asyncio.sleep(jitter)
-                else:
-                    delay = self._reconnection_manager.calculate_delay()
-                    await asyncio.sleep(delay)
+                    if reconnected:
+                        jitter = uniform(0.1, 0.5) * (attempt + 1)
+                        await asyncio.sleep(jitter)
+                    else:
+                        delay = self._reconnection_manager.calculate_delay()
+                        await asyncio.sleep(delay)
+        finally:
+            if task_uuid:
+                await self._unregister_pending_operation(task_uuid, force=True)
 
     def _handle_error_response(self, response: Dict[str, Any]) -> None:
         """
@@ -622,7 +626,7 @@ class RunwareBase:
 
         numberOfResults = requestPhotoMaker.numberResults
 
-        future, should_send = self._register_pending_operation(
+        future, should_send = await self._register_pending_operation(
             task_uuid,
             expected_results=numberOfResults,
             complete_predicate=None,
@@ -632,7 +636,7 @@ class RunwareBase:
         try:
             if should_send:
                 await self.send([request_object])
-                self._mark_operation_sent(task_uuid)
+                await self._mark_operation_sent(task_uuid)
             results = await asyncio.wait_for(future, timeout=IMAGE_INFERENCE_TIMEOUT / 1000)
 
             unique_results = {}
@@ -657,7 +661,7 @@ class RunwareBase:
         except RunwareAPIError:
             raise
         finally:
-            self._unregister_pending_operation(task_uuid)
+            await self._unregister_pending_operation(task_uuid)
 
     async def imageInference(
             self, requestImage: "IImageInference"
@@ -761,7 +765,7 @@ class RunwareBase:
                     debug_key="image-inference-webhook"
                 )
 
-            future, should_send = self._register_pending_operation(
+            future, should_send = await self._register_pending_operation(
                 task_uuid,
                 expected_results=1,
                 complete_predicate=lambda r: True
@@ -770,7 +774,7 @@ class RunwareBase:
             try:
                 if should_send:
                     await self.send([request_object])
-                    self._mark_operation_sent(task_uuid)
+                    await self._mark_operation_sent(task_uuid)
                 results = await asyncio.wait_for(future, timeout=IMAGE_INITIAL_TIMEOUT / 1000)
                 response = results[0]
                 self._handle_error_response(response)
@@ -785,9 +789,9 @@ class RunwareBase:
                     f"Timeout: {IMAGE_INITIAL_TIMEOUT}ms"
                 )
             finally:
-                self._unregister_pending_operation(task_uuid)
+                await self._unregister_pending_operation(task_uuid)
 
-        future, should_send = self._register_pending_operation(
+        future, should_send = await self._register_pending_operation(
             task_uuid,
             expected_results=number_results,
             on_partial=requestImage.onPartialImages,
@@ -798,7 +802,7 @@ class RunwareBase:
         try:
             if should_send:
                 await self.send([request_object])
-                self._mark_operation_sent(task_uuid)
+                await self._mark_operation_sent(task_uuid)
             results = await asyncio.wait_for(future, timeout=IMAGE_INFERENCE_TIMEOUT / 1000)
 
             if not results:
@@ -825,7 +829,7 @@ class RunwareBase:
         except RunwareAPIError:
             raise
         finally:
-            self._unregister_pending_operation(task_uuid)
+            await self._unregister_pending_operation(task_uuid)
 
     async def imageCaption(self, requestImageToText: "IImageCaption") -> "Union[IImageToText, IAsyncTaskResponse]":
         async with self._request_semaphore:
@@ -898,7 +902,7 @@ class RunwareBase:
                 debug_key="image-caption-webhook"
             )
 
-        future, should_send = self._register_pending_operation(
+        future, should_send = await self._register_pending_operation(
             taskUUID,
             expected_results=1,
             complete_predicate=lambda r: True
@@ -907,7 +911,7 @@ class RunwareBase:
         try:
             if should_send:
                 await self.send([task_params])
-                self._mark_operation_sent(taskUUID)
+                await self._mark_operation_sent(taskUUID)
             results = await asyncio.wait_for(future, timeout=IMAGE_OPERATION_TIMEOUT / 1000)
             response = results[0]
             self._handle_error_response(response)
@@ -920,7 +924,7 @@ class RunwareBase:
         except RunwareAPIError:
             raise
         finally:
-            self._unregister_pending_operation(taskUUID)
+            await self._unregister_pending_operation(taskUUID)
 
     async def videoCaption(self, requestVideoCaption: "IVideoCaption") -> "Union[List[IVideoToText], IAsyncTaskResponse]":
         async with self._request_semaphore:
@@ -1145,7 +1149,7 @@ class RunwareBase:
                 debug_key="image-background-removal-webhook"
             )
 
-        future, should_send = self._register_pending_operation(
+        future, should_send = await self._register_pending_operation(
             taskUUID,
             expected_results=1,
             complete_predicate=None,
@@ -1155,7 +1159,7 @@ class RunwareBase:
         try:
             if should_send:
                 await self.send([task_params])
-                self._mark_operation_sent(taskUUID)
+                await self._mark_operation_sent(taskUUID)
             results = await asyncio.wait_for(future, timeout=IMAGE_OPERATION_TIMEOUT / 1000)
             response = results[0]
             self._handle_error_response(response)
@@ -1169,7 +1173,7 @@ class RunwareBase:
         except RunwareAPIError:
             raise
         finally:
-            self._unregister_pending_operation(taskUUID)
+            await self._unregister_pending_operation(taskUUID)
 
     async def imageUpscale(self, upscaleGanPayload: "IImageUpscale") -> "Union[List[IImage], IAsyncTaskResponse]":
         async with self._request_semaphore:
@@ -1246,7 +1250,7 @@ class RunwareBase:
                 debug_key="image-upscale-webhook"
             )
 
-        future, should_send = self._register_pending_operation(
+        future, should_send = await self._register_pending_operation(
             taskUUID,
             expected_results=1,
             complete_predicate=None,
@@ -1256,7 +1260,7 @@ class RunwareBase:
         try:
             if should_send:
                 await self.send([task_params])
-                self._mark_operation_sent(taskUUID)
+                await self._mark_operation_sent(taskUUID)
             results = await asyncio.wait_for(future, timeout=IMAGE_OPERATION_TIMEOUT / 1000)
             response = results[0]
             self._handle_error_response(response)
@@ -1270,7 +1274,7 @@ class RunwareBase:
         except RunwareAPIError:
             raise
         finally:
-            self._unregister_pending_operation(taskUUID)
+            await self._unregister_pending_operation(taskUUID)
 
     async def imageVectorize(self, vectorizePayload: "IVectorize") -> "Union[List[IImage], IAsyncTaskResponse]":
         async with self._request_semaphore:
@@ -1319,7 +1323,7 @@ class RunwareBase:
                 debug_key="image-vectorize-webhook"
             )
 
-        future, should_send = self._register_pending_operation(
+        future, should_send = await self._register_pending_operation(
             taskUUID,
             expected_results=1,
             complete_predicate=None,
@@ -1330,7 +1334,7 @@ class RunwareBase:
 
             if should_send:
                 await self.send([task_params])
-                self._mark_operation_sent(taskUUID)
+                await self._mark_operation_sent(taskUUID)
             results = await asyncio.wait_for(future, timeout=IMAGE_OPERATION_TIMEOUT / 1000)
 
             if not results:
@@ -1350,7 +1354,7 @@ class RunwareBase:
         except RunwareAPIError:
             raise
         finally:
-            self._unregister_pending_operation(taskUUID)
+            await self._unregister_pending_operation(taskUUID)
 
     async def promptEnhance(
         self, promptEnhancer: "IPromptEnhance"
@@ -1401,7 +1405,7 @@ class RunwareBase:
                 debug_key="prompt-enhance-webhook"
             )
 
-        future, should_send = self._register_pending_operation(
+        future, should_send = await self._register_pending_operation(
             taskUUID,
             expected_results=promptVersions,
             complete_predicate=None,
@@ -1411,7 +1415,7 @@ class RunwareBase:
         try:
             if should_send:
                 await self.send([task_params])
-                self._mark_operation_sent(taskUUID)
+                await self._mark_operation_sent(taskUUID)
             results = await asyncio.wait_for(future, timeout=PROMPT_ENHANCE_TIMEOUT / 1000)
 
             if not results:
@@ -1436,11 +1440,10 @@ class RunwareBase:
         except RunwareAPIError:
             raise
         finally:
-            self._unregister_pending_operation(taskUUID)
+            await self._unregister_pending_operation(taskUUID)
 
     async def uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
-        async with self._request_semaphore:
-            return await self._retry_with_reconnect(self._uploadImage, file)
+        return await self._retry_with_reconnect(self._uploadImage, file)
 
     async def _uploadImage(self, file: "Union[File, str]") -> "Optional[UploadImageType]":
         await self.ensureConnection()
@@ -1471,7 +1474,7 @@ class RunwareBase:
         # Convert file to base64 (handles both File objects and string paths)
         file_data = await fileToBase64(file)
 
-        future, should_send = self._register_pending_operation(
+        future, should_send = await self._register_pending_operation(
             task_uuid,
             expected_results=1,
             complete_predicate=lambda r: True
@@ -1486,7 +1489,7 @@ class RunwareBase:
                         "image": file_data,
                     }
                 ])
-                self._mark_operation_sent(task_uuid)
+                await self._mark_operation_sent(task_uuid)
 
             results = await asyncio.wait_for(future, timeout=IMAGE_UPLOAD_TIMEOUT / 1000)
             response = results[0]
@@ -1505,11 +1508,10 @@ class RunwareBase:
         except RunwareAPIError:
             raise
         finally:
-            self._unregister_pending_operation(task_uuid)
+            await self._unregister_pending_operation(task_uuid)
 
     async def uploadMedia(self, media_url: str) -> "Optional[MediaStorageType]":
-        async with self._request_semaphore:
-            return await self._retry_with_reconnect(self._uploadMedia, media_url)
+        return await self._retry_with_reconnect(self._uploadMedia, media_url)
 
     async def _uploadMedia(self, media_url: str) -> "Optional[MediaStorageType]":
         await self.ensureConnection()
@@ -1526,7 +1528,7 @@ class RunwareBase:
                     media_data = media_data.split(",", 1)[1]
             # For URLs and base64 strings, send them directly to the API
 
-        future, should_send = self._register_pending_operation(
+        future, should_send = await self._register_pending_operation(
             task_uuid,
             expected_results=1,
             complete_predicate=lambda r: r.get("mediaUUID") is not None
@@ -1544,7 +1546,7 @@ class RunwareBase:
                         }
                     ]
                 )
-                self._mark_operation_sent(task_uuid)
+                await self._mark_operation_sent(task_uuid)
 
             results = await asyncio.wait_for(future, timeout=self._timeout / 1000)
             response = results[0]
@@ -1566,7 +1568,7 @@ class RunwareBase:
         except RunwareAPIError:
             raise
         finally:
-            self._unregister_pending_operation(task_uuid)
+            await self._unregister_pending_operation(task_uuid)
 
     async def listenToImages(
         self,
@@ -1863,7 +1865,7 @@ class RunwareBase:
         def is_ready(item: "Dict[str, Any]") -> bool:
             return item.get("status") == "ready"
 
-        future, should_send = self._register_pending_operation(
+        future, should_send = await self._register_pending_operation(
             task_uuid,
             expected_results=1,
             complete_predicate=is_ready,
@@ -1873,7 +1875,7 @@ class RunwareBase:
         try:
             if should_send:
                 await self.send([request_object])
-                self._mark_operation_sent(task_uuid)
+                await self._mark_operation_sent(task_uuid)
             results = await asyncio.wait_for(future, timeout=MODEL_UPLOAD_TIMEOUT / 1000)
 
             unique_statuses = set()
@@ -1917,7 +1919,7 @@ class RunwareBase:
         except RunwareAPIError:
             raise
         finally:
-            self._unregister_pending_operation(task_uuid)
+            await self._unregister_pending_operation(task_uuid)
 
     async def modelUpload(
             self, requestModel: "IUploadModelBaseType"
@@ -1948,7 +1950,7 @@ class RunwareBase:
                 }
             )
 
-            future, should_send = self._register_pending_operation(
+            future, should_send = await self._register_pending_operation(
                 task_uuid,
                 expected_results=1,
                 complete_predicate=lambda r: True
@@ -1957,7 +1959,7 @@ class RunwareBase:
             try:
                 if should_send:
                     await self.send([request_object])
-                    self._mark_operation_sent(task_uuid)
+                    await self._mark_operation_sent(task_uuid)
                 results = await asyncio.wait_for(future, timeout=self._timeout / 1000)
                 response = results[0]
                 self._handle_error_response(response)
@@ -1968,7 +1970,7 @@ class RunwareBase:
                     f"Timeout: {self._timeout}ms"
                 )
             finally:
-                self._unregister_pending_operation(task_uuid)
+                await self._unregister_pending_operation(task_uuid)
 
         except RunwareAPIError:
             raise
@@ -2274,7 +2276,7 @@ class RunwareBase:
         task_type: str,
         debug_key: str,
     ) -> "IAsyncTaskResponse":
-        future, should_send = self._register_pending_operation(
+        future, should_send = await self._register_pending_operation(
             task_uuid,
             expected_results=1,
             complete_predicate=lambda r: r.get("taskType") == task_type or r.get("taskUUID") == task_uuid
@@ -2283,7 +2285,7 @@ class RunwareBase:
         try:
             if should_send:
                 await self.send([request_object])
-                self._mark_operation_sent(task_uuid)
+                await self._mark_operation_sent(task_uuid)
             results = await asyncio.wait_for(future, timeout=WEBHOOK_TIMEOUT / 1000)
             response = results[0]
             self._handle_error_response(response)
@@ -2296,7 +2298,7 @@ class RunwareBase:
         except RunwareAPIError:
             raise
         finally:
-            self._unregister_pending_operation(task_uuid)
+            await self._unregister_pending_operation(task_uuid)
 
     async def _handleInitialVideoResponse(
             self,
@@ -2321,7 +2323,7 @@ class RunwareBase:
                 return True
             return False
 
-        future, should_send = self._register_pending_operation(
+        future, should_send = await self._register_pending_operation(
             task_uuid,
             expected_results=1,
             complete_predicate=is_video_complete
@@ -2332,7 +2334,7 @@ class RunwareBase:
         try:
             if should_send:
                 await self.send([request_object])
-                self._mark_operation_sent(task_uuid)
+                await self._mark_operation_sent(task_uuid)
             results = await asyncio.wait_for(future, timeout=timeout / 1000)
 
             if not results:
@@ -2369,10 +2371,10 @@ class RunwareBase:
         except RunwareAPIError:
             raise
         finally:
-            self._unregister_pending_operation(task_uuid)
+            await self._unregister_pending_operation(task_uuid)
 
     async def _sendPollRequest(self, task_uuid: str, poll_count: int) -> "List[Dict[str, Any]]":
-        future, should_send = self._register_pending_operation(
+        future, should_send = await self._register_pending_operation(
             task_uuid,
             expected_results=1,
             complete_predicate=lambda r: True
@@ -2383,7 +2385,7 @@ class RunwareBase:
                     "taskType": ETaskType.GET_RESPONSE.value,
                     "taskUUID": task_uuid
                 }])
-                self._mark_operation_sent(task_uuid)
+                await self._mark_operation_sent(task_uuid)
 
             results = await asyncio.wait_for(future, timeout=VIDEO_INITIAL_TIMEOUT / 1000)
             return results
@@ -2397,7 +2399,7 @@ class RunwareBase:
                 f"Poll: {poll_count} | Timeout: {VIDEO_INITIAL_TIMEOUT}ms"
             )
         finally:
-            self._unregister_pending_operation(task_uuid)
+            await self._unregister_pending_operation(task_uuid)
 
     def _hasPendingResults(self, responses: List[Dict[str, Any]]) -> bool:
         return any(response.get("status") == "processing" for response in responses)
@@ -2489,7 +2491,7 @@ class RunwareBase:
                 return True
             return False
 
-        future, should_send = self._register_pending_operation(
+        future, should_send = await self._register_pending_operation(
             task_uuid,
             expected_results=1,
             complete_predicate=is_audio_complete
@@ -2500,7 +2502,7 @@ class RunwareBase:
         try:
             if should_send:
                 await self.send([request_object])
-                self._mark_operation_sent(task_uuid)
+                await self._mark_operation_sent(task_uuid)
             results = await asyncio.wait_for(future, timeout=timeout / 1000)
 
             if not results:
@@ -2536,7 +2538,7 @@ class RunwareBase:
         except RunwareAPIError:
             raise
         finally:
-            self._unregister_pending_operation(task_uuid)
+            await self._unregister_pending_operation(task_uuid)
 
     def _processPollingResponse(self, responses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         completed_results: List[Dict[str, Any]] = []
@@ -2660,7 +2662,7 @@ class RunwareBase:
             return []
 
         except Exception:
-            self._unregister_pending_operation(task_uuid)
+            await self._unregister_pending_operation(task_uuid)
             raise
 
     def _createAudioFromResponse(self, response: Dict[str, Any]) -> IAudio:
