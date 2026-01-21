@@ -105,6 +105,12 @@ class EDeliveryMethod(Enum):
     SYNC = "sync"
     ASYNC = "async"
 
+class OperationState(Enum):
+    """State machine for pending operations."""
+    REGISTERED = "registered"      # Future created, request NOT sent
+    SENT = "sent"                  # send() completed successfully
+    DISCONNECTED = "disconnected"  # Connection lost after SENT
+
 
 # Define the types using Literal
 IOutputType = Literal["base64Data", "dataURI", "URL"]
