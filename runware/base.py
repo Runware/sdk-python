@@ -288,83 +288,126 @@ class RunwareBase:
             future.set_exception(RunwareAPIError(error))
         return True
 
-    async def _retry_with_reconnect(self, func, *args, **kwargs):
+    async def _do_reconnect(self, last_error: Optional[Exception] = None) -> bool:
+        async with self._reconnect_lock:
+            if self.connected() and self._connectionSessionUUID is not None:
+                self.logger.info("Connection already re-established by another task")
+                return True
+
+            should_open_circuit = self._reconnection_manager.on_auth_failure()
+
+            if should_open_circuit:
+                self.logger.error("Authentication circuit breaker opened due to repeated failures")
+                raise ConnectionError(
+                    f"Authentication circuit breaker opened due to repeated failures. "
+                    f"Last error: {str(last_error)}"
+                )
+
+            try:
+                self.logger.info(f"Reconnecting after error: {str(last_error)}")
+
+                self._invalidAPIkey = None
+                self._connectionSessionUUID = None
+
+                await self.connect()
+
+                if not self.connected():
+                    raise ConnectionError("Reconnection failed; WebSocket is not open")
+
+                self.logger.info("Reconnection successful")
+                return True
+
+            except Exception as reconnect_error:
+                self.logger.error(f"Error while reconnecting: {reconnect_error}", exc_info=True)
+                return False
+
+    async def _retry_with_reconnect(self, func, request_model, **func_kwargs):
+        last_error = None
+
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
-                result = await func(*args, **kwargs)
+                result = await func(request_model, **func_kwargs)
                 self._reconnection_manager.on_connection_success()
                 return result
-                
+
             except Exception as e:
                 last_error = e
-                
+
+                if not isinstance(e, ConnectionError):
+                    raise
+
+                if attempt >= MAX_RETRY_ATTEMPTS - 1:
+                    self.logger.error(f"Max retry attempts ({MAX_RETRY_ATTEMPTS}) exceeded")
+                    raise ConnectionError(
+                        f"Failed after {MAX_RETRY_ATTEMPTS} attempts. "
+                        f"Last error: {last_error}"
+                    )
+
+                reconnected = await self._do_reconnect(last_error)
+
+                if reconnected:
+                    jitter = uniform(0.1, 0.5) * (attempt + 1)
+                    await asyncio.sleep(jitter)
+                else:
+                    delay = self._reconnection_manager.calculate_delay()
+                    await asyncio.sleep(delay)
+
+    async def _retry_async_with_reconnect(self, func, request_model, task_type: str):
+        task_uuid = getattr(request_model, 'taskUUID', None)
+        delivery_method = getattr(request_model, 'deliveryMethod', None)
+
+        for attempt in range(MAX_RETRY_ATTEMPTS):
+            try:
+                result = await func(request_model)
+                self._reconnection_manager.on_connection_success()
+                return result
+
+            except Exception as e:
+                last_error = e
+
                 # When conflictTaskUUID: raise on first attempt, return async response on retry
                 if isinstance(e, RunwareAPIError) and e.code == "conflictTaskUUID":
                     if attempt == 0:
                         raise
-                    else:
-                        context = e.error_data.get("context", {})
-                        task_type = context.get("taskType")
-                        task_uuid = context.get("taskUUID") or e.error_data.get("taskUUID")
-                        delivery_method_raw = context.get("deliveryMethod")
-                        delivery_method_enum = EDeliveryMethod(delivery_method_raw) if isinstance(delivery_method_raw, str) else delivery_method_raw if delivery_method_raw else None
-                        
-                        if task_type and task_uuid and delivery_method_enum is EDeliveryMethod.ASYNC:
-                            return createAsyncTaskResponse({
-                                "taskType": task_type,
-                                "taskUUID": task_uuid
-                            })
-                        
-                        raise RunwareAPIError({
-                            "code": "conflictTaskUUIDDuringRetries",
-                            "message": "Lost connection during request submission",
+
+                    delivery_method_enum = None
+                    if delivery_method is not None:
+                        delivery_method_enum = (
+                            EDeliveryMethod(delivery_method)
+                            if isinstance(delivery_method, str)
+                            else delivery_method
+                        )
+
+                    if task_type and task_uuid and delivery_method_enum is EDeliveryMethod.ASYNC:
+                        return createAsyncTaskResponse({
+                            "taskType": task_type,
                             "taskUUID": task_uuid
                         })
-                
+
+                    raise RunwareAPIError({
+                        "code": "conflictTaskUUIDDuringRetries",
+                        "message": "Lost connection during request submission",
+                        "taskUUID": task_uuid
+                    })
+
                 if not isinstance(e, ConnectionError):
                     raise
-                
+
                 if attempt >= MAX_RETRY_ATTEMPTS - 1:
-                    self.logger.error(f"Max authentication retry attempts ({MAX_RETRY_ATTEMPTS}) exceeded")
+                    self.logger.error(f"Max retry attempts ({MAX_RETRY_ATTEMPTS}) exceeded")
                     raise ConnectionError(
-                        f"Failed to authenticate after {MAX_RETRY_ATTEMPTS} attempts. "
+                        f"Failed after {MAX_RETRY_ATTEMPTS} attempts. "
                         f"Last error: {last_error}"
                     )
-                
-                async with self._reconnect_lock:
-                    # Check if already connected (another concurrent task may have reconnected)
-                    if self.connected() and self._connectionSessionUUID is not None:
-                        self.logger.info("Connection already re-established by another task, retrying request")
-                        jitter = uniform(0.1, 0.5) * (attempt + 1)
-                        await asyncio.sleep(jitter)
-                        continue
-                    
-                    should_open_circuit = self._reconnection_manager.on_auth_failure()
-                    
-                    if should_open_circuit:
-                        self.logger.error("Authentication circuit breaker opened due to repeated failures")
-                        raise ConnectionError(
-                            f"Authentication circuit breaker opened due to repeated failures. "
-                            f"Last error: {str(last_error)}"
-                        )
-                    try:
-                        self.logger.info(f"Reconnecting after auth error: {str(e)}")
-                        
-                        self._invalidAPIkey = None
-                        self._connectionSessionUUID = None
-                        
-                        await self.connect()
-                        
 
-                        if not self.connected():
-                            raise ConnectionError("Reconnection failed; WebSocket is not open")
-                        
-                        self.logger.info("Reconnection successful, retrying request")
-                        
-                    except Exception as reconnect_error:
-                        self.logger.error(f"Error while reconnecting: {reconnect_error}", exc_info=True)
-                        delay = self._reconnection_manager.calculate_delay()
-                        await asyncio.sleep(delay)
+                reconnected = await self._do_reconnect(last_error)
+
+                if reconnected:
+                    jitter = uniform(0.1, 0.5) * (attempt + 1)
+                    await asyncio.sleep(jitter)
+                else:
+                    delay = self._reconnection_manager.calculate_delay()
+                    await asyncio.sleep(delay)
 
     def _handle_error_response(self, response: Dict[str, Any]) -> None:
         """
@@ -576,7 +619,11 @@ class RunwareBase:
             self, requestImage: "IImageInference"
     ) -> "Union[List[IImage], IAsyncTaskResponse]":
         async with self._request_semaphore:
-            return await self._retry_with_reconnect(self._imageInference, requestImage)
+            return await self._retry_async_with_reconnect(
+                self._imageInference,
+                requestImage,
+                task_type=ETaskType.IMAGE_INFERENCE.value
+            )
 
     async def _imageInference(
             self, requestImage: "IImageInference"
@@ -827,7 +874,11 @@ class RunwareBase:
 
     async def videoCaption(self, requestVideoCaption: "IVideoCaption") -> "Union[List[IVideoToText], IAsyncTaskResponse]":
         async with self._request_semaphore:
-            return await self._retry_with_reconnect(self._requestVideoCaption, requestVideoCaption)
+            return await self._retry_async_with_reconnect(
+                self._requestVideoCaption,
+                requestVideoCaption,
+                task_type=ETaskType.VIDEO_CAPTION.value
+            )
 
     async def _requestVideoCaption(
             self, requestVideoCaption: "IVideoCaption"
@@ -868,7 +919,11 @@ class RunwareBase:
     async def videoBackgroundRemoval(self,
                                      requestVideoBackgroundRemoval: "IVideoBackgroundRemoval") -> "Union[List[IVideo], IAsyncTaskResponse]":
         async with self._request_semaphore:
-            return await self._retry_with_reconnect(self._requestVideoBackgroundRemoval, requestVideoBackgroundRemoval)
+            return await self._retry_async_with_reconnect(
+                self._requestVideoBackgroundRemoval,
+                requestVideoBackgroundRemoval,
+                task_type=ETaskType.VIDEO_BACKGROUND_REMOVAL.value
+            )
 
     async def _requestVideoBackgroundRemoval(
             self, requestVideoBackgroundRemoval: "IVideoBackgroundRemoval"
@@ -922,7 +977,11 @@ class RunwareBase:
 
     async def videoUpscale(self, requestVideoUpscale: "IVideoUpscale") -> "Union[List[IVideo], IAsyncTaskResponse]":
         async with self._request_semaphore:
-            return await self._retry_with_reconnect(self._requestVideoUpscale, requestVideoUpscale)
+            return await self._retry_async_with_reconnect(
+                self._requestVideoUpscale,
+                requestVideoUpscale,
+                task_type=ETaskType.VIDEO_UPSCALE.value
+            )
 
     async def _requestVideoUpscale(self, requestVideoUpscale: "IVideoUpscale") -> "Union[List[IVideo], IAsyncTaskResponse]":
         await self.ensureConnection()
@@ -1853,7 +1912,11 @@ class RunwareBase:
 
     async def videoInference(self, requestVideo: "IVideoInference") -> "Union[List[IVideo], IAsyncTaskResponse]":
         async with self._request_semaphore:
-            return await self._retry_with_reconnect(self._videoInference, requestVideo)
+            return await self._retry_async_with_reconnect(
+                self._videoInference,
+                requestVideo,
+                task_type=ETaskType.VIDEO_INFERENCE.value
+            )
 
     async def _videoInference(self, requestVideo: IVideoInference) -> Union[List[IVideo], IAsyncTaskResponse]:
         await self.ensureConnection()
@@ -2269,7 +2332,11 @@ class RunwareBase:
 
     async def audioInference(self, requestAudio: "IAudioInference") -> "Union[List[IAudio], IAsyncTaskResponse]":
         async with self._request_semaphore:
-            return await self._retry_with_reconnect(self._requestAudio, requestAudio)
+            return await self._retry_async_with_reconnect(
+                self._requestAudio,
+                requestAudio,
+                task_type=ETaskType.AUDIO_INFERENCE.value
+            )
 
     async def _requestAudio(self, requestAudio: "IAudioInference") -> Union[List["IAudio"], "IAsyncTaskResponse"]:
         await self.ensureConnection()
