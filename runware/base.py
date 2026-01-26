@@ -530,8 +530,7 @@ class RunwareBase:
                     )
 
             request_object = self._buildImageRequest(requestImage, prompt, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
-            import json
-            print(f"\n\n[DEBUG] REQUEST OBJECT: {json.dumps(request_object, indent=4)}")
+            
             delivery_method_enum = EDeliveryMethod(requestImage.deliveryMethod) if isinstance(requestImage.deliveryMethod, str) else requestImage.deliveryMethod
             
             if delivery_method_enum is EDeliveryMethod.ASYNC:
@@ -2644,8 +2643,7 @@ class RunwareBase:
             for poll_count in range(MAX_POLLS):
                 try:
                     responses = await self._sendPollRequest(task_uuid, poll_count)
-                    import json
-                    print(f"\n\n[DEBUG] RESPONSES: {json.dumps(responses, indent=4)}")
+                    
                     for response in responses:
                         self._handle_error_response(response)
 
