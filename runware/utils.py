@@ -29,6 +29,7 @@ from .types import (
     IError,
     UploadImageType,
     IAsyncTaskResponse,
+    IOutput,
 )
 import logging
 
@@ -864,6 +865,7 @@ async def getIntervalWithPromise(
 def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
     """
     Instantiates a dataclass object from a dictionary, filtering out any unknown attributes.
+    Handles nested dataclasses by recursively instantiating them.
 
     :param dataclass_type: The dataclass type to instantiate.
     :param data: A dictionary with data.
@@ -872,7 +874,17 @@ def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
     # Get the set of valid field names for the dataclass
     valid_fields = {f.name for f in fields(dataclass_type)}
     # Filter the data to include only valid fields
-    filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+    filtered_data = {}
+    for k, v in data.items():
+        if k not in valid_fields:
+            continue
+        
+        # Handle nested dataclasses (e.g., outputs -> IOutput)
+        if k == "outputs" and isinstance(v, dict):
+            filtered_data[k] = instantiateDataclass(IOutput, v)
+        else:
+            filtered_data[k] = v
+    
     return dataclass_type(**filtered_data)
 
 
