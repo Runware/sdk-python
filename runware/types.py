@@ -607,16 +607,6 @@ class ISourcefulProviderSettings(BaseProviderSettings):
     def provider_key(self) -> str:
         return "sourceful"
 
-    def serialize(self) -> Dict[str, Any]:
-        result = {}
-        if self.transparency is not None:
-            result["transparency"] = self.transparency
-        if self.enhancePrompt is not None:
-            result["enhancePrompt"] = self.enhancePrompt
-        if self.fontInputs is not None:
-            result["fontInputs"] = self.fontInputs
-        return result
-
 
 ImageProviderSettings = (
     IOpenAIProviderSettings
