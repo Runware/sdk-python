@@ -598,10 +598,16 @@ class IMireloProviderSettings(BaseProviderSettings):
 
 
 @dataclass
+class ISourcefulFontInput(SerializableMixin):
+    fontUrl: Optional[str] = None
+    text: Optional[str] = None
+
+
+@dataclass
 class ISourcefulProviderSettings(BaseProviderSettings):
     transparency: Optional[bool] = None
     enhancePrompt: Optional[bool] = None
-    fontInputs: Optional[List[Dict[str, Any]]] = None
+    fontInputs: Optional[List[ISourcefulFontInput]] = None
 
     @property
     def provider_key(self) -> str:
