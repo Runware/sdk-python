@@ -11,8 +11,8 @@ import uuid
 import json
 import mimetypes
 import inspect
-from typing import Any, Dict, List, Union, Optional, TypeVar, Type, Coroutine
-from dataclasses import fields
+from typing import Any, Dict, List, Union, Optional, TypeVar, Type, Coroutine, get_type_hints, get_origin, get_args
+from dataclasses import fields, is_dataclass
 from .types import (
     Environment,
     EPreProcessor,
@@ -871,17 +871,35 @@ def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
     :param data: A dictionary with data.
     :return: An instantiated dataclass object.
     """
-    # Get the set of valid field names for the dataclass
+    hints = get_type_hints(dataclass_type)
     valid_fields = {f.name for f in fields(dataclass_type)}
-    # Filter the data to include only valid fields
     filtered_data = {}
+    
     for k, v in data.items():
         if k not in valid_fields:
             continue
         
-        # Handle nested dataclasses (e.g., outputs -> IOutput)
-        if k == "outputs" and isinstance(v, dict):
-            filtered_data[k] = instantiateDataclass(IOutput, v)
+        if v is None:
+            filtered_data[k] = None
+            continue
+        
+        field_type = hints.get(k)
+        
+        # Unwrap Optional[X] -> X
+        if get_origin(field_type) is Union:
+            args = [a for a in get_args(field_type) if a is not type(None)]
+            field_type = args[0] if args else field_type
+        
+        # Nested dataclass
+        if is_dataclass(field_type) and isinstance(v, dict):
+            filtered_data[k] = instantiateDataclass(field_type, v)
+        # List[Dataclass]
+        elif get_origin(field_type) is list and isinstance(v, list):
+            inner = get_args(field_type)[0] if get_args(field_type) else None
+            if inner and is_dataclass(inner):
+                filtered_data[k] = [instantiateDataclass(inner, i) if isinstance(i, dict) else i for i in v]
+            else:
+                filtered_data[k] = v
         else:
             filtered_data[k] = v
     
