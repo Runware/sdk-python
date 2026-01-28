@@ -694,6 +694,7 @@ class IVideoInputs(SerializableMixin):
     mask: Optional[Union[str, File]] = None
     frame: Optional[str] = None
     draftId: Optional[str] = None
+    videoId: Optional[str] = None
     
     def __post_init__(self):
         if self.frames is not None:
@@ -1362,6 +1363,7 @@ class IAudioInference:
 @dataclass
 class IOutput:
     draftId: Optional[str] = None
+    videoId: Optional[str] = None
 
 
 @dataclass
