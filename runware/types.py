@@ -693,7 +693,7 @@ class IVideoInputs(SerializableMixin):
     speech: Optional[List[ISpeechInput]] = None
     mask: Optional[Union[str, File]] = None
     frame: Optional[str] = None
-    draftTaskId: Optional[str] = None
+    draftId: Optional[str] = None
     
     def __post_init__(self):
         if self.frames is not None:
