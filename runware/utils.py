@@ -29,7 +29,7 @@ from .types import (
     IError,
     UploadImageType,
     IAsyncTaskResponse,
-    IOutput,
+    I3d,
 )
 import logging
 
@@ -769,6 +769,18 @@ def createVideoToTextFromResponse(response: dict) -> IVideoToText:
                 processed_fields[field.name] = response[field.name]
 
     return instantiateDataclass(IVideoToText, processed_fields)
+
+
+def create3dFromResponse(response: dict) -> I3d:
+    """Build I3d from API response (same pattern as createVideoToTextFromResponse)."""
+    processed_fields = {}
+    for field in fields(I3d):
+        if field.name in response:
+            if field.type == float or field.type == Optional[float]:
+                processed_fields[field.name] = float(response[field.name])
+            else:
+                processed_fields[field.name] = response[field.name]
+    return instantiateDataclass(I3d, processed_fields)
 
 
 async def getIntervalWithPromise(
