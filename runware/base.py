@@ -1873,10 +1873,10 @@ class RunwareBase:
         await self.ensureConnection()
         return await self._requestVideo(requestVideo)
 
-    async def inference3D(self, request3d: I3dInference) -> Union[List[I3d], IAsyncTaskResponse]:
-        return await self._retry_with_reconnect(self._inference3D, request3d)
+    async def inference3d(self, request3d: I3dInference) -> Union[List[I3d], IAsyncTaskResponse]:
+        return await self._retry_with_reconnect(self._inference3d, request3d)
 
-    async def _inference3D(self, request3d: I3dInference) -> Union[List[I3d], IAsyncTaskResponse]:
+    async def _inference3d(self, request3d: I3dInference) -> Union[List[I3d], IAsyncTaskResponse]:
         await self.ensureConnection()
         return await self._request3d(request3d)
 
