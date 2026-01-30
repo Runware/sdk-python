@@ -666,6 +666,7 @@ class IInputs(SerializableMixin):
     references: Optional[List[Union[str, File]]] = None
     referenceImages: Optional[List[Union[str, File, IInputReference]]] = None
     image: Optional[Union[str, File]] = None
+    mask: Optional[Union[str, File]] = None
     superResolutionReferences: Optional[List[Union[str, File]]] = None
     
     @property
