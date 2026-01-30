@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.42]
+
+### Added
+- Added `IOutput` dataclass with the following parameters:
+  - `draftId: Optional[str] = None`
+  - `videoId: Optional[str] = None`
+- Added `IVideo.outputs: Optional[IOutput] = None` to support draft ID in video responses
+- Added `IVideoInputs.draftId: Optional[str] = None` for passing draft task ID in video inference inputs for bytedance:seedance@1.5-pro
+- Added `IVideoInputs.videoId: Optional[str] = None` for passing video ID in video inference inputs for openai:3@1
+- Added `IBytedanceProviderSettings.draft: Optional[bool] = None` to enable draft mode for Seedance video generation
+- Added `IInputs.mask: Optional[Union[str, File]] = None`
+- Added `ISourcefulProviderSettings` with the following parameters:
+  - `transparency: Optional[bool] = None`
+  - `enhancePrompt: Optional[bool] = None`
+  - `fontInputs: Optional[List[Dict[str, Any]]] = None`
+- Added `IInputs.superResolutionReferences: Optional[List[Union[str, File]]] = None` for super resolution guidance in image-to-image inference
+
+### Changed
+- Enhanced `instantiateDataclass()` function to automatically handle nested dataclasses
+
 ## [0.4.41]
 
 ### Changed

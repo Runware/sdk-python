@@ -598,6 +598,23 @@ class IMireloProviderSettings(BaseProviderSettings):
         return "mirelo"
 
 
+@dataclass
+class ISourcefulFontInput(SerializableMixin):
+    fontUrl: Optional[str] = None
+    text: Optional[str] = None
+
+
+@dataclass
+class ISourcefulProviderSettings(BaseProviderSettings):
+    transparency: Optional[bool] = None
+    enhancePrompt: Optional[bool] = None
+    fontInputs: Optional[List[ISourcefulFontInput]] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "sourceful"
+
+
 ImageProviderSettings = (
     IOpenAIProviderSettings
     | IBriaProviderSettings
@@ -605,6 +622,7 @@ ImageProviderSettings = (
     | IMidjourneyProviderSettings
     | IAlibabaProviderSettings
     | IBlackForestLabsProviderSettings
+    | ISourcefulProviderSettings
 )
 
 @dataclass
@@ -649,6 +667,8 @@ class IInputs(SerializableMixin):
     references: Optional[List[Union[str, File]]] = None
     referenceImages: Optional[List[Union[str, File, IInputReference]]] = None
     image: Optional[Union[str, File]] = None
+    mask: Optional[Union[str, File]] = None
+    superResolutionReferences: Optional[List[Union[str, File]]] = None
     
     @property
     def request_key(self) -> str:
@@ -695,6 +715,7 @@ class IVideoInputs(SerializableMixin):
     mask: Optional[Union[str, File]] = None
     frame: Optional[str] = None
     draftId: Optional[str] = None
+    videoId: Optional[str] = None
     
     def __post_init__(self):
         if self.frames is not None:
@@ -1398,6 +1419,7 @@ class I3dObject:
 class IOutput:
     draftId: Optional[str] = None
     files: Optional[List[I3dObject]] = None
+    videoId: Optional[str] = None
 
 
 @dataclass
