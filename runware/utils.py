@@ -772,7 +772,7 @@ def createVideoToTextFromResponse(response: dict) -> IVideoToText:
 
 
 def create3dFromResponse(response: dict) -> I3d:
-    """Build I3d from API response (same pattern as createVideoToTextFromResponse)."""
+    
     processed_fields = {}
     for field in fields(I3d):
         if field.name in response:

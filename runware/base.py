@@ -1874,10 +1874,10 @@ class RunwareBase:
         await self.ensureConnection()
         return await self._requestVideo(requestVideo)
 
-    async def inference_3d(self, request3d: I3dInference) -> Union[List[I3d], IAsyncTaskResponse]:
-        return await self._retry_with_reconnect(self._inference_3d, request3d)
+    async def inference3D(self, request3d: I3dInference) -> Union[List[I3d], IAsyncTaskResponse]:
+        return await self._retry_with_reconnect(self._inference3D, request3d)
 
-    async def _inference_3d(self, request3d: I3dInference) -> Union[List[I3d], IAsyncTaskResponse]:
+    async def _inference3D(self, request3d: I3dInference) -> Union[List[I3d], IAsyncTaskResponse]:
         await self.ensureConnection()
         return await self._request3d(request3d)
 
@@ -2352,7 +2352,8 @@ class RunwareBase:
                     del self._globalMessages[task_uuid]
                     raise RunwareAPIError(response)
 
-                if response.get("status") == "success" or (response.get("outputs") or {}).get("files"):
+                outputs = response.get("outputs")
+                if response.get("status") == "success" or (outputs is not None and outputs.get("files") is not None):
                     del self._globalMessages[task_uuid]
                     resolve([response])
                     return True
@@ -2400,7 +2401,7 @@ class RunwareBase:
         if isinstance(initial_response[0], IAsyncTaskResponse):
             return initial_response[0]
 
-        return [create3dFromResponse(r) for r in initial_response]
+        return instantiateDataclassList(I3d, initial_response)
 
     async def _handleInitialImageResponse(
         self,
@@ -2799,8 +2800,7 @@ class RunwareBase:
 
                     if len(completed_results) >= number_results:
                         results = completed_results[:number_results]
-                        if response_cls is I3d:
-                            return [create3dFromResponse(r) for r in results]
+
                         return instantiateDataclassList(
                             response_cls,
                             results
