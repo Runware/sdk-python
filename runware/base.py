@@ -61,7 +61,6 @@ from .utils import (
     createImageFromResponse,
     createImageToTextFromResponse,
     createVideoToTextFromResponse,
-    create3dFromResponse,
     createEnhancedPromptsFromResponse,
     instantiateDataclassList,
     RunwareAPIError,
@@ -2799,11 +2798,10 @@ class RunwareBase:
                     completed_results.extend(processed_responses)
 
                     if len(completed_results) >= number_results:
-                        results = completed_results[:number_results]
 
                         return instantiateDataclassList(
                             response_cls,
-                            results
+                            completed_results[:number_results]
                         )
 
                     if not processed_responses and not self._hasPendingResults(responses):
