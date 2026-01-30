@@ -713,6 +713,8 @@ class IVideoInputs(SerializableMixin):
     speech: Optional[List[ISpeechInput]] = None
     mask: Optional[Union[str, File]] = None
     frame: Optional[str] = None
+    draftId: Optional[str] = None
+    videoId: Optional[str] = None
     
     def __post_init__(self):
         if self.frames is not None:
@@ -1092,6 +1094,7 @@ class IBytedanceProviderSettings(BaseProviderSettings):
     maxSequentialImages: Optional[int] = None  # Min: 1, Max: 15 - Maximum number of sequential images to generate
     fastMode: Optional[bool] = None  # When enabled, speeds up generation by sacrificing some effects. Default: false. RTF: 25-28 (fast) vs 35 (normal)
     audio: Optional[bool] = None
+    draft: Optional[bool] = None
 
     @property
     def provider_key(self) -> str:
@@ -1378,6 +1381,12 @@ class IAudioInference:
 
 
 @dataclass
+class IOutput:
+    draftId: Optional[str] = None
+    videoId: Optional[str] = None
+
+
+@dataclass
 class IVideo:
     taskType: str
     taskUUID: str
@@ -1388,6 +1397,7 @@ class IVideo:
     mediaURL: Optional[str] = None
     cost: Optional[float] = None
     seed: Optional[int] = None
+    outputs: Optional[IOutput] = None
 
 
 @dataclass
