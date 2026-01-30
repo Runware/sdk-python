@@ -597,6 +597,23 @@ class IMireloProviderSettings(BaseProviderSettings):
         return "mirelo"
 
 
+@dataclass
+class ISourcefulFontInput(SerializableMixin):
+    fontUrl: Optional[str] = None
+    text: Optional[str] = None
+
+
+@dataclass
+class ISourcefulProviderSettings(BaseProviderSettings):
+    transparency: Optional[bool] = None
+    enhancePrompt: Optional[bool] = None
+    fontInputs: Optional[List[ISourcefulFontInput]] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "sourceful"
+
+
 ImageProviderSettings = (
     IOpenAIProviderSettings
     | IBriaProviderSettings
@@ -604,6 +621,7 @@ ImageProviderSettings = (
     | IMidjourneyProviderSettings
     | IAlibabaProviderSettings
     | IBlackForestLabsProviderSettings
+    | ISourcefulProviderSettings
 )
 
 @dataclass
@@ -648,6 +666,7 @@ class IInputs(SerializableMixin):
     references: Optional[List[Union[str, File]]] = None
     referenceImages: Optional[List[Union[str, File, IInputReference]]] = None
     image: Optional[Union[str, File]] = None
+    superResolutionReferences: Optional[List[Union[str, File]]] = None
     
     @property
     def request_key(self) -> str:
