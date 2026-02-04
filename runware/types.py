@@ -1209,6 +1209,7 @@ class IViduProviderSettings(BaseProviderSettings):
     style: Optional[str] = None
     movementAmplitude: Optional[str] = None
     template: Optional[IViduTemplate] = None
+    audio: Optional[bool] = None
 
     @property
     def provider_key(self) -> str:
