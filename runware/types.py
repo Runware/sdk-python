@@ -1,7 +1,6 @@
 from abc import abstractmethod, ABC
 from enum import Enum
 from dataclasses import dataclass, field, asdict
-from token import OP
 from typing import List, Union, Optional, Callable, Any, Dict, TypeVar, Literal
 import warnings
 
