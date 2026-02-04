@@ -1,6 +1,7 @@
 from abc import abstractmethod, ABC
 from enum import Enum
 from dataclasses import dataclass, field, asdict
+from token import OP
 from typing import List, Union, Optional, Callable, Any, Dict, TypeVar, Literal
 import warnings
 
@@ -614,6 +615,23 @@ class ISourcefulProviderSettings(BaseProviderSettings):
         return "sourceful"
 
 
+@dataclass
+class IUltralytics(SerializableMixin):
+    
+    maskBlur: Optional[int] = None  
+    maskPadding: Optional[int] = None  
+    confidence: Optional[float] = None  
+    positivePrompt: Optional[str] = None  
+    negativePrompt: Optional[str] = None  
+    steps: Optional[int] = None  
+    CFGScale: Optional[float] = None  
+    strength: Optional[float] = None  
+
+    @property
+    def request_key(self) -> str:
+        return "ultralytics"
+
+
 ImageProviderSettings = (
     IOpenAIProviderSettings
     | IBriaProviderSettings
@@ -643,7 +661,8 @@ class ISettings(SerializableMixin):
     topP: Optional[float] = None
     layers: Optional[int] = None  
     trueCFGScale: Optional[float] = None  
-
+    quality: Optional[str] = None
+    
     @property
     def request_key(self) -> str:
         return "settings"  
@@ -796,6 +815,7 @@ class IImageInference:
     safety: Optional[ISafety] = None
     settings: Optional[ISettings] = None
     inputs: Optional[IInputs] = None
+    ultralytics: Optional[IUltralytics] = None
     useCache: Optional[bool] = None
     resolution: Optional[str] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
