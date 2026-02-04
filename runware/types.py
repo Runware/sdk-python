@@ -616,16 +616,15 @@ class ISourcefulProviderSettings(BaseProviderSettings):
 
 @dataclass
 class IUltralytics(SerializableMixin):
-    
-    maskBlur: Optional[int] = None  
-    maskPadding: Optional[int] = None  
-    confidence: Optional[float] = None  
-    positivePrompt: Optional[str] = None  
-    negativePrompt: Optional[str] = None  
-    steps: Optional[int] = None  
-    CFGScale: Optional[float] = None  
-    strength: Optional[float] = None  
 
+    maskBlur: Optional[int] = None
+    maskPadding: Optional[int] = None
+    confidence: Optional[float] = None
+    positivePrompt: Optional[str] = None
+    negativePrompt: Optional[str] = None
+    steps: Optional[int] = None
+    CFGScale: Optional[float] = None
+    strength: Optional[float] = None
     @property
     def request_key(self) -> str:
         return "ultralytics"
