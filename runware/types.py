@@ -125,6 +125,12 @@ class IAsyncTaskResponse:
 
 
 @dataclass
+class IGetResponseType:
+    taskUUID: str
+    numberResults: int = 1
+
+
+@dataclass
 class RunwareBaseType:
     apiKey: str
     url: Optional[str] = None
