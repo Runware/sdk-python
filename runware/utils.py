@@ -117,6 +117,14 @@ AUDIO_INITIAL_TIMEOUT = int(os.environ.get(
     30000
 ))
 
+# Text initial response timeout (milliseconds)
+# Maximum time to wait for the initial text response before falling back to async handling
+# Used in: _handleInitialTextResponse() for async delivery method
+TEXT_INITIAL_TIMEOUT = int(os.environ.get(
+    "RUNWARE_TEXT_INITIAL_TIMEOUT",
+    30000
+))
+
 # Audio generation timeout (milliseconds)
 # Maximum time to wait for audio generation completion
 # Used in: _waitForAudioCompletion() for single audio generation
