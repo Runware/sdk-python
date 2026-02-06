@@ -1504,6 +1504,10 @@ class ITextInference:
     deliveryMethod: str = "sync"
     maxTokens: Optional[int] = None
     temperature: Optional[float] = None
+    topP: Optional[float] = None  # Nucleus sampling, 0.0-1.0
+    topK: Optional[int] = None  # Top-K sampling, 1-100
+    seed: Optional[int] = None  # Random seed, 0-4294967295
+    stopSequences: Optional[List[str]] = None  # Stop generation sequences (max 5 items, 50 chars each)
     includeCost: Optional[bool] = None
     providerSettings: Optional[TextProviderSettings] = None
 

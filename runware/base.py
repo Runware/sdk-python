@@ -87,6 +87,7 @@ from .utils import (
     MODEL_UPLOAD_TIMEOUT,
     IMAGE_INITIAL_TIMEOUT,
     IMAGE_POLLING_DELAY,
+    TEXT_POLLING_DELAY,
     AUDIO_INITIAL_TIMEOUT,
     AUDIO_INFERENCE_TIMEOUT,
     AUDIO_POLLING_DELAY,
@@ -2081,6 +2082,14 @@ class RunwareBase:
             request_object["maxTokens"] = requestText.maxTokens
         if requestText.temperature is not None:
             request_object["temperature"] = requestText.temperature
+        if requestText.topP is not None:
+            request_object["topP"] = requestText.topP
+        if requestText.topK is not None:
+            request_object["topK"] = requestText.topK
+        if requestText.seed is not None:
+            request_object["seed"] = requestText.seed
+        if requestText.stopSequences is not None:
+            request_object["stopSequences"] = requestText.stopSequences
         if requestText.includeCost is not None:
             request_object["includeCost"] = requestText.includeCost
         self._addTextProviderSettings(request_object, requestText)
@@ -2903,7 +2912,7 @@ class RunwareBase:
                     return (
                         IText,
                         MAX_POLLS,
-                        IMAGE_POLLING_DELAY,
+                        TEXT_POLLING_DELAY,
                         f"Text generation timeout after {MAX_POLLS} polls"
                     )
                 case _:

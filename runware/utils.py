@@ -157,6 +157,14 @@ IMAGE_POLLING_DELAY = int(os.environ.get(
     1000
 ))
 
+# Text polling delay (milliseconds)
+# Delay between consecutive polling requests for text generation status
+# Used in: _pollResults() for checking textInference task progress
+TEXT_POLLING_DELAY = int(os.environ.get(
+    "RUNWARE_TEXT_POLLING_DELAY",
+    1000
+))
+
 # Prompt enhancement timeout (milliseconds)
 # Maximum time to wait for prompt enhancement completion
 # Used in: promptEnhance() for enhancing text prompts
