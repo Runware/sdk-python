@@ -1410,14 +1410,14 @@ class IAudioInference:
 
 
 @dataclass
-class I3dObject:
+class IObject:
     uuid: str
     url: str
 
 
 @dataclass
 class I3dOutput:
-    files: Optional[List[I3dObject]] = None
+    files: Optional[List[IObject]] = None
 
 
 @dataclass
