@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.43]
+
+### Added
+- Added support for "3dInference" task type
+- Added `I3dInputs` dataclass with image and mask parameters for 3D inference inputs
+- Added `I3dOutputFormat` type: Literal["GLB", "PLY"]
+- Added `I3dInference` dataclass for 3D inference requests (model, positivePrompt, seed, inputs, outputFormat, etc.)
+- Added `IObject` dataclass with uuid and url for 3D output files
+- Added `I3dOutput` dataclass with `files: Optional[List[IObject]] = None` for 3D output files in responses
+- Added `I3d` dataclass for 3D inference responses (taskType, taskUUID, cost, status, seed, outputs)
+- Added `inference3d()` method to Runware for 3D inference
+- Added `getResponse()` support for `List[I3d]` when polling 3dInference tasks
+- Added `_handleInitial3dResponse`, `_process3dInputs`, `_build3dRequest`, `_request3d` in base
+- Added `IUltralytics` dataclass with the following parameters:
+  - `maskBlur: Optional[int]`
+  - `maskPadding: Optional[int]`
+  - `confidence: Optional[float]`
+  - `positivePrompt: Optional[str]`
+  - `negativePrompt: Optional[str]`
+  - `steps: Optional[int]`
+  - `CFGScale: Optional[float]`
+  - `strength: Optional[float]`
+- Added `IImageInference.ultralytics: Optional[IUltralytics]`
+- Added `quality: Optional[str] = None` to `ISettings`
+- Added `audio: Optional[bool] = None` to `IViduProviderSettings`
+
+### Changed
+- Split `IOutput` into media-specific output types: `IOutput` (video: draftId, videoId) and `I3dOutput` (3D: files)
+
 ## [0.4.42]
 
 ### Added
