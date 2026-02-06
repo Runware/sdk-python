@@ -117,6 +117,14 @@ AUDIO_INITIAL_TIMEOUT = int(os.environ.get(
     30000
 ))
 
+# Text initial response timeout (milliseconds)
+# Maximum time to wait for the initial text response before falling back to async handling
+# Used in: _handleInitialTextResponse() for async delivery method
+TEXT_INITIAL_TIMEOUT = int(os.environ.get(
+    "RUNWARE_TEXT_INITIAL_TIMEOUT",
+    30000
+))
+
 # Audio generation timeout (milliseconds)
 # Maximum time to wait for audio generation completion
 # Used in: _waitForAudioCompletion() for single audio generation
@@ -146,6 +154,14 @@ IMAGE_INITIAL_TIMEOUT = int(os.environ.get(
 # Used in: _pollResults() for checking image generation progress
 IMAGE_POLLING_DELAY = int(os.environ.get(
     "RUNWARE_IMAGE_POLLING_DELAY",
+    1000
+))
+
+# Text polling delay (milliseconds)
+# Delay between consecutive polling requests for text generation status
+# Used in: _pollResults() for checking textInference task progress
+TEXT_POLLING_DELAY = int(os.environ.get(
+    "RUNWARE_TEXT_POLLING_DELAY",
     1000
 ))
 

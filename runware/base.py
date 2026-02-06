@@ -52,6 +52,8 @@ from .types import (
     IVectorize,
     I3dInference,
     I3d,
+    ITextInference,
+    IText,
 )
 from .types import IImage, IError, SdkType, ListenerType
 from .utils import (
@@ -75,6 +77,7 @@ from .utils import (
     process_image,
     createAsyncTaskResponse,
     VIDEO_INITIAL_TIMEOUT,
+    TEXT_INITIAL_TIMEOUT,
     VIDEO_POLLING_DELAY,
     WEBHOOK_TIMEOUT,
     IMAGE_INFERENCE_TIMEOUT,
@@ -84,6 +87,7 @@ from .utils import (
     MODEL_UPLOAD_TIMEOUT,
     IMAGE_INITIAL_TIMEOUT,
     IMAGE_POLLING_DELAY,
+    TEXT_POLLING_DELAY,
     AUDIO_INITIAL_TIMEOUT,
     AUDIO_INFERENCE_TIMEOUT,
     AUDIO_POLLING_DELAY,
@@ -1880,18 +1884,25 @@ class RunwareBase:
         await self.ensureConnection()
         return await self._request3d(request3d)
 
+    async def textInference(self, requestText: ITextInference) -> Union[List[IText], IAsyncTaskResponse]:
+        return await self._retry_with_reconnect(self._textInference, requestText)
+
+    async def _textInference(self, requestText: ITextInference) -> Union[List[IText], IAsyncTaskResponse]:
+        await self.ensureConnection()
+        return await self._requestText(requestText)
+
     async def getResponse(
         self,
         taskUUID: str,
         numberResults: Optional[int] = 1,
-    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage], List[I3d]]:
+    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage], List[I3d], List[IText]]:
         return await self._retry_with_reconnect(self._getResponse, taskUUID, numberResults)
 
     async def _getResponse(
         self,
         taskUUID: str,
         numberResults: Optional[int] = 1,
-    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage], List[I3d]]:
+    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage], List[I3d], List[IText]]:
         await self.ensureConnection()
 
         return await self._pollResults(
@@ -2058,6 +2069,121 @@ class RunwareBase:
             request_object.get("webhookURL"),
             "3d-inference-initial",
         )
+
+    def _buildTextRequest(self, requestText: ITextInference) -> Dict[str, Any]:
+        request_object: Dict[str, Any] = {
+            "taskType": ETaskType.TEXT_INFERENCE.value,
+            "taskUUID": requestText.taskUUID,
+            "model": requestText.model,
+            "deliveryMethod": requestText.deliveryMethod,
+            "messages": [asdict(m) for m in requestText.messages],
+        }
+        if requestText.maxTokens is not None:
+            request_object["maxTokens"] = requestText.maxTokens
+        if requestText.temperature is not None:
+            request_object["temperature"] = requestText.temperature
+        if requestText.topP is not None:
+            request_object["topP"] = requestText.topP
+        if requestText.topK is not None:
+            request_object["topK"] = requestText.topK
+        if requestText.seed is not None:
+            request_object["seed"] = requestText.seed
+        if requestText.stopSequences is not None:
+            request_object["stopSequences"] = requestText.stopSequences
+        if requestText.includeCost is not None:
+            request_object["includeCost"] = requestText.includeCost
+        self._addTextProviderSettings(request_object, requestText)
+        return request_object
+
+    async def _requestText(self, requestText: ITextInference) -> Union[List[IText], IAsyncTaskResponse]:
+        requestText.taskUUID = requestText.taskUUID or getUUID()
+        request_object = self._buildTextRequest(requestText)
+        await self.send([request_object])
+        return await self._handleInitialTextResponse(
+            requestText.taskUUID,
+            requestText.deliveryMethod,
+            "text-inference-initial",
+        )
+
+    async def _handleInitialTextResponse(
+        self,
+        task_uuid: str,
+        delivery_method: Union[str, EDeliveryMethod] = EDeliveryMethod.SYNC,
+        debug_key: str = "text-inference-initial",
+    ) -> Union[List[IText], IAsyncTaskResponse]:
+        lis = self.globalListener(taskUUID=task_uuid)
+        delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(delivery_method)
+
+        async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
+            if not self.connected() or not self.isWebsocketReadyState():
+                reject(ConnectionError(
+                    f"Connection lost while waiting for text response | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Delivery method: {delivery_method_enum}"
+                ))
+                return True
+
+            async with self._messages_lock:
+                response_list = self._globalMessages.get(task_uuid, [])
+
+                if not response_list:
+                    return False
+
+                response = response_list[0]
+
+                if self._is_error_response(response):
+                    del self._globalMessages[task_uuid]
+                    raise RunwareAPIError(response)
+
+                if response.get("status") == "success" or response.get("text") is not None:
+                    del self._globalMessages[task_uuid]
+                    resolve([response])
+                    return True
+
+                if delivery_method_enum is EDeliveryMethod.ASYNC:
+                    del self._globalMessages[task_uuid]
+                    async_response = createAsyncTaskResponse(response)
+                    resolve([async_response])
+                    return True
+
+                return False
+
+        try:
+            initial_response = await getIntervalWithPromise(
+                check_initial_response,
+                debugKey=debug_key,
+                timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else TEXT_INITIAL_TIMEOUT,
+            )
+        except RunwareAPIError:
+            raise
+        except Exception as e:
+            if not self.connected() or not self.isWebsocketReadyState():
+                raise ConnectionError(
+                    f"Connection lost while waiting for text response | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Delivery method: {delivery_method_enum}"
+                )
+            if delivery_method_enum is EDeliveryMethod.SYNC:
+                error_msg = (
+                    f"Timeout waiting for text generation | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Timeout: {TIMEOUT_DURATION}ms | "
+                    f"Original error: {str(e)}"
+                )
+                raise ConnectionError(error_msg)
+            initial_response = None
+        finally:
+            lis["destroy"]()
+
+        if not initial_response or len(initial_response) == 0:
+            raise ConnectionError(
+                f"No initial response received for text generation | delivery_method={delivery_method_enum} | taskUUID={task_uuid}"
+            )
+
+        if isinstance(initial_response[0], IAsyncTaskResponse):
+            return initial_response[0]
+
+        return instantiateDataclassList(IText, initial_response)
 
     def _buildImageRequest(self, requestImage: IImageInference, prompt: Optional[str], control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> Dict[str, Any]:
         request_object = {
@@ -2580,6 +2706,13 @@ class RunwareBase:
         if provider_dict:
             request_object["providerSettings"] = provider_dict
 
+    def _addTextProviderSettings(self, request_object: Dict[str, Any], requestText: ITextInference) -> None:
+        if not requestText.providerSettings:
+            return
+        provider_dict = requestText.providerSettings.to_request_dict()
+        if provider_dict:
+            request_object["providerSettings"] = provider_dict
+
     async def _handleInitialAudioResponse(
         self,
         task_uuid: str,
@@ -2717,7 +2850,7 @@ class RunwareBase:
         self,
         task_uuid: str,
         number_results: Optional[int],
-    ) -> Union[List[IVideo], List[IVideoToText], List[IAudio], List[IImage], List[I3d]]:
+    ) -> Union[List[IVideo], List[IVideoToText], List[IAudio], List[IImage], List[I3d], List[IText]]:
         # Default to 1 if number_results is None
         if number_results is None:
             number_results = 1
@@ -2726,7 +2859,7 @@ class RunwareBase:
         lis = self.globalListener(taskUUID=task_uuid)
 
         task_type = None
-        response_cls: Optional[Union[IVideo, IVideoToText, IAudio, IImage, I3d]] = None
+        response_cls: Optional[Union[IVideo, IVideoToText, IAudio, IImage, I3d, IText]] = None
         max_polls: int = MAX_POLLS
         polling_delay: int = VIDEO_POLLING_DELAY
         timeout_message: str = f"Polling timeout after {MAX_POLLS} polls"
@@ -2774,6 +2907,13 @@ class RunwareBase:
                         MAX_POLLS,
                         VIDEO_POLLING_DELAY,
                         f"3d generation timeout after {MAX_POLLS} polls"
+                    )
+                case ETaskType.TEXT_INFERENCE.value:
+                    return (
+                        IText,
+                        MAX_POLLS,
+                        TEXT_POLLING_DELAY,
+                        f"Text generation timeout after {MAX_POLLS} polls"
                     )
                 case _:
                     raise ValueError(f"Unsupported task type for polling: {task_type}")
