@@ -42,6 +42,7 @@ class ETaskType(Enum):
     MODEL_UPLOAD = "modelUpload"
     MODEL_SEARCH = "modelSearch"
     VIDEO_INFERENCE = "videoInference"
+    INFERENCE_3D = "3dInference"
     AUDIO_INFERENCE = "audioInference"
     VIDEO_CAPTION = "caption"
     MEDIA_STORAGE = "mediaStorage"
@@ -768,6 +769,16 @@ class IVideoInputs(SerializableMixin):
 
 
 @dataclass
+class I3dInputs(SerializableMixin):
+    image: Optional[Union[str, File]] = None
+    mask: Optional[Union[str, File]] = None
+
+    @property
+    def request_key(self) -> str:
+        return "inputs"
+
+
+@dataclass
 class IImageInference:
     model: Union[int, str]
     positivePrompt: Optional[str] = None
@@ -1371,6 +1382,24 @@ class IVideoInference:
     resolution: Optional[str] = None
 
 
+I3dOutputFormat = Literal["GLB", "PLY"]
+
+
+@dataclass
+class I3dInference:
+    model: str
+    positivePrompt: Optional[str] = None
+    seed: Optional[int] = None
+    taskUUID: Optional[str] = None
+    numberResults: Optional[int] = 1
+    outputType: Optional[IOutputType] = None
+    outputFormat: Optional[I3dOutputFormat] = None  # "GLB" | "PLY"
+    includeCost: Optional[bool] = None
+    deliveryMethod: str = "async"
+    webhookURL: Optional[str] = None
+    inputs: Optional[I3dInputs] = None
+
+
 @dataclass
 class IAudioInputs(SerializableMixin):
     video: Optional[str] = None
@@ -1400,6 +1429,17 @@ class IAudioInference:
 
 
 @dataclass
+class IObject:
+    uuid: str
+    url: str
+
+
+@dataclass
+class I3dOutput:
+    files: Optional[List[IObject]] = None
+
+
+@dataclass
 class IOutput:
     draftId: Optional[str] = None
     videoId: Optional[str] = None
@@ -1417,6 +1457,16 @@ class IVideo:
     cost: Optional[float] = None
     seed: Optional[int] = None
     outputs: Optional[IOutput] = None
+
+
+@dataclass
+class I3d:
+    taskType: str
+    taskUUID: str
+    cost: Optional[float] = None
+    status: Optional[str] = None
+    seed: Optional[int] = None
+    outputs: Optional[I3dOutput] = None
 
 
 @dataclass

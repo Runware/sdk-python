@@ -50,6 +50,8 @@ from .types import (
     IFrameImage,
     IAsyncTaskResponse,
     IVectorize,
+    I3dInference,
+    I3d,
 )
 from .types import IImage, IError, SdkType, ListenerType
 from .utils import (
@@ -1871,18 +1873,25 @@ class RunwareBase:
         await self.ensureConnection()
         return await self._requestVideo(requestVideo)
 
+    async def inference3d(self, request3d: I3dInference) -> Union[List[I3d], IAsyncTaskResponse]:
+        return await self._retry_with_reconnect(self._inference3d, request3d)
+
+    async def _inference3d(self, request3d: I3dInference) -> Union[List[I3d], IAsyncTaskResponse]:
+        await self.ensureConnection()
+        return await self._request3d(request3d)
+
     async def getResponse(
         self,
         taskUUID: str,
         numberResults: Optional[int] = 1,
-    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage]]:
+    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage], List[I3d]]:
         return await self._retry_with_reconnect(self._getResponse, taskUUID, numberResults)
 
     async def _getResponse(
         self,
         taskUUID: str,
         numberResults: Optional[int] = 1,
-    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage]]:
+    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage], List[I3d]]:
         await self.ensureConnection()
 
         return await self._pollResults(
@@ -2003,6 +2012,52 @@ class RunwareBase:
                 {"model": lora.model, "weight": lora.weight}
                 for lora in requestVideo.lora
             ]
+
+    async def _process3dInputs(self, request3d: I3dInference) -> None:
+        if not request3d.inputs:
+            return
+        if request3d.inputs.image:
+            request3d.inputs.image = await process_image(request3d.inputs.image)
+        if request3d.inputs.mask:
+            request3d.inputs.mask = await process_image(request3d.inputs.mask)
+
+    def _build3dRequest(self, request3d: I3dInference) -> Dict[str, Any]:
+        request_object: Dict[str, Any] = {
+            "taskType": ETaskType.INFERENCE_3D.value,
+            "taskUUID": request3d.taskUUID,
+            "model": request3d.model,
+        }
+        if request3d.positivePrompt is not None:
+            request_object["positivePrompt"] = request3d.positivePrompt.strip()
+        if request3d.seed is not None:
+            request_object["seed"] = request3d.seed
+        if request3d.numberResults is not None:
+            request_object["numberResults"] = request3d.numberResults
+        if request3d.outputType is not None:
+            request_object["outputType"] = request3d.outputType
+        if request3d.outputFormat is not None:
+            request_object["outputFormat"] = request3d.outputFormat
+        if request3d.includeCost is not None:
+            request_object["includeCost"] = request3d.includeCost
+        if request3d.deliveryMethod is not None:
+            request_object["deliveryMethod"] = request3d.deliveryMethod
+        if request3d.webhookURL is not None:
+            request_object["webhookURL"] = request3d.webhookURL
+        self._addOptionalField(request_object, request3d.inputs)
+        return request_object
+
+    async def _request3d(self, request3d: I3dInference) -> Union[List[I3d], IAsyncTaskResponse]:
+        await self._process3dInputs(request3d)
+        request3d.taskUUID = request3d.taskUUID or getUUID()
+        request_object = self._build3dRequest(request3d)
+        await self.send([request_object])
+        return await self._handleInitial3dResponse(
+            request3d.taskUUID,
+            request3d.numberResults or 1,
+            request3d.deliveryMethod,
+            request_object.get("webhookURL"),
+            "3d-inference-initial",
+        )
 
     def _buildImageRequest(self, requestImage: IImageInference, prompt: Optional[str], control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> Dict[str, Any]:
         request_object = {
@@ -2271,6 +2326,82 @@ class RunwareBase:
             return initial_response[0]
         
         return instantiateDataclassList(IVideo, initial_response)
+
+    async def _handleInitial3dResponse(self, task_uuid: str, number_results: int, delivery_method: Union[str, EDeliveryMethod] = EDeliveryMethod.ASYNC, webhook_url: Optional[str] = None, debug_key: str = "3d-inference-initial") -> Union[List[I3d], IAsyncTaskResponse]:
+        lis = self.globalListener(taskUUID=task_uuid)
+        delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(delivery_method)
+
+        async def check_initial_response(resolve: callable, reject: callable, *args: Any) -> bool:
+            if not self.connected() or not self.isWebsocketReadyState():
+                reject(ConnectionError(
+                    f"Connection lost while waiting for 3d response | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Delivery method: {delivery_method_enum}"
+                ))
+                return True
+
+            async with self._messages_lock:
+                response_list = self._globalMessages.get(task_uuid, [])
+
+                if not response_list:
+                    return False
+
+                response = response_list[0]
+
+                if self._is_error_response(response):
+                    del self._globalMessages[task_uuid]
+                    raise RunwareAPIError(response)
+
+                outputs = response.get("outputs")
+                if response.get("status") == "success" or (outputs is not None and outputs.get("files") is not None):
+                    del self._globalMessages[task_uuid]
+                    resolve([response])
+                    return True
+
+                if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
+                    del self._globalMessages[task_uuid]
+                    async_response = createAsyncTaskResponse(response)
+                    resolve([async_response])
+                    return True
+
+                return False
+
+        try:
+            initial_response = await getIntervalWithPromise(
+                check_initial_response,
+                debugKey=debug_key,
+                timeOutDuration=TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else VIDEO_INITIAL_TIMEOUT
+            )
+        except RunwareAPIError:
+            raise
+        except Exception as e:
+            if not self.connected() or not self.isWebsocketReadyState():
+                raise ConnectionError(
+                    f"Connection lost while waiting for 3d response | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Delivery method: {delivery_method_enum}"
+                )
+            if delivery_method_enum is EDeliveryMethod.SYNC:
+                error_msg = (
+                    f"Timeout waiting for 3d generation | "
+                    f"TaskUUID: {task_uuid} | "
+                    f"Timeout: {TIMEOUT_DURATION}ms | "
+                    f"Original error: {str(e)}"
+                )
+                raise ConnectionError(error_msg)
+            initial_response = None
+        finally:
+            lis["destroy"]()
+
+        if not initial_response or len(initial_response) == 0:
+            raise ConnectionError(
+                f"No initial response received for 3d generation | delivery_method={delivery_method_enum} | taskUUID={task_uuid}"
+            )
+
+        if isinstance(initial_response[0], IAsyncTaskResponse):
+            return initial_response[0]
+
+        return instantiateDataclassList(I3d, initial_response)
 
     async def _handleInitialImageResponse(
         self,
@@ -2586,7 +2717,7 @@ class RunwareBase:
         self,
         task_uuid: str,
         number_results: Optional[int],
-    ) -> Union[List[IVideo], List[IVideoToText], List[IAudio], List[IImage]]:
+    ) -> Union[List[IVideo], List[IVideoToText], List[IAudio], List[IImage], List[I3d]]:
         # Default to 1 if number_results is None
         if number_results is None:
             number_results = 1
@@ -2595,7 +2726,7 @@ class RunwareBase:
         lis = self.globalListener(taskUUID=task_uuid)
 
         task_type = None
-        response_cls: Optional[Union[IVideo, IVideoToText, IAudio, IImage]] = None
+        response_cls: Optional[Union[IVideo, IVideoToText, IAudio, IImage, I3d]] = None
         max_polls: int = MAX_POLLS
         polling_delay: int = VIDEO_POLLING_DELAY
         timeout_message: str = f"Polling timeout after {MAX_POLLS} polls"
@@ -2637,6 +2768,13 @@ class RunwareBase:
                         VIDEO_POLLING_DELAY,
                         f"Video generation timeout after {MAX_POLLS} polls"
                     )
+                case ETaskType.INFERENCE_3D.value:
+                    return (
+                        I3d,
+                        MAX_POLLS,
+                        VIDEO_POLLING_DELAY,
+                        f"3d generation timeout after {MAX_POLLS} polls"
+                    )
                 case _:
                     raise ValueError(f"Unsupported task type for polling: {task_type}")
 
@@ -2661,6 +2799,7 @@ class RunwareBase:
                     completed_results.extend(processed_responses)
 
                     if len(completed_results) >= number_results:
+
                         return instantiateDataclassList(
                             response_cls,
                             completed_results[:number_results]

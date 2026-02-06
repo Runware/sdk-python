@@ -29,7 +29,6 @@ from .types import (
     IError,
     UploadImageType,
     IAsyncTaskResponse,
-    IOutput,
 )
 import logging
 
