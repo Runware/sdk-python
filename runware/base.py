@@ -50,6 +50,8 @@ from .types import (
     IFrameImage,
     IAsyncTaskResponse,
     IGetResponseType,
+    IUploadImageRequest,
+    IUploadMediaRequest,
     IVectorize,
     I3dInference,
     I3d,
@@ -1298,14 +1300,16 @@ class RunwareBase:
         return list(set(enhanced_prompts))
 
     async def uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
+        request = IUploadImageRequest(file=file, taskUUID=getUUID())
         return await self._retry_with_reconnect(
-            self._uploadImage, file, task_type=ETaskType.IMAGE_UPLOAD.value
+            self._uploadImage, request, task_type=ETaskType.IMAGE_UPLOAD.value
         )
 
-    async def _uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
+    async def _uploadImage(self, request: IUploadImageRequest) -> Optional[UploadImageType]:
         await self.ensureConnection()
         
-        task_uuid = getUUID()
+        file = request.file
+        task_uuid = request.taskUUID
         local_file = True
         
         if isinstance(file, str):
@@ -1377,14 +1381,16 @@ class RunwareBase:
         return image
 
     async def uploadMedia(self, media_url: str) -> Optional[MediaStorageType]:
+        request = IUploadMediaRequest(media_url=media_url, taskUUID=getUUID())
         return await self._retry_with_reconnect(
-            self._uploadMedia, media_url, task_type=ETaskType.MEDIA_STORAGE.value
+            self._uploadMedia, request, task_type=ETaskType.MEDIA_STORAGE.value
         )
 
-    async def _uploadMedia(self, media_url: str) -> Optional[MediaStorageType]:
+    async def _uploadMedia(self, request: IUploadMediaRequest) -> Optional[MediaStorageType]:
         await self.ensureConnection()
         
-        task_uuid = getUUID()
+        media_url = request.media_url
+        task_uuid = request.taskUUID
         media_data = media_url
         
         if isinstance(media_url, str):

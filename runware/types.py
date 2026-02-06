@@ -131,6 +131,18 @@ class IGetResponseType:
 
 
 @dataclass
+class IUploadImageRequest:
+    file: Union[File, str]
+    taskUUID: str
+
+
+@dataclass
+class IUploadMediaRequest:
+    media_url: str
+    taskUUID: str
+
+
+@dataclass
 class RunwareBaseType:
     apiKey: str
     url: Optional[str] = None
