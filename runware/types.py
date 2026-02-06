@@ -1416,9 +1416,13 @@ class I3dObject:
 
 
 @dataclass
+class I3dOutput:
+    files: Optional[List[I3dObject]] = None
+
+
+@dataclass
 class IOutput:
     draftId: Optional[str] = None
-    files: Optional[List[I3dObject]] = None
     videoId: Optional[str] = None
 
 
@@ -1443,7 +1447,7 @@ class I3d:
     cost: Optional[float] = None
     status: Optional[str] = None
     seed: Optional[int] = None
-    outputs: Optional[IOutput] = None
+    outputs: Optional[I3dOutput] = None
 
 
 @dataclass
