@@ -1987,7 +1987,7 @@ class RunwareBase:
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
         optional_fields = [
             "outputType", "outputFormat", "outputQuality", "uploadEndpoint",
-            "includeCost", "negativePrompt", "inputAudios", "referenceVideos", "fps", "steps", "seed",
+            "includeCost", "negativePrompt", "inputAudios", "referenceVideos", "fps", "steps", "scheduler", "seed",
             "CFGScale", "seedImage", "duration", "width", "height", "nsfw_check", "resolution",
         ]
 
