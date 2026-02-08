@@ -53,6 +53,9 @@ from .types import (
     OperationState,
     I3dInference,
     I3d,
+    IGetResponseRequest,
+    IUploadImageRequest,
+    IUploadMediaRequest,
 )
 from .types import IImage, IError, SdkType, ListenerType
 from .utils import (
@@ -1446,12 +1449,14 @@ class RunwareBase:
             await self._unregister_pending_operation(taskUUID)
 
     async def uploadImage(self, file: Union[File, str]) -> Optional[UploadImageType]:
-        return await self._retry_with_reconnect(self._uploadImage, file)
+        request = IUploadImageRequest(file=file, taskUUID=getUUID())
+        return await self._retry_with_reconnect(self._uploadImage, request)
 
-    async def _uploadImage(self, file: "Union[File, str]") -> "Optional[UploadImageType]":
+    async def _uploadImage(self, request: IUploadImageRequest) -> "Optional[UploadImageType]":
         await self.ensureConnection()
 
-        task_uuid = getUUID()
+        file = request.file
+        task_uuid = request.taskUUID
         local_file = True
 
         if isinstance(file, str):
@@ -1514,12 +1519,14 @@ class RunwareBase:
             await self._unregister_pending_operation(task_uuid)
 
     async def uploadMedia(self, media_url: str) -> "Optional[MediaStorageType]":
-        return await self._retry_with_reconnect(self._uploadMedia, media_url)
+        request = IUploadMediaRequest(media_url=media_url, taskUUID=getUUID())
+        return await self._retry_with_reconnect(self._uploadMedia, request)
 
-    async def _uploadMedia(self, media_url: str) -> "Optional[MediaStorageType]":
+    async def _uploadMedia(self, request: IUploadMediaRequest) -> "Optional[MediaStorageType]":
         await self.ensureConnection()
 
-        task_uuid = getUUID()
+        media_url = request.media_url
+        task_uuid = request.taskUUID
         media_data = media_url
 
         if isinstance(media_url, str):
@@ -2012,18 +2019,21 @@ class RunwareBase:
         numberResults: Optional[int] = 1,
     ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage], List[I3d]]:
         async with self._request_semaphore:
-            return await self._retry_with_reconnect(self._getResponse, taskUUID, numberResults)
+            request = IGetResponseRequest(
+                taskUUID=taskUUID,
+                numberResults=numberResults or 1,
+            )
+            return await self._retry_with_reconnect(self._getResponse, request)
 
     async def _getResponse(
         self,
-        taskUUID: str,
-        numberResults: Optional[int] = 1,
+        request_model: IGetResponseRequest,
     ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage], List[I3d]]:
         await self.ensureConnection()
 
         return await self._pollResults(
-            task_uuid=taskUUID,
-            number_results=numberResults,
+            task_uuid=request_model.taskUUID,
+            number_results=request_model.numberResults,
         )
 
     async def _requestVideo(self, requestVideo: "IVideoInference") -> "Union[List[IVideo], IAsyncTaskResponse]":
