@@ -42,6 +42,7 @@ class ETaskType(Enum):
     MODEL_UPLOAD = "modelUpload"
     MODEL_SEARCH = "modelSearch"
     VIDEO_INFERENCE = "videoInference"
+    INFERENCE_3D = "3dInference"
     AUDIO_INFERENCE = "audioInference"
     VIDEO_CAPTION = "caption"
     MEDIA_STORAGE = "mediaStorage"
@@ -603,6 +604,39 @@ class IMireloProviderSettings(BaseProviderSettings):
         return "mirelo"
 
 
+@dataclass
+class ISourcefulFontInput(SerializableMixin):
+    fontUrl: Optional[str] = None
+    text: Optional[str] = None
+
+
+@dataclass
+class ISourcefulProviderSettings(BaseProviderSettings):
+    transparency: Optional[bool] = None
+    enhancePrompt: Optional[bool] = None
+    fontInputs: Optional[List[ISourcefulFontInput]] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "sourceful"
+
+
+@dataclass
+class IUltralytics(SerializableMixin):
+
+    maskBlur: Optional[int] = None
+    maskPadding: Optional[int] = None
+    confidence: Optional[float] = None
+    positivePrompt: Optional[str] = None
+    negativePrompt: Optional[str] = None
+    steps: Optional[int] = None
+    CFGScale: Optional[float] = None
+    strength: Optional[float] = None
+    @property
+    def request_key(self) -> str:
+        return "ultralytics"
+
+
 ImageProviderSettings = (
     IOpenAIProviderSettings
     | IBriaProviderSettings
@@ -610,6 +644,7 @@ ImageProviderSettings = (
     | IMidjourneyProviderSettings
     | IAlibabaProviderSettings
     | IBlackForestLabsProviderSettings
+    | ISourcefulProviderSettings
 )
 
 @dataclass
@@ -631,7 +666,8 @@ class ISettings(SerializableMixin):
     topP: Optional[float] = None
     layers: Optional[int] = None  
     trueCFGScale: Optional[float] = None  
-
+    quality: Optional[str] = None
+    
     @property
     def request_key(self) -> str:
         return "settings"  
@@ -654,6 +690,8 @@ class IInputs(SerializableMixin):
     references: Optional[List[Union[str, File]]] = None
     referenceImages: Optional[List[Union[str, File, IInputReference]]] = None
     image: Optional[Union[str, File]] = None
+    mask: Optional[Union[str, File]] = None
+    superResolutionReferences: Optional[List[Union[str, File]]] = None
     
     @property
     def request_key(self) -> str:
@@ -699,6 +737,8 @@ class IVideoInputs(SerializableMixin):
     speech: Optional[List[ISpeechInput]] = None
     mask: Optional[Union[str, File]] = None
     frame: Optional[str] = None
+    draftId: Optional[str] = None
+    videoId: Optional[str] = None
     
     def __post_init__(self):
         if self.frames is not None:
@@ -728,6 +768,16 @@ class IVideoInputs(SerializableMixin):
                     stacklevel=3
                 )
                 self.referenceImages = [ref.image if isinstance(ref, IInputReference) else ref for ref in self.referenceImages]
+
+    @property
+    def request_key(self) -> str:
+        return "inputs"
+
+
+@dataclass
+class I3dInputs(SerializableMixin):
+    image: Optional[Union[str, File]] = None
+    mask: Optional[Union[str, File]] = None
 
     @property
     def request_key(self) -> str:
@@ -780,6 +830,7 @@ class IImageInference:
     safety: Optional[ISafety] = None
     settings: Optional[ISettings] = None
     inputs: Optional[IInputs] = None
+    ultralytics: Optional[IUltralytics] = None
     useCache: Optional[bool] = None
     resolution: Optional[str] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
@@ -1078,6 +1129,7 @@ class IBytedanceProviderSettings(BaseProviderSettings):
     maxSequentialImages: Optional[int] = None  # Min: 1, Max: 15 - Maximum number of sequential images to generate
     fastMode: Optional[bool] = None  # When enabled, speeds up generation by sacrificing some effects. Default: false. RTF: 25-28 (fast) vs 35 (normal)
     audio: Optional[bool] = None
+    draft: Optional[bool] = None
 
     @property
     def provider_key(self) -> str:
@@ -1192,6 +1244,7 @@ class IViduProviderSettings(BaseProviderSettings):
     style: Optional[str] = None
     movementAmplitude: Optional[str] = None
     template: Optional[IViduTemplate] = None
+    audio: Optional[bool] = None
 
     @property
     def provider_key(self) -> str:
@@ -1335,6 +1388,24 @@ class IVideoInference:
     resolution: Optional[str] = None
 
 
+I3dOutputFormat = Literal["GLB", "PLY"]
+
+
+@dataclass
+class I3dInference:
+    model: str
+    positivePrompt: Optional[str] = None
+    seed: Optional[int] = None
+    taskUUID: Optional[str] = None
+    numberResults: Optional[int] = 1
+    outputType: Optional[IOutputType] = None
+    outputFormat: Optional[I3dOutputFormat] = None  # "GLB" | "PLY"
+    includeCost: Optional[bool] = None
+    deliveryMethod: str = "async"
+    webhookURL: Optional[str] = None
+    inputs: Optional[I3dInputs] = None
+
+
 @dataclass
 class IAudioInputs(SerializableMixin):
     video: Optional[str] = None
@@ -1364,6 +1435,23 @@ class IAudioInference:
 
 
 @dataclass
+class IObject:
+    uuid: str
+    url: str
+
+
+@dataclass
+class I3dOutput:
+    files: Optional[List[IObject]] = None
+
+
+@dataclass
+class IOutput:
+    draftId: Optional[str] = None
+    videoId: Optional[str] = None
+
+
+@dataclass
 class IVideo:
     taskType: str
     taskUUID: str
@@ -1374,6 +1462,17 @@ class IVideo:
     mediaURL: Optional[str] = None
     cost: Optional[float] = None
     seed: Optional[int] = None
+    outputs: Optional[IOutput] = None
+
+
+@dataclass
+class I3d:
+    taskType: str
+    taskUUID: str
+    cost: Optional[float] = None
+    status: Optional[str] = None
+    seed: Optional[int] = None
+    outputs: Optional[I3dOutput] = None
 
 
 @dataclass
