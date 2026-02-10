@@ -92,6 +92,10 @@ from .utils import (
     AUDIO_INFERENCE_TIMEOUT,
     AUDIO_POLLING_DELAY,
     MAX_POLLS,
+    MAX_POLLS_VIDEO_GENERATION,
+    MAX_POLLS_AUDIO_GENERATION,
+    MAX_POLLS_3D_GENERATION,
+    MAX_POLLS_IMAGE_GENERATION,
     MAX_RETRY_ATTEMPTS,
     MAX_CONCURRENT_REQUESTS,
 )
@@ -136,6 +140,11 @@ class RunwareBase:
         self._reconnect_lock = asyncio.Lock()
         self._pending_operations: Dict[str, Dict[str, Any]] = {}
         self._operations_lock = asyncio.Lock()
+        if MAX_CONCURRENT_REQUESTS <= 0:
+            raise ValueError(
+                "RUNWARE_MAX_CONCURRENT_REQUESTS must be greater than 0 "
+                f"(got {MAX_CONCURRENT_REQUESTS}). A value of 0 would cause asyncio.Semaphore to deadlock."
+            )
         self._request_semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
     async def _register_pending_operation(
@@ -233,6 +242,7 @@ class RunwareBase:
         if not task_uuid:
             return False
 
+        on_partial_callback = None
         async with self._operations_lock:
             op = self._pending_operations.get(task_uuid)
             if op is None:
@@ -256,16 +266,7 @@ class RunwareBase:
             op["results"].append(item)
 
             if op["on_partial"]:
-                try:
-                    if item.get("imageUUID"):
-                        partial_images = [createImageFromResponse(item)]
-                        op["on_partial"](partial_images, None)
-                    elif item.get("videoUUID") or item.get("mediaUUID"):
-                        op["on_partial"]([item], None)
-                    elif item.get("audioUUID"):
-                        op["on_partial"]([item], None)
-                except Exception as e:
-                    logger.error(f"Error in on_partial callback: {e}")
+                on_partial_callback = op["on_partial"]
 
             if op["complete_predicate"]:
                 is_complete = op["complete_predicate"](item)
@@ -276,13 +277,27 @@ class RunwareBase:
                 logger.debug(f"Completing pending operation: {task_uuid}, results: {len(op['results'])}")
                 future.set_result(op["results"])
 
-            return True
+        if on_partial_callback:
+            try:
+                if item.get("imageUUID"):
+                    partial_images = [createImageFromResponse(item)]
+                    on_partial_callback(partial_images, None)
+                elif item.get("videoUUID") or item.get("mediaUUID"):
+                    on_partial_callback([item], None)
+                elif item.get("audioUUID"):
+                    on_partial_callback([item], None)
+            except Exception as e:
+                logger.error(f"Error in on_partial callback: {e}")
+
+        return True
 
     async def _handle_pending_operation_error(self, error: "Dict[str, Any]") -> bool:
         task_uuid = error.get("taskUUID")
         if not task_uuid:
             return False
 
+        on_partial_callback = None
+        error_obj = None
         async with self._operations_lock:
             op = self._pending_operations.get(task_uuid)
             if op is None:
@@ -294,23 +309,27 @@ class RunwareBase:
                 return True
 
             if op["on_partial"]:
-                try:
-                    error_obj = IError(
-                        error=True,
-                        error_message=error.get("message", "Unknown error"),
-                        task_uuid=task_uuid,
-                        error_code=error.get("code"),
-                        error_type=error.get("type"),
-                        parameter=error.get("parameter"),
-                        documentation=error.get("documentation"),
-                    )
-                    op["on_partial"]([], error_obj)
-                except Exception as e:
-                    logger.error(f"Error in on_partial error callback: {e}")
+                on_partial_callback = op["on_partial"]
+                error_obj = IError(
+                    error=True,
+                    error_message=error.get("message", "Unknown error"),
+                    task_uuid=task_uuid,
+                    error_code=error.get("code"),
+                    error_type=error.get("type"),
+                    parameter=error.get("parameter"),
+                    documentation=error.get("documentation"),
+                )
 
             if not future.done():
                 future.set_exception(RunwareAPIError(error))
-            return True
+
+        if on_partial_callback and error_obj is not None:
+            try:
+                on_partial_callback([], error_obj)
+            except Exception as e:
+                logger.error(f"Error in on_partial error callback: {e}")
+
+        return True
 
     async def _do_reconnect(self, last_error: Optional[Exception] = None) -> bool:
         async with self._reconnect_lock:
@@ -2807,23 +2826,23 @@ class RunwareBase:
                 case ETaskType.AUDIO_INFERENCE.value:
                     return (
                         IAudio,
-                        MAX_POLLS,
+                        MAX_POLLS_AUDIO_GENERATION,
                         AUDIO_POLLING_DELAY,
-                        f"Audio generation timeout after {MAX_POLLS} polls"
+                        f"Audio generation timeout after {MAX_POLLS_AUDIO_GENERATION} polls"
                     )
                 case ETaskType.VIDEO_CAPTION.value:
                     return (
                         IVideoToText,
-                        MAX_POLLS,
+                        MAX_POLLS_VIDEO_GENERATION,
                         VIDEO_POLLING_DELAY,
-                        f"Video caption generation timeout after {MAX_POLLS} polls"
+                        f"Video caption generation timeout after {MAX_POLLS_VIDEO_GENERATION} polls"
                     )
                 case ETaskType.IMAGE_INFERENCE.value:
                     return (
                         IImage,
-                        MAX_POLLS,
+                        MAX_POLLS_IMAGE_GENERATION,
                         IMAGE_POLLING_DELAY,
-                        f"Image generation timeout after {MAX_POLLS} polls"
+                        f"Image generation timeout after {MAX_POLLS_IMAGE_GENERATION} polls"
                     )
                 case (
                     ETaskType.VIDEO_INFERENCE.value
@@ -2832,22 +2851,29 @@ class RunwareBase:
                 ):
                     return (
                         IVideo,
-                        MAX_POLLS,
+                        MAX_POLLS_VIDEO_GENERATION,
                         VIDEO_POLLING_DELAY,
-                        f"Video generation timeout after {MAX_POLLS} polls"
+                        f"Video generation timeout after {MAX_POLLS_VIDEO_GENERATION} polls"
                     )
                 case ETaskType.INFERENCE_3D.value:
                     return (
                         I3d,
-                        MAX_POLLS,
+                        MAX_POLLS_3D_GENERATION,
                         VIDEO_POLLING_DELAY,
-                        f"3d generation timeout after {MAX_POLLS} polls"
+                        f"3d generation timeout after {MAX_POLLS_3D_GENERATION} polls"
                     )
                 case _:
                     raise ValueError(f"Unsupported task type for polling: {task_type_val}")
 
+        max_polls_loop = max(
+            MAX_POLLS,
+            MAX_POLLS_VIDEO_GENERATION,
+            MAX_POLLS_AUDIO_GENERATION,
+            MAX_POLLS_3D_GENERATION,
+            MAX_POLLS_IMAGE_GENERATION,
+        )
         try:
-            for poll_count in range(MAX_POLLS):
+            for poll_count in range(max_polls_loop):
                 try:
                     responses = await self._sendPollRequest(task_uuid, poll_count)
                     
@@ -2902,7 +2928,6 @@ class RunwareBase:
             return []
 
         except Exception:
-            await self._unregister_pending_operation(task_uuid)
             raise
 
     def _createAudioFromResponse(self, response: Dict[str, Any]) -> IAudio:
