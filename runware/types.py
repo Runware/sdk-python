@@ -655,14 +655,47 @@ class ISafety(SerializableMixin):
 
 
 @dataclass
+class ISparseStructure:
+    guidanceStrength: Optional[float] = None
+    guidanceRescale: Optional[float] = None
+    steps: Optional[int] = None
+    rescaleT: Optional[float] = None
+
+
+@dataclass
+class IShapeSlat:
+    guidanceStrength: Optional[float] = None
+    guidanceRescale: Optional[float] = None
+    steps: Optional[int] = None
+    rescaleT: Optional[float] = None
+
+
+@dataclass
+class ITexSlat:
+    guidanceStrength: Optional[float] = None
+    guidanceRescale: Optional[float] = None
+    steps: Optional[int] = None
+    rescaleT: Optional[float] = None
+
+
+@dataclass
 class ISettings(SerializableMixin):
+    # Image 
     temperature: Optional[float] = None
     systemPrompt: Optional[str] = None
     topP: Optional[float] = None
-    layers: Optional[int] = None  
-    trueCFGScale: Optional[float] = None  
+    layers: Optional[int] = None
+    trueCFGScale: Optional[float] = None
     quality: Optional[str] = None
-    
+    # 3D inference
+    textureSize: Optional[int] = None
+    decimationTarget: Optional[int] = None
+    remesh: Optional[bool] = None
+    resolution: Optional[int] = None
+    sparseStructure: Optional[ISparseStructure] = None
+    shapeSlat: Optional[IShapeSlat] = None
+    texSlat: Optional[ITexSlat] = None
+
     @property
     def request_key(self) -> str:
         return "settings"  
@@ -1396,10 +1429,12 @@ class I3dInference:
     numberResults: Optional[int] = 1
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[I3dOutputFormat] = None  # "GLB" | "PLY"
+    outputQuality: Optional[int] = None
     includeCost: Optional[bool] = None
     deliveryMethod: str = "async"
     webhookURL: Optional[str] = None
     inputs: Optional[I3dInputs] = None
+    settings: Optional[ISettings] = None
 
 
 @dataclass
