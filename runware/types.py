@@ -43,6 +43,7 @@ class ETaskType(Enum):
     MODEL_SEARCH = "modelSearch"
     VIDEO_INFERENCE = "videoInference"
     INFERENCE_3D = "3dInference"
+    TEXT_INFERENCE = "textInference"
     AUDIO_INFERENCE = "audioInference"
     VIDEO_CAPTION = "caption"
     MEDIA_STORAGE = "mediaStorage"
@@ -1390,6 +1391,7 @@ class IVideoInference:
     inputAudios: Optional[List[str]] = None
     fps: Optional[int] = None
     steps: Optional[int] = None
+    scheduler: Optional[str] = None
     seed: Optional[int] = None
     CFGScale: Optional[float] = None
     acceleration: Optional[str] = None
@@ -1491,6 +1493,61 @@ class I3d:
     status: Optional[str] = None
     seed: Optional[int] = None
     outputs: Optional[I3dOutput] = None
+
+
+@dataclass
+class ITextInferenceMessage:
+    role: str
+    content: str
+
+
+@dataclass
+class ITextInferenceUsage:
+    promptTokens: Optional[int] = None
+    completionTokens: Optional[int] = None
+    totalTokens: Optional[int] = None
+    thinkingTokens: Optional[int] = None
+
+
+@dataclass
+class IGoogleTextProviderSettings(BaseProviderSettings):
+    thinkingLevel: Optional[str] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "google"
+
+
+TextProviderSettings = IGoogleTextProviderSettings
+
+
+@dataclass
+class ITextInference:
+    model: str
+    messages: List[ITextInferenceMessage]
+    taskUUID: Optional[str] = None
+    deliveryMethod: str = "sync"
+    numberResults: Optional[int] = 1
+    maxTokens: Optional[int] = None
+    temperature: Optional[float] = None
+    topP: Optional[float] = None  
+    topK: Optional[int] = None  
+    seed: Optional[int] = None  
+    stopSequences: Optional[List[str]] = None  
+    includeCost: Optional[bool] = None
+    providerSettings: Optional[TextProviderSettings] = None
+    webhookURL: Optional[str] = None
+
+
+@dataclass
+class IText:
+    taskType: str
+    taskUUID: str
+    text: Optional[str] = None
+    finishReason: Optional[str] = None
+    usage: Optional[ITextInferenceUsage] = None
+    cost: Optional[float] = None
+    status: Optional[str] = None
 
 
 @dataclass

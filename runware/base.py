@@ -56,6 +56,8 @@ from .types import (
     IGetResponseRequest,
     IUploadImageRequest,
     IUploadMediaRequest,
+    ITextInference,
+    IText,
 )
 from .types import IImage, IError, SdkType, ListenerType
 from .utils import (
@@ -79,6 +81,7 @@ from .utils import (
     process_image,
     createAsyncTaskResponse,
     VIDEO_INITIAL_TIMEOUT,
+    TEXT_INITIAL_TIMEOUT,
     VIDEO_POLLING_DELAY,
     WEBHOOK_TIMEOUT,
     IMAGE_INFERENCE_TIMEOUT,
@@ -88,6 +91,7 @@ from .utils import (
     MODEL_UPLOAD_TIMEOUT,
     IMAGE_INITIAL_TIMEOUT,
     IMAGE_POLLING_DELAY,
+    TEXT_POLLING_DELAY,
     AUDIO_INITIAL_TIMEOUT,
     AUDIO_INFERENCE_TIMEOUT,
     AUDIO_POLLING_DELAY,
@@ -2032,11 +2036,19 @@ class RunwareBase:
         await self.ensureConnection()
         return await self._request3d(request3d)
 
+    async def textInference(self, requestText: ITextInference) -> Union[List[IText], IAsyncTaskResponse]:
+        async with self._request_semaphore:
+            return await self._retry_async_with_reconnect(
+                self._requestText,
+                requestText,
+                task_type=ETaskType.TEXT_INFERENCE.value,
+            )
+
     async def getResponse(
         self,
         taskUUID: str,
         numberResults: Optional[int] = 1,
-    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage], List[I3d]]:
+    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage], List[I3d], List[IText]]:
         async with self._request_semaphore:
             request = IGetResponseRequest(
                 taskUUID=taskUUID,
@@ -2047,7 +2059,7 @@ class RunwareBase:
     async def _getResponse(
         self,
         request_model: IGetResponseRequest,
-    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage], List[I3d]]:
+    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage], List[I3d], List[IText]]:
         await self.ensureConnection()
 
         return await self._pollResults(
@@ -2142,7 +2154,7 @@ class RunwareBase:
     def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
         optional_fields = [
             "outputType", "outputFormat", "outputQuality", "uploadEndpoint",
-            "includeCost", "negativePrompt", "inputAudios", "referenceVideos", "fps", "steps", "seed",
+            "includeCost", "negativePrompt", "inputAudios", "referenceVideos", "fps", "steps", "scheduler", "seed",
             "CFGScale", "seedImage", "duration", "width", "height", "nsfw_check", "resolution",
         ]
 
@@ -2214,6 +2226,124 @@ class RunwareBase:
             webhook_url=request_object.get("webhookURL"),
             debug_key="3d-inference-initial",
         )
+
+    def _buildTextRequest(self, requestText: ITextInference) -> Dict[str, Any]:
+        request_object: Dict[str, Any] = {
+            "taskType": ETaskType.TEXT_INFERENCE.value,
+            "taskUUID": requestText.taskUUID,
+            "model": requestText.model,
+            "deliveryMethod": requestText.deliveryMethod,
+            "messages": [asdict(m) for m in requestText.messages],
+        }
+        if requestText.maxTokens is not None:
+            request_object["maxTokens"] = requestText.maxTokens
+        if requestText.temperature is not None:
+            request_object["temperature"] = requestText.temperature
+        if requestText.topP is not None:
+            request_object["topP"] = requestText.topP
+        if requestText.topK is not None:
+            request_object["topK"] = requestText.topK
+        if requestText.seed is not None:
+            request_object["seed"] = requestText.seed
+        if requestText.stopSequences is not None:
+            request_object["stopSequences"] = requestText.stopSequences
+        if requestText.includeCost is not None:
+            request_object["includeCost"] = requestText.includeCost
+        self._addTextProviderSettings(request_object, requestText)
+        return request_object
+
+    async def _requestText(self, requestText: ITextInference) -> Union[List[IText], IAsyncTaskResponse]:
+        await self.ensureConnection()
+        requestText.taskUUID = requestText.taskUUID or getUUID()
+        request_object = self._buildTextRequest(requestText)
+
+        if requestText.webhookURL:
+            request_object["webhookURL"] = requestText.webhookURL
+
+        return await self._handleInitialTextResponse(
+            request_object=request_object,
+            task_uuid=requestText.taskUUID,
+            number_results=requestText.numberResults or 1,
+            delivery_method=requestText.deliveryMethod,
+            webhook_url=request_object.get("webhookURL"),
+            debug_key="text-inference-initial",
+        )
+
+    async def _handleInitialTextResponse(
+        self,
+        request_object: "Dict[str, Any]",
+        task_uuid: str,
+        number_results: int,
+        delivery_method: "Union[str, EDeliveryMethod]" = EDeliveryMethod.SYNC,
+        webhook_url: "Optional[str]" = None,
+        debug_key: str = "text-inference-initial",
+    ) -> Union[List[IText], IAsyncTaskResponse]:
+        if delivery_method is None:
+            delivery_method = EDeliveryMethod.SYNC
+        delivery_method_enum = delivery_method if isinstance(delivery_method, EDeliveryMethod) else EDeliveryMethod(
+            delivery_method,
+        )
+
+        def is_text_complete(r: "Dict[str, Any]") -> bool:
+            if r.get("status") == "success":
+                return True
+            if r.get("text") is not None:
+                return True
+            if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
+                return True
+            return False
+
+        future, should_send = await self._register_pending_operation(
+            task_uuid,
+            expected_results=1,
+            complete_predicate=is_text_complete,
+        )
+
+        timeout = TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else TEXT_INITIAL_TIMEOUT
+
+        try:
+            if should_send:
+                await self.send([request_object])
+                await self._mark_operation_sent(task_uuid)
+            results = await asyncio.wait_for(future, timeout=timeout / 1000)
+
+            if not results:
+                raise ConnectionError(
+                    f"No initial response received for text inference | "
+                    f"delivery_method={delivery_method_enum} | taskUUID={task_uuid}"
+                )
+
+            response = results[0]
+            self._handle_error_response(response)
+
+            if response.get("status") == "success" or response.get("text") is not None:
+                return instantiateDataclassList(IText, results)
+
+            if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
+                return createAsyncTaskResponse(response)
+
+            return instantiateDataclassList(IText, results)
+
+        except asyncio.TimeoutError:
+            if not self.connected() or not self.isWebsocketReadyState():
+                raise ConnectionError(
+                    f"Connection lost while waiting for text response | "
+                    f"TaskUUID: {task_uuid} | Delivery method: {delivery_method_enum}"
+                )
+
+            if delivery_method_enum is EDeliveryMethod.SYNC:
+                raise ConnectionError(
+                    f"Timeout waiting for text generation | TaskUUID: {task_uuid} | "
+                    f"Timeout: {timeout}ms"
+                )
+            raise ConnectionError(
+                f"Timeout waiting for text generation | TaskUUID: {task_uuid} | "
+                f"Timeout: {timeout}ms"
+            )
+        except RunwareAPIError:
+            raise
+        finally:
+            await self._unregister_pending_operation(task_uuid)
 
     def _buildImageRequest(self, requestImage: IImageInference, prompt: Optional[str], control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> Dict[str, Any]:
         request_object = {
@@ -2718,6 +2848,13 @@ class RunwareBase:
         if provider_dict:
             request_object["providerSettings"] = provider_dict
 
+    def _addTextProviderSettings(self, request_object: Dict[str, Any], requestText: ITextInference) -> None:
+        if not requestText.providerSettings:
+            return
+        provider_dict = requestText.providerSettings.to_request_dict()
+        if provider_dict:
+            request_object["providerSettings"] = provider_dict
+
     async def _handleInitialAudioResponse(
             self,
             request_object: "Dict[str, Any]",
@@ -2805,7 +2942,7 @@ class RunwareBase:
         self,
         task_uuid: str,
         number_results: Optional[int],
-    ) -> Union[List[IVideo], List[IVideoToText], List[IAudio], List[IImage], List[I3d]]:
+    ) -> Union[List[IVideo], List[IVideoToText], List[IAudio], List[IImage], List[I3d], List[IText]]:
         # Default to 1 if number_results is None
         if number_results is None:
             number_results = 1
@@ -2813,7 +2950,7 @@ class RunwareBase:
         completed_results: "List[Dict[str, Any]]" = []
 
         task_type = None
-        response_cls: Optional[Union[IVideo, IVideoToText, IAudio, IImage, I3d]] = None
+        response_cls: Optional[Union[IVideo, IVideoToText, IAudio, IImage, I3d, IText]] = None
         max_polls: int = MAX_POLLS
         polling_delay: int = VIDEO_POLLING_DELAY
         timeout_message: str = f"Polling timeout after {MAX_POLLS} polls"
@@ -2861,6 +2998,13 @@ class RunwareBase:
                         MAX_POLLS_3D_GENERATION,
                         VIDEO_POLLING_DELAY,
                         f"3d generation timeout after {MAX_POLLS_3D_GENERATION} polls"
+                    )
+                case ETaskType.TEXT_INFERENCE.value:
+                    return (
+                        IText,
+                        MAX_POLLS,
+                        TEXT_POLLING_DELAY,
+                        f"Text generation timeout after {MAX_POLLS} polls"
                     )
                 case _:
                     raise ValueError(f"Unsupported task type for polling: {task_type_val}")
