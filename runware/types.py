@@ -350,8 +350,17 @@ class IPhotoMaker:
 
 class SerializableMixin:
     def serialize(self) -> Dict[str, Any]:
-        return {k: v for k, v in asdict(self).items()
-                if v is not None and not k.startswith('_')}
+        result: Dict[str, Any] = {}
+        for k, v in vars(self).items():
+            if v is None or k.startswith("_"):
+                continue
+            if isinstance(v, SerializableMixin):
+                nested = v.serialize()
+                if nested:
+                    result[k] = nested
+            else:
+                result[k] = v
+        return result
 
     def to_request_dict(self) -> Dict[str, Any]:
         data = self.serialize()
@@ -711,42 +720,6 @@ class ISettings(SerializableMixin):
     @property
     def request_key(self) -> str:
         return "settings"
-
-    def serialize(self) -> Dict[str, Any]:
-        result: Dict[str, Any] = {}
-        if self.temperature is not None:
-            result["temperature"] = self.temperature
-        if self.systemPrompt is not None:
-            result["systemPrompt"] = self.systemPrompt
-        if self.topP is not None:
-            result["topP"] = self.topP
-        if self.layers is not None:
-            result["layers"] = self.layers
-        if self.trueCFGScale is not None:
-            result["trueCFGScale"] = self.trueCFGScale
-        if self.quality is not None:
-            result["quality"] = self.quality
-        if self.textureSize is not None:
-            result["textureSize"] = self.textureSize
-        if self.decimationTarget is not None:
-            result["decimationTarget"] = self.decimationTarget
-        if self.remesh is not None:
-            result["remesh"] = self.remesh
-        if self.resolution is not None:
-            result["resolution"] = self.resolution
-        if self.sparseStructure:
-            sparse_data = self.sparseStructure.serialize()
-            if sparse_data:
-                result["sparseStructure"] = sparse_data
-        if self.shapeSlat:
-            shape_data = self.shapeSlat.serialize()
-            if shape_data:
-                result["shapeSlat"] = shape_data
-        if self.texSlat:
-            tex_data = self.texSlat.serialize()
-            if tex_data:
-                result["texSlat"] = tex_data
-        return result  
 
 
 @dataclass
