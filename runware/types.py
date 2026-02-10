@@ -655,32 +655,44 @@ class ISafety(SerializableMixin):
 
 
 @dataclass
-class ISparseStructure:
+class ISparseStructure(SerializableMixin):
     guidanceStrength: Optional[float] = None
     guidanceRescale: Optional[float] = None
     steps: Optional[int] = None
     rescaleT: Optional[float] = None
+
+    @property
+    def request_key(self) -> str:
+        return "sparseStructure"
 
 
 @dataclass
-class IShapeSlat:
+class IShapeSlat(SerializableMixin):
     guidanceStrength: Optional[float] = None
     guidanceRescale: Optional[float] = None
     steps: Optional[int] = None
     rescaleT: Optional[float] = None
+
+    @property
+    def request_key(self) -> str:
+        return "shapeSlat"
 
 
 @dataclass
-class ITexSlat:
+class ITexSlat(SerializableMixin):
     guidanceStrength: Optional[float] = None
     guidanceRescale: Optional[float] = None
     steps: Optional[int] = None
     rescaleT: Optional[float] = None
+
+    @property
+    def request_key(self) -> str:
+        return "texSlat"
 
 
 @dataclass
 class ISettings(SerializableMixin):
-    # Image 
+    # Image
     temperature: Optional[float] = None
     systemPrompt: Optional[str] = None
     topP: Optional[float] = None
@@ -698,7 +710,43 @@ class ISettings(SerializableMixin):
 
     @property
     def request_key(self) -> str:
-        return "settings"  
+        return "settings"
+
+    def serialize(self) -> Dict[str, Any]:
+        result: Dict[str, Any] = {}
+        if self.temperature is not None:
+            result["temperature"] = self.temperature
+        if self.systemPrompt is not None:
+            result["systemPrompt"] = self.systemPrompt
+        if self.topP is not None:
+            result["topP"] = self.topP
+        if self.layers is not None:
+            result["layers"] = self.layers
+        if self.trueCFGScale is not None:
+            result["trueCFGScale"] = self.trueCFGScale
+        if self.quality is not None:
+            result["quality"] = self.quality
+        if self.textureSize is not None:
+            result["textureSize"] = self.textureSize
+        if self.decimationTarget is not None:
+            result["decimationTarget"] = self.decimationTarget
+        if self.remesh is not None:
+            result["remesh"] = self.remesh
+        if self.resolution is not None:
+            result["resolution"] = self.resolution
+        if self.sparseStructure:
+            sparse_data = self.sparseStructure.serialize()
+            if sparse_data:
+                result["sparseStructure"] = sparse_data
+        if self.shapeSlat:
+            shape_data = self.shapeSlat.serialize()
+            if shape_data:
+                result["shapeSlat"] = shape_data
+        if self.texSlat:
+            tex_data = self.texSlat.serialize()
+            if tex_data:
+                result["texSlat"] = tex_data
+        return result  
 
 
 @dataclass
