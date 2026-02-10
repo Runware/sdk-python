@@ -1366,6 +1366,7 @@ class IVideoInference:
     inputAudios: Optional[List[str]] = None
     fps: Optional[int] = None
     steps: Optional[int] = None
+    scheduler: Optional[str] = None
     seed: Optional[int] = None
     CFGScale: Optional[float] = None
     acceleration: Optional[str] = None
