@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.44]
+
+### Added
+- Added support for textInference task type (TEXT_INFERENCE in ETaskType enum)
+- Added `ITextInferenceMessage` with role and content for chat messages
+- Added `ITextInferenceUsage` for token usage (promptTokens, completionTokens, totalTokens, thinkingTokens)
+- Added `IGoogleTextProviderSettings` with thinkingLevel for Gemini
+- Added `TextProviderSettings` type alias for text inference provider settings
+- Added `ITextInference` for requests (model, messages, taskUUID, deliveryMethod, maxTokens, temperature, topP, topK, seed, stopSequences, includeCost, providerSettings)
+- Added `IText` for responses (taskType, taskUUID, text, finishReason, usage, cost, status)
+- Added `textInference()` to Runware
+- Added `_buildTextRequest`, `_requestText`, `_handleInitialTextResponse` in base
+- Added `_addTextProviderSettings` for provider settings (matching image/video/audio pattern)
+- Added `getResponse()` support for `List[IText]` when polling textInference tasks
+- Added `TEXT_INITIAL_TIMEOUT` for async delivery (configurable via RUNWARE_TEXT_INITIAL_TIMEOUT)
+- Added `TEXT_POLLING_DELAY` for polling cadence (configurable via RUNWARE_TEXT_POLLING_DELAY)
+- Added `IVideoInference.scheduler: Optional[str] = None`
+
+### Changed
+- Enabled async delivery for text inference (returns IAsyncTaskResponse and uses getResponse() for polling)
+
 ## [0.4.43]
 
 ### Added
