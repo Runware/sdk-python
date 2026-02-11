@@ -1992,6 +1992,7 @@ class RunwareBase:
         self._addOptionalField(request_object, requestVideo.safety)
         self._addOptionalField(request_object, requestVideo.advancedFeatures)
         self._addOptionalField(request_object, requestVideo.acceleratorOptions)
+        self._addOptionalField(request_object, requestVideo.settings)
 
         return request_object
 

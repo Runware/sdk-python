@@ -358,6 +358,8 @@ class SerializableMixin:
                 nested = v.serialize()
                 if nested:
                     result[k] = nested
+            elif isinstance(v, (list, tuple)) and v and all(isinstance(x, SerializableMixin) for x in v):
+                result[k] = [x.serialize() for x in v]
             else:
                 result[k] = v
         return result
@@ -716,6 +718,8 @@ class ISettings(SerializableMixin):
     sparseStructure: Optional[ISparseStructure] = None
     shapeSlat: Optional[IShapeSlat] = None
     texSlat: Optional[ITexSlat] = None
+    # Audio
+    audio: Optional[bool] = None
 
     @property
     def request_key(self) -> str:
@@ -1189,44 +1193,27 @@ class IBytedanceProviderSettings(BaseProviderSettings):
 
 
 @dataclass
+class IKlingMultiPrompt(SerializableMixin):
+    prompt: str
+    duration: float
+
+
+@dataclass
 class IKlingAIProviderSettings(BaseProviderSettings):
     sound: Optional[bool] = None
     cameraControl: Optional[IKlingCameraControl] = None
-    soundVolume: Optional[float] = None  
+    soundVolume: Optional[float] = None
     originalAudioVolume: Optional[float] = None
-    soundEffectPrompt: Optional[str] = None  
-    bgmPrompt: Optional[str] = None  
+    soundEffectPrompt: Optional[str] = None
+    bgmPrompt: Optional[str] = None
     asmrMode: Optional[bool] = None
     keepOriginalSound: Optional[bool] = None
-    characterOrientation: Optional[str] = None  
+    characterOrientation: Optional[str] = None
+    multiPrompt: Optional[List[IKlingMultiPrompt]] = None
 
     @property
     def provider_key(self) -> str:
         return "klingai"
-
-    def serialize(self) -> Dict[str, Any]:
-        result = {}
-        if self.sound is not None:
-            result["sound"] = self.sound
-        if self.cameraControl:
-            camera_control_data = self.cameraControl.serialize()
-            if camera_control_data:
-                result["cameraControl"] = camera_control_data
-        if self.soundVolume is not None:
-            result["soundVolume"] = self.soundVolume
-        if self.originalAudioVolume is not None:
-            result["originalAudioVolume"] = self.originalAudioVolume
-        if self.soundEffectPrompt is not None:
-            result["soundEffectPrompt"] = self.soundEffectPrompt
-        if self.bgmPrompt is not None:
-            result["bgmPrompt"] = self.bgmPrompt
-        if self.asmrMode is not None:
-            result["asmrMode"] = self.asmrMode
-        if self.keepOriginalSound is not None:
-            result["keepOriginalSound"] = self.keepOriginalSound
-        if self.characterOrientation is not None:
-            result["characterOrientation"] = self.characterOrientation
-        return result
 
 
 @dataclass
@@ -1437,6 +1424,7 @@ class IVideoInference:
     inputs: Optional[IVideoInputs] = None
     skipResponse: Optional[bool] = False
     resolution: Optional[str] = None
+    settings: Optional[ISettings] = None
 
 
 I3dOutputFormat = Literal["GLB", "PLY"]
