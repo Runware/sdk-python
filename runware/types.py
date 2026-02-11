@@ -727,7 +727,7 @@ class ISettings(SerializableMixin):
 
 
 @dataclass
-class IInputFrame:
+class IInputFrame(SerializableMixin):
     image: Union[str, File]
     frame: Optional[Union[Literal["first", "last"], int]] = None
 
@@ -762,13 +762,13 @@ class IInputs(SerializableMixin):
 
 
 @dataclass
-class IAudioInput:
+class IAudioInput(SerializableMixin):
     id: Optional[str] = None
     source: Optional[str] = None
 
 
 @dataclass
-class ISpeechInput:
+class ISpeechInput(SerializableMixin):
     id: Optional[str] = None
     provider: Optional[str] = None
     voiceId: Optional[str] = None
@@ -914,7 +914,7 @@ class IAudioSettings(SerializableMixin):
 
 
 @dataclass
-class IElevenLabsCompositionSection:
+class IElevenLabsCompositionSection(SerializableMixin):
     sectionName: str  # 1-100 characters
     positiveLocalStyles: List[str]  # Styles that should be present in this section
     negativeLocalStyles: List[str]  # Styles that should not be present in this section
@@ -923,14 +923,14 @@ class IElevenLabsCompositionSection:
 
 
 @dataclass
-class IElevenLabsCompositionPlan:
+class IElevenLabsCompositionPlan(SerializableMixin):
     positiveGlobalStyles: List[str]  # Styles that should be present in the entire song
     negativeGlobalStyles: List[str]  # Styles that should not be present in the entire song
     sections: List[IElevenLabsCompositionSection]  # Sections of the song
 
 
 @dataclass
-class IElevenLabsMusicSettings:
+class IElevenLabsMusicSettings(SerializableMixin):
     compositionPlan: IElevenLabsCompositionPlan  # Music composition structure
 
 
@@ -1270,7 +1270,7 @@ class IPixverseProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class IViduTemplate:
+class IViduTemplate(SerializableMixin):
     name: Optional[str] = None
     area: Optional[str] = None
     beast: Optional[str] = None
@@ -1320,7 +1320,7 @@ class IRunwayProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class ISyncSegment:
+class ISyncSegment(SerializableMixin):
     startTime: float
     endTime: float
     ref: str
@@ -1341,36 +1341,6 @@ class ISyncProviderSettings(BaseProviderSettings):
     @property
     def provider_key(self) -> str:
         return "sync"
-
-    def serialize(self) -> Dict[str, Any]:
-        result = {}
-        if self.syncMode is not None:
-            result["syncMode"] = self.syncMode
-        if self.editRegion is not None:
-            result["editRegion"] = self.editRegion
-        if self.emotionPrompt is not None:
-            result["emotionPrompt"] = self.emotionPrompt
-        if self.temperature is not None:
-            result["temperature"] = self.temperature
-        if self.activeSpeakerDetection is not None:
-            result["activeSpeakerDetection"] = self.activeSpeakerDetection
-        if self.occlusionDetectionEnabled is not None:
-            result["occlusionDetectionEnabled"] = self.occlusionDetectionEnabled
-        if self.segments is not None:
-            segments_list = []
-            for segment in self.segments:
-                segment_dict = {
-                    "startTime": segment.startTime,
-                    "endTime": segment.endTime,
-                    "ref": segment.ref
-                }
-                if segment.audioStartTime is not None:
-                    segment_dict["audioStartTime"] = segment.audioStartTime
-                if segment.audioEndTime is not None:
-                    segment_dict["audioEndTime"] = segment.audioEndTime
-                segments_list.append(segment_dict)
-            result["segments"] = segments_list
-        return result
 
 
 AudioProviderSettings = IElevenLabsProviderSettings | IKlingAIProviderSettings | IMireloProviderSettings
