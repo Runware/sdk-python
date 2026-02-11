@@ -2031,6 +2031,8 @@ class RunwareBase:
             request3d.inputs.image = await process_image(request3d.inputs.image)
         if request3d.inputs.mask:
             request3d.inputs.mask = await process_image(request3d.inputs.mask)
+        if request3d.inputs.meshFile:
+            request3d.inputs.meshFile = await process_image(request3d.inputs.meshFile)
 
     def _build3dRequest(self, request3d: I3dInference) -> Dict[str, Any]:
         request_object: Dict[str, Any] = {

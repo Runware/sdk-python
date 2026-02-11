@@ -827,6 +827,7 @@ class IVideoInputs(SerializableMixin):
 class I3dInputs(SerializableMixin):
     image: Optional[Union[str, File]] = None
     mask: Optional[Union[str, File]] = None
+    meshFile: Optional[Union[str, File]] = None
 
     @property
     def request_key(self) -> str:
