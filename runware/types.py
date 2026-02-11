@@ -733,7 +733,7 @@ class IInputFrame(SerializableMixin):
 
 
 @dataclass
-class IInputReference:
+class IInputReference(SerializableMixin):
     image: Union[str, File]
     tag: Optional[str] = None
 
