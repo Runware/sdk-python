@@ -718,8 +718,6 @@ class ISettings(SerializableMixin):
     sparseStructure: Optional[ISparseStructure] = None
     shapeSlat: Optional[IShapeSlat] = None
     texSlat: Optional[ITexSlat] = None
-    # Audio
-    audio: Optional[bool] = None
 
     @property
     def request_key(self) -> str:
@@ -1394,7 +1392,6 @@ class IVideoInference:
     inputs: Optional[IVideoInputs] = None
     skipResponse: Optional[bool] = False
     resolution: Optional[str] = None
-    settings: Optional[ISettings] = None
 
 
 I3dOutputFormat = Literal["GLB", "PLY"]
