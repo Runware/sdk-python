@@ -350,8 +350,17 @@ class IPhotoMaker:
 
 class SerializableMixin:
     def serialize(self) -> Dict[str, Any]:
-        return {k: v for k, v in asdict(self).items()
-                if v is not None and not k.startswith('_')}
+        result: Dict[str, Any] = {}
+        for k, v in vars(self).items():
+            if v is None or k.startswith("_"):
+                continue
+            if isinstance(v, SerializableMixin):
+                nested = v.serialize()
+                if nested:
+                    result[k] = nested
+            else:
+                result[k] = v
+        return result
 
     def to_request_dict(self) -> Dict[str, Any]:
         data = self.serialize()
@@ -655,17 +664,62 @@ class ISafety(SerializableMixin):
 
 
 @dataclass
+class ISparseStructure(SerializableMixin):
+    guidanceStrength: Optional[float] = None
+    guidanceRescale: Optional[float] = None
+    steps: Optional[int] = None
+    rescaleT: Optional[float] = None
+
+    @property
+    def request_key(self) -> str:
+        return "sparseStructure"
+
+
+@dataclass
+class IShapeSlat(SerializableMixin):
+    guidanceStrength: Optional[float] = None
+    guidanceRescale: Optional[float] = None
+    steps: Optional[int] = None
+    rescaleT: Optional[float] = None
+
+    @property
+    def request_key(self) -> str:
+        return "shapeSlat"
+
+
+@dataclass
+class ITexSlat(SerializableMixin):
+    guidanceStrength: Optional[float] = None
+    guidanceRescale: Optional[float] = None
+    steps: Optional[int] = None
+    rescaleT: Optional[float] = None
+
+    @property
+    def request_key(self) -> str:
+        return "texSlat"
+
+
+@dataclass
 class ISettings(SerializableMixin):
+    # Image
     temperature: Optional[float] = None
     systemPrompt: Optional[str] = None
     topP: Optional[float] = None
-    layers: Optional[int] = None  
-    trueCFGScale: Optional[float] = None  
+    layers: Optional[int] = None
+    trueCFGScale: Optional[float] = None
     quality: Optional[str] = None
-    
+    # 3D inference
+    textureSize: Optional[int] = None
+    decimationTarget: Optional[int] = None
+    remesh: Optional[bool] = None
+    resolution: Optional[int] = None
+    sparseStructure: Optional[ISparseStructure] = None
+    shapeSlat: Optional[IShapeSlat] = None
+    texSlat: Optional[ITexSlat] = None
+
     @property
     def request_key(self) -> str:
-        return "settings"  
+        return "settings"
 
 
 @dataclass
@@ -773,6 +827,7 @@ class IVideoInputs(SerializableMixin):
 class I3dInputs(SerializableMixin):
     image: Optional[Union[str, File]] = None
     mask: Optional[Union[str, File]] = None
+    meshFile: Optional[Union[str, File]] = None
 
     @property
     def request_key(self) -> str:
@@ -1396,10 +1451,12 @@ class I3dInference:
     numberResults: Optional[int] = 1
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[I3dOutputFormat] = None  # "GLB" | "PLY"
+    outputQuality: Optional[int] = None
     includeCost: Optional[bool] = None
     deliveryMethod: str = "async"
     webhookURL: Optional[str] = None
     inputs: Optional[I3dInputs] = None
+    settings: Optional[ISettings] = None
 
 
 @dataclass
