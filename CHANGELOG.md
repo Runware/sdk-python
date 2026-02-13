@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.45]
+
+### Added
+- Added `ISparseStructure`, `IShapeSlat`, `ITexSlat` (guidanceStrength, guidanceRescale, steps, rescaleT).
+- Added `I3dInference.settings: Optional[ISettings]` and `outputQuality: Optional[int]`.
+- Added `I3dInputs.meshFile: Optional[Union[str, File]]`.
+
+### Changed
+- Extended `ISettings` with 3D fields: textureSize, decimationTarget, remesh, resolution, sparseStructure, shapeSlat, texSlat.
+
 ## [0.4.44]
 
 ### Added
