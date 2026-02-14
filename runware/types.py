@@ -358,6 +358,8 @@ class SerializableMixin:
                 nested = v.serialize()
                 if nested:
                     result[k] = nested
+            elif isinstance(v, (list, tuple)) and v and all(isinstance(x, SerializableMixin) for x in v):
+                result[k] = [x.serialize() for x in v]
             else:
                 result[k] = v
         return result
@@ -723,13 +725,13 @@ class ISettings(SerializableMixin):
 
 
 @dataclass
-class IInputFrame:
+class IInputFrame(SerializableMixin):
     image: Union[str, File]
     frame: Optional[Union[Literal["first", "last"], int]] = None
 
 
 @dataclass
-class IInputReference:
+class IInputReference(SerializableMixin):
     image: Union[str, File]
     tag: Optional[str] = None
 
@@ -758,13 +760,13 @@ class IInputs(SerializableMixin):
 
 
 @dataclass
-class IAudioInput:
+class IAudioInput(SerializableMixin):
     id: Optional[str] = None
     source: Optional[str] = None
 
 
 @dataclass
-class ISpeechInput:
+class ISpeechInput(SerializableMixin):
     id: Optional[str] = None
     provider: Optional[str] = None
     voiceId: Optional[str] = None
@@ -910,7 +912,7 @@ class IAudioSettings(SerializableMixin):
 
 
 @dataclass
-class IElevenLabsCompositionSection:
+class IElevenLabsCompositionSection(SerializableMixin):
     sectionName: str  # 1-100 characters
     positiveLocalStyles: List[str]  # Styles that should be present in this section
     negativeLocalStyles: List[str]  # Styles that should not be present in this section
@@ -919,14 +921,14 @@ class IElevenLabsCompositionSection:
 
 
 @dataclass
-class IElevenLabsCompositionPlan:
+class IElevenLabsCompositionPlan(SerializableMixin):
     positiveGlobalStyles: List[str]  # Styles that should be present in the entire song
     negativeGlobalStyles: List[str]  # Styles that should not be present in the entire song
     sections: List[IElevenLabsCompositionSection]  # Sections of the song
 
 
 @dataclass
-class IElevenLabsMusicSettings:
+class IElevenLabsMusicSettings(SerializableMixin):
     compositionPlan: IElevenLabsCompositionPlan  # Music composition structure
 
 
@@ -1189,44 +1191,27 @@ class IBytedanceProviderSettings(BaseProviderSettings):
 
 
 @dataclass
+class IKlingMultiPrompt(SerializableMixin):
+    prompt: str
+    duration: float
+
+
+@dataclass
 class IKlingAIProviderSettings(BaseProviderSettings):
     sound: Optional[bool] = None
     cameraControl: Optional[IKlingCameraControl] = None
-    soundVolume: Optional[float] = None  
+    soundVolume: Optional[float] = None
     originalAudioVolume: Optional[float] = None
-    soundEffectPrompt: Optional[str] = None  
-    bgmPrompt: Optional[str] = None  
+    soundEffectPrompt: Optional[str] = None
+    bgmPrompt: Optional[str] = None
     asmrMode: Optional[bool] = None
     keepOriginalSound: Optional[bool] = None
-    characterOrientation: Optional[str] = None  
+    characterOrientation: Optional[str] = None
+    multiPrompt: Optional[List[IKlingMultiPrompt]] = None
 
     @property
     def provider_key(self) -> str:
         return "klingai"
-
-    def serialize(self) -> Dict[str, Any]:
-        result = {}
-        if self.sound is not None:
-            result["sound"] = self.sound
-        if self.cameraControl:
-            camera_control_data = self.cameraControl.serialize()
-            if camera_control_data:
-                result["cameraControl"] = camera_control_data
-        if self.soundVolume is not None:
-            result["soundVolume"] = self.soundVolume
-        if self.originalAudioVolume is not None:
-            result["originalAudioVolume"] = self.originalAudioVolume
-        if self.soundEffectPrompt is not None:
-            result["soundEffectPrompt"] = self.soundEffectPrompt
-        if self.bgmPrompt is not None:
-            result["bgmPrompt"] = self.bgmPrompt
-        if self.asmrMode is not None:
-            result["asmrMode"] = self.asmrMode
-        if self.keepOriginalSound is not None:
-            result["keepOriginalSound"] = self.keepOriginalSound
-        if self.characterOrientation is not None:
-            result["characterOrientation"] = self.characterOrientation
-        return result
 
 
 @dataclass
@@ -1283,7 +1268,7 @@ class IPixverseProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class IViduTemplate:
+class IViduTemplate(SerializableMixin):
     name: Optional[str] = None
     area: Optional[str] = None
     beast: Optional[str] = None
@@ -1333,7 +1318,7 @@ class IRunwayProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class ISyncSegment:
+class ISyncSegment(SerializableMixin):
     startTime: float
     endTime: float
     ref: str
@@ -1354,36 +1339,6 @@ class ISyncProviderSettings(BaseProviderSettings):
     @property
     def provider_key(self) -> str:
         return "sync"
-
-    def serialize(self) -> Dict[str, Any]:
-        result = {}
-        if self.syncMode is not None:
-            result["syncMode"] = self.syncMode
-        if self.editRegion is not None:
-            result["editRegion"] = self.editRegion
-        if self.emotionPrompt is not None:
-            result["emotionPrompt"] = self.emotionPrompt
-        if self.temperature is not None:
-            result["temperature"] = self.temperature
-        if self.activeSpeakerDetection is not None:
-            result["activeSpeakerDetection"] = self.activeSpeakerDetection
-        if self.occlusionDetectionEnabled is not None:
-            result["occlusionDetectionEnabled"] = self.occlusionDetectionEnabled
-        if self.segments is not None:
-            segments_list = []
-            for segment in self.segments:
-                segment_dict = {
-                    "startTime": segment.startTime,
-                    "endTime": segment.endTime,
-                    "ref": segment.ref
-                }
-                if segment.audioStartTime is not None:
-                    segment_dict["audioStartTime"] = segment.audioStartTime
-                if segment.audioEndTime is not None:
-                    segment_dict["audioEndTime"] = segment.audioEndTime
-                segments_list.append(segment_dict)
-            result["segments"] = segments_list
-        return result
 
 
 AudioProviderSettings = IElevenLabsProviderSettings | IKlingAIProviderSettings | IMireloProviderSettings

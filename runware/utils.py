@@ -445,11 +445,14 @@ async def fileToBase64(file_path: str) -> str:
         async with aiofiles.open(file_path, "rb") as file:
             file_contents = await file.read()
             mime_type, _ = mimetypes.guess_type(file_path)
-
             if mime_type is None:
-                raise ValueError(
-                    f"Unable to determine the MIME type for file: {file_path}"
-                )
+                ext = os.path.splitext(file_path)[1].lower()
+                if ext in (".glb", ".ply"):
+                    mime_type = "application/octet-stream"
+                else:
+                    raise ValueError(
+                        f"Unable to determine the MIME type for file: {file_path}"
+                    )
 
             base64_content = base64.b64encode(file_contents).decode("utf-8")
             return f"data:{mime_type};base64,{base64_content}"
