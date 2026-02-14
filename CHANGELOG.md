@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.46]
+
+### Added
+- Added `IKlingMultiPrompt`: new dataclass with `prompt: str` and `duration: float` for Kling multiPrompt payloads.
+
+### Changed
+- `fileToBase64()`: allow `application/octet-stream` as MIME type for `.glb` and `.ply` files when MIME cannot be guessed.
+- Recursive serialization in `SerializableMixin.serialize()`: replaced flat `asdict` + None filter with a recursive implementation that:
+  - Skips `None` and keys starting with `_`
+  - Recursively serializes nested `SerializableMixin` instances
+  - Serializes lists/tuples of `SerializableMixin` as lists of dicts (e.g. for `multiPrompt` and other list payloads).
+
 ## [0.4.45]
 
 ### Added
