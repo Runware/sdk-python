@@ -628,6 +628,17 @@ class ISourcefulProviderSettings(BaseProviderSettings):
 
 
 @dataclass
+class IRecraftProviderSettings(BaseProviderSettings):
+    styleId: Optional[str] = None
+    colors: Optional[List[int]] = None
+    backgroundColor: Optional[List[int]] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "recraft"
+
+
+@dataclass
 class IUltralytics(SerializableMixin):
 
     maskBlur: Optional[int] = None
@@ -651,6 +662,7 @@ ImageProviderSettings = (
     | IAlibabaProviderSettings
     | IBlackForestLabsProviderSettings
     | ISourcefulProviderSettings
+    | IRecraftProviderSettings
 )
 
 @dataclass
@@ -718,6 +730,9 @@ class ISettings(SerializableMixin):
     sparseStructure: Optional[ISparseStructure] = None
     shapeSlat: Optional[IShapeSlat] = None
     texSlat: Optional[ITexSlat] = None
+    # Audio
+    lyrics: Optional[str] = None  
+    guidanceType: Optional[str] = None  
 
     @property
     def request_key(self) -> str:
@@ -1428,7 +1443,12 @@ class IAudioInputs(SerializableMixin):
 class IAudioInference:
     model: str
     positivePrompt: Optional[str] = None  # Optional when using composition plan
+    negativePrompt: Optional[str] = None
     duration: Optional[float] = None  # Min: 10, Max: 300 - Optional when using composition plan
+    seed: Optional[int] = None
+    steps: Optional[int] = None
+    strength: Optional[float] = None
+    CFGScale: Optional[float] = None
     taskUUID: Optional[str] = None
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IAudioOutputFormat] = None
