@@ -628,10 +628,15 @@ class ISourcefulProviderSettings(BaseProviderSettings):
 
 
 @dataclass
+class IRecraftRGB(SerializableMixin):
+    rgb: List[int]  
+
+
+@dataclass
 class IRecraftProviderSettings(BaseProviderSettings):
     styleId: Optional[str] = None
-    colors: Optional[List[int]] = None
-    backgroundColor: Optional[List[int]] = None
+    colors: Optional[List[IRecraftRGB]] = None
+    backgroundColor: Optional[IRecraftRGB] = None
 
     @property
     def provider_key(self) -> str:
@@ -1460,6 +1465,7 @@ class IAudioInference:
     webhookURL: Optional[str] = None
     providerSettings: Optional[AudioProviderSettings] = None  
     inputs: Optional[IAudioInputs] = None
+    settings: Optional[ISettings] = None
 
 
 @dataclass

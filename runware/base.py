@@ -2691,12 +2691,14 @@ class RunwareBase:
         self._addOptionalField(request_object, requestAudio.audioSettings)
         self._addAudioProviderSettings(request_object, requestAudio)
         self._addOptionalField(request_object, requestAudio.inputs)
+        self._addOptionalField(request_object, requestAudio.settings)
         
         return request_object
 
     def _addOptionalAudioFields(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
         optional_fields = [
-            "outputType", "outputFormat", "includeCost", "uploadEndpoint", "webhookURL"
+            "outputType", "outputFormat", "includeCost", "uploadEndpoint", "webhookURL",
+            "negativePrompt", "steps", "seed", "CFGScale", "strength"
         ]
 
         for field in optional_fields:
