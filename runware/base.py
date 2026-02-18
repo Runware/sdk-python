@@ -595,20 +595,21 @@ class RunwareBase:
             "numberResults": image_remaining,
         }
 
-        await self.send([new_request_object])
-
-        if new_request_object.get("webhookURL"):
-            return await self._handleWebhookAcknowledgment(
-                task_uuid=task_uuid,
-                task_type="imageInference",
-                debug_key="image-inference-webhook"
-            )
-
         let_lis = await self.listenToImages(
             onPartialImages=on_partial_images,
             taskUUID=task_uuid,
             groupKey=LISTEN_TO_IMAGES_KEY.REQUEST_IMAGES,
         )
+
+        await self.send([new_request_object])
+
+        if new_request_object.get("webhookURL"):
+            let_lis["destroy"]()
+            return await self._handleWebhookAcknowledgment(
+                task_uuid=task_uuid,
+                task_type="imageInference",
+                debug_key="image-inference-webhook"
+            )
         images = await self.getSimililarImage(
             taskUUID=task_uuids,
             numberOfImages=number_of_images,
