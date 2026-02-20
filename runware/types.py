@@ -718,6 +718,8 @@ class ISettings(SerializableMixin):
     sparseStructure: Optional[ISparseStructure] = None
     shapeSlat: Optional[IShapeSlat] = None
     texSlat: Optional[ITexSlat] = None
+    # Audio 
+    languageBoost: Optional[str] = None  
 
     @property
     def request_key(self) -> str:
@@ -905,6 +907,7 @@ class IImageCaption:
 class IAudioSettings(SerializableMixin):
     sampleRate: Optional[int] = None  # Min: 8000, Max: 48000, Default: 44100
     bitrate: Optional[int] = None  # Min: 32, Max: 320, Default: 128
+    channels: Optional[int] = None  
 
     @property
     def request_key(self) -> str:
@@ -1425,6 +1428,21 @@ class IAudioInputs(SerializableMixin):
 
 
 @dataclass
+class IAudioSpeech(SerializableMixin):
+    text: Optional[str] = None  
+    voice: Optional[str] = None  
+    speed: Optional[float] = None
+    volume: Optional[int] = None
+    pitch: Optional[int] = None
+    emotion: Optional[str] = None
+    tone: Optional[List[str]] = None  
+
+    @property
+    def request_key(self) -> str:
+        return "speech"
+
+
+@dataclass
 class IAudioInference:
     model: str
     positivePrompt: Optional[str] = None  # Optional when using composition plan
@@ -1440,6 +1458,8 @@ class IAudioInference:
     webhookURL: Optional[str] = None
     providerSettings: Optional[AudioProviderSettings] = None  
     inputs: Optional[IAudioInputs] = None
+    speech: Optional[IAudioSpeech] = None
+    settings: Optional[ISettings] = None  
 
 
 @dataclass

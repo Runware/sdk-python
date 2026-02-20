@@ -2688,7 +2688,9 @@ class RunwareBase:
                 request_object["duration"] = requestAudio.duration
         
         self._addOptionalAudioFields(request_object, requestAudio)
+        self._addOptionalField(request_object, requestAudio.speech)
         self._addOptionalField(request_object, requestAudio.audioSettings)
+        self._addOptionalField(request_object, requestAudio.settings)
         self._addAudioProviderSettings(request_object, requestAudio)
         self._addOptionalField(request_object, requestAudio.inputs)
         
