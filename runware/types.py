@@ -549,6 +549,11 @@ class IBriaProviderSettings(BaseProviderSettings):
     preserveAudio: Optional[bool] = None
     autoTrim: Optional[bool] = None
     mask: Optional[IBriaMaskSettings] = None
+    edit: Optional[str] = None
+    color: Optional[str] = None
+    lightDirection: Optional[str] = None
+    lightType: Optional[str] = None
+    season: Optional[str] = None
 
     @property
     def provider_key(self) -> str:
