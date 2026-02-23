@@ -889,6 +889,9 @@ class IImageInference:
     webhookURL: Optional[str] = None
     ttl: Optional[int] = None  # time-to-live (TTL) in seconds, only applies when outputType is "URL"
 
+    def __post_init__(self):
+        if self.inputs is not None and not isinstance(self.inputs, IInputs):
+            self.inputs = IInputs(**self.inputs)
 
 @dataclass
 class IImageCaption:
