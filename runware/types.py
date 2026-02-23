@@ -719,7 +719,8 @@ class ISettings(SerializableMixin):
     shapeSlat: Optional[IShapeSlat] = None
     texSlat: Optional[ITexSlat] = None
     # Audio 
-    languageBoost: Optional[str] = None  
+    languageBoost: Optional[str] = None
+    turbo: Optional[bool] = None
 
     @property
     def request_key(self) -> str:
