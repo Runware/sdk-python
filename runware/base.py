@@ -2260,6 +2260,8 @@ class RunwareBase:
             request_object["stopSequences"] = requestText.stopSequences
         if requestText.includeCost is not None:
             request_object["includeCost"] = requestText.includeCost
+        if requestText.numberResults is not None:
+            request_object["numberResults"] = requestText.numberResults
         self._addTextProviderSettings(request_object, requestText)
         return request_object
 
