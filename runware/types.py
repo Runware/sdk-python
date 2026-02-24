@@ -628,15 +628,22 @@ class ISourcefulProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class IRecraftRGB(SerializableMixin):
-    rgb: List[int]  
+class IRGB(SerializableMixin):
+    rgb: List[int]
+
+    def __post_init__(self) -> None:
+        if len(self.rgb) != 3:
+            raise ValueError("IRGB.rgb must have exactly 3 elements")
+        for i, v in enumerate(self.rgb):
+            if not isinstance(v, int) or v < 0 or v > 255:
+                raise ValueError(f"IRGB.rgb[{i}] must be an int in 0-255, got {v!r}")
 
 
 @dataclass
 class IRecraftProviderSettings(BaseProviderSettings):
     styleId: Optional[str] = None
-    colors: Optional[List[IRecraftRGB]] = None
-    backgroundColor: Optional[IRecraftRGB] = None
+    colors: Optional[List[IRGB]] = None
+    backgroundColor: Optional[IRGB] = None
 
     @property
     def provider_key(self) -> str:
