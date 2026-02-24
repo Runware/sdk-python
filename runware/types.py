@@ -915,13 +915,17 @@ class IImageInference:
     providerSettings: Optional[ImageProviderSettings] = None
     safety: Optional[ISafety] = None
     settings: Optional[ISettings] = None
-    inputs: Optional[IInputs] = None
+    inputs: Optional[Union[IInputs, Dict[str, Any]]] = None
     ultralytics: Optional[IUltralytics] = None
     useCache: Optional[bool] = None
     resolution: Optional[str] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
     webhookURL: Optional[str] = None
     ttl: Optional[int] = None  # time-to-live (TTL) in seconds, only applies when outputType is "URL"
+
+    def __post_init__(self):
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = IInputs(**self.inputs)
 
 
 @dataclass
@@ -1061,7 +1065,11 @@ class IImageUpscale:
     webhookURL: Optional[str] = None
     providerSettings: Optional[ImageProviderSettings] = None
     safety: Optional[ISafety] = None
-    inputs: Optional[IInputs] = None
+    inputs: Optional[Union[IInputs, Dict[str, Any]]] = None
+
+    def __post_init__(self):
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = IInputs(**self.inputs)
 
 
 class ReconnectingWebsocketProps:
@@ -1424,9 +1432,13 @@ class IVideoInference:
     safety: Optional[ISafety] = None
     advancedFeatures: Optional[IVideoAdvancedFeatures] = None
     acceleratorOptions: Optional[IAcceleratorOptions] = None
-    inputs: Optional[IVideoInputs] = None
+    inputs: Optional[Union[IVideoInputs, Dict[str, Any]]] = None
     skipResponse: Optional[bool] = False
     resolution: Optional[str] = None
+
+    def __post_init__(self):
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = IVideoInputs(**self.inputs)
 
 
 I3dOutputFormat = Literal["GLB", "PLY"]
@@ -1445,8 +1457,12 @@ class I3dInference:
     includeCost: Optional[bool] = None
     deliveryMethod: str = "async"
     webhookURL: Optional[str] = None
-    inputs: Optional[I3dInputs] = None
+    inputs: Optional[Union[I3dInputs, Dict[str, Any]]] = None
     settings: Optional[ISettings] = None
+
+    def __post_init__(self):
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = I3dInputs(**self.inputs)
 
 
 @dataclass
@@ -1494,9 +1510,13 @@ class IAudioInference:
     uploadEndpoint: Optional[str] = None
     webhookURL: Optional[str] = None
     providerSettings: Optional[AudioProviderSettings] = None  
-    inputs: Optional[IAudioInputs] = None
+    inputs: Optional[Union[IAudioInputs, Dict[str, Any]]] = None
     speech: Optional[IAudioSpeech] = None
-    settings: Optional[ISettings] = None  
+    settings: Optional[ISettings] = None
+
+    def __post_init__(self):
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = IAudioInputs(**self.inputs)
 
 
 @dataclass
