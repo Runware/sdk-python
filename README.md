@@ -1081,6 +1081,9 @@ The Runware SDK provides configurable timeout settings for different operations 
 Set environment variables to customize timeout behavior:
 
 ```bash
+# Concurrency
+RUNWARE_MAX_CONCURRENT_REQUESTS=15           # Max concurrent API requests per client (default: 15)
+
 # Image Operations (milliseconds)
 RUNWARE_IMAGE_INFERENCE_TIMEOUT=300000      # Image generation (default: 5 min)
 RUNWARE_IMAGE_OPERATION_TIMEOUT=120000      # Caption, upscale, background removal (default: 2 min)

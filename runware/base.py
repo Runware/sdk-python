@@ -66,7 +66,6 @@ from .utils import (
     fileToBase64,
     createImageFromResponse,
     createImageToTextFromResponse,
-    createVideoToTextFromResponse,
     createEnhancedPromptsFromResponse,
     instantiateDataclassList,
     RunwareAPIError,
@@ -93,7 +92,6 @@ from .utils import (
     IMAGE_POLLING_DELAY,
     TEXT_POLLING_DELAY,
     AUDIO_INITIAL_TIMEOUT,
-    AUDIO_INFERENCE_TIMEOUT,
     AUDIO_POLLING_DELAY,
     MAX_POLLS,
     MAX_POLLS_VIDEO_GENERATION,
@@ -893,6 +891,7 @@ class RunwareBase:
             uploaded_images.append(image_uploaded.imageUUID)
 
         taskUUID = getUUID()
+        requestImageToText.taskUUID = taskUUID
 
         # Create a dictionary with mandatory parameters
         task_params = {
@@ -968,6 +967,7 @@ class RunwareBase:
     ) -> "Union[List[IVideoToText], IAsyncTaskResponse]":
         await self.ensureConnection()
         taskUUID = requestVideoCaption.taskUUID or getUUID()
+        requestVideoCaption.taskUUID = taskUUID
 
         # Create the request object
         task_params = {
@@ -1013,6 +1013,7 @@ class RunwareBase:
     ) -> "Union[List[IVideo], IAsyncTaskResponse]":
         await self.ensureConnection()
         taskUUID = requestVideoBackgroundRemoval.taskUUID or getUUID()
+        requestVideoBackgroundRemoval.taskUUID = taskUUID
 
         # Create the request object
         task_params = {
@@ -1069,6 +1070,7 @@ class RunwareBase:
     async def _requestVideoUpscale(self, requestVideoUpscale: "IVideoUpscale") -> "Union[List[IVideo], IAsyncTaskResponse]":
         await self.ensureConnection()
         taskUUID = requestVideoUpscale.taskUUID or getUUID()
+        requestVideoUpscale.taskUUID = taskUUID
 
         # Create the request object
         task_params = {
@@ -1131,6 +1133,7 @@ class RunwareBase:
             taskUUID = removeImageBackgroundPayload.taskUUID
         else:
             taskUUID = getUUID()
+        removeImageBackgroundPayload.taskUUID = taskUUID
 
         # Create a dictionary with mandatory parameters
         task_params = {
@@ -1227,6 +1230,7 @@ class RunwareBase:
             return []
 
         taskUUID = getUUID()
+        upscaleGanPayload.taskUUID = taskUUID
 
         # Create a dictionary with mandatory parameters
         task_params = {
@@ -1411,6 +1415,7 @@ class RunwareBase:
         promptVersions = promptEnhancer.promptVersions or 1
 
         taskUUID = getUUID()
+        promptEnhancer.taskUUID = taskUUID
 
         # Create a dictionary with mandatory parameters
         task_params = {

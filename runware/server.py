@@ -172,6 +172,8 @@ class RunwareServer(RunwareBase):
         self.logger.info("Disconnecting from Runware server")
         self._is_shutting_down = True
 
+        await self._cancel_pending_operations("Disconnected by user")
+
         for task_name, task in list(self._tasks.items()):
             if task and not task.done():
                 task.cancel()
