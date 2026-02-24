@@ -374,8 +374,19 @@ class IPhotoMaker:
 
 class SerializableMixin:
     def serialize(self) -> Dict[str, Any]:
-        return {k: v for k, v in asdict(self).items()
-                if v is not None and not k.startswith('_')}
+        result: Dict[str, Any] = {}
+        for k, v in vars(self).items():
+            if v is None or k.startswith("_"):
+                continue
+            if isinstance(v, SerializableMixin):
+                nested = v.serialize()
+                if nested:
+                    result[k] = nested
+            elif isinstance(v, (list, tuple)) and v and all(isinstance(x, SerializableMixin) for x in v):
+                result[k] = [x.serialize() for x in v]
+            else:
+                result[k] = v
+        return result
 
     def to_request_dict(self) -> Dict[str, Any]:
         data = self.serialize()
@@ -562,6 +573,11 @@ class IBriaProviderSettings(BaseProviderSettings):
     preserveAudio: Optional[bool] = None
     autoTrim: Optional[bool] = None
     mask: Optional[IBriaMaskSettings] = None
+    edit: Optional[str] = None
+    color: Optional[str] = None
+    lightDirection: Optional[str] = None
+    lightType: Optional[str] = None
+    season: Optional[str] = None
 
     @property
     def provider_key(self) -> str:
@@ -641,6 +657,29 @@ class ISourcefulProviderSettings(BaseProviderSettings):
 
 
 @dataclass
+class IRGB(SerializableMixin):
+    rgb: List[int]
+
+    def __post_init__(self) -> None:
+        if len(self.rgb) != 3:
+            raise ValueError("IRGB.rgb must have exactly 3 elements")
+        for i, v in enumerate(self.rgb):
+            if not isinstance(v, int) or v < 0 or v > 255:
+                raise ValueError(f"IRGB.rgb[{i}] must be an int in 0-255, got {v!r}")
+
+
+@dataclass
+class IRecraftProviderSettings(BaseProviderSettings):
+    styleId: Optional[str] = None
+    colors: Optional[List[IRGB]] = None
+    backgroundColor: Optional[IRGB] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "recraft"
+
+
+@dataclass
 class IUltralytics(SerializableMixin):
 
     maskBlur: Optional[int] = None
@@ -664,6 +703,7 @@ ImageProviderSettings = (
     | IAlibabaProviderSettings
     | IBlackForestLabsProviderSettings
     | ISourcefulProviderSettings
+    | IRecraftProviderSettings
 )
 
 @dataclass
@@ -679,27 +719,77 @@ class ISafety(SerializableMixin):
 
 
 @dataclass
-class ISettings(SerializableMixin):
-    temperature: Optional[float] = None
-    systemPrompt: Optional[str] = None
-    topP: Optional[float] = None
-    layers: Optional[int] = None  
-    trueCFGScale: Optional[float] = None  
-    quality: Optional[str] = None
-    
+class ISparseStructure(SerializableMixin):
+    guidanceStrength: Optional[float] = None
+    guidanceRescale: Optional[float] = None
+    steps: Optional[int] = None
+    rescaleT: Optional[float] = None
+
     @property
     def request_key(self) -> str:
-        return "settings"  
+        return "sparseStructure"
 
 
 @dataclass
-class IInputFrame:
+class IShapeSlat(SerializableMixin):
+    guidanceStrength: Optional[float] = None
+    guidanceRescale: Optional[float] = None
+    steps: Optional[int] = None
+    rescaleT: Optional[float] = None
+
+    @property
+    def request_key(self) -> str:
+        return "shapeSlat"
+
+
+@dataclass
+class ITexSlat(SerializableMixin):
+    guidanceStrength: Optional[float] = None
+    guidanceRescale: Optional[float] = None
+    steps: Optional[int] = None
+    rescaleT: Optional[float] = None
+
+    @property
+    def request_key(self) -> str:
+        return "texSlat"
+
+
+@dataclass
+class ISettings(SerializableMixin):
+    # Image
+    temperature: Optional[float] = None
+    systemPrompt: Optional[str] = None
+    topP: Optional[float] = None
+    layers: Optional[int] = None
+    trueCFGScale: Optional[float] = None
+    quality: Optional[str] = None
+    # 3D inference
+    textureSize: Optional[int] = None
+    decimationTarget: Optional[int] = None
+    remesh: Optional[bool] = None
+    resolution: Optional[int] = None
+    sparseStructure: Optional[ISparseStructure] = None
+    shapeSlat: Optional[IShapeSlat] = None
+    texSlat: Optional[ITexSlat] = None
+    # Audio 
+    languageBoost: Optional[str] = None
+    turbo: Optional[bool] = None
+    lyrics: Optional[str] = None  
+    guidanceType: Optional[str] = None  
+
+    @property
+    def request_key(self) -> str:
+        return "settings"
+
+
+@dataclass
+class IInputFrame(SerializableMixin):
     image: Union[str, File]
     frame: Optional[Union[Literal["first", "last"], int]] = None
 
 
 @dataclass
-class IInputReference:
+class IInputReference(SerializableMixin):
     image: Union[str, File]
     tag: Optional[str] = None
 
@@ -728,13 +818,13 @@ class IInputs(SerializableMixin):
 
 
 @dataclass
-class IAudioInput:
+class IAudioInput(SerializableMixin):
     id: Optional[str] = None
     source: Optional[str] = None
 
 
 @dataclass
-class ISpeechInput:
+class ISpeechInput(SerializableMixin):
     id: Optional[str] = None
     provider: Optional[str] = None
     voiceId: Optional[str] = None
@@ -797,6 +887,7 @@ class IVideoInputs(SerializableMixin):
 class I3dInputs(SerializableMixin):
     image: Optional[Union[str, File]] = None
     mask: Optional[Union[str, File]] = None
+    meshFile: Optional[Union[str, File]] = None
 
     @property
     def request_key(self) -> str:
@@ -872,6 +963,7 @@ class IImageCaption:
 class IAudioSettings(SerializableMixin):
     sampleRate: Optional[int] = None  # Min: 8000, Max: 48000, Default: 44100
     bitrate: Optional[int] = None  # Min: 32, Max: 320, Default: 128
+    channels: Optional[int] = None  
 
     @property
     def request_key(self) -> str:
@@ -879,7 +971,7 @@ class IAudioSettings(SerializableMixin):
 
 
 @dataclass
-class IElevenLabsCompositionSection:
+class IElevenLabsCompositionSection(SerializableMixin):
     sectionName: str  # 1-100 characters
     positiveLocalStyles: List[str]  # Styles that should be present in this section
     negativeLocalStyles: List[str]  # Styles that should not be present in this section
@@ -888,14 +980,14 @@ class IElevenLabsCompositionSection:
 
 
 @dataclass
-class IElevenLabsCompositionPlan:
+class IElevenLabsCompositionPlan(SerializableMixin):
     positiveGlobalStyles: List[str]  # Styles that should be present in the entire song
     negativeGlobalStyles: List[str]  # Styles that should not be present in the entire song
     sections: List[IElevenLabsCompositionSection]  # Sections of the song
 
 
 @dataclass
-class IElevenLabsMusicSettings:
+class IElevenLabsMusicSettings(SerializableMixin):
     compositionPlan: IElevenLabsCompositionPlan  # Music composition structure
 
 
@@ -1158,44 +1250,27 @@ class IBytedanceProviderSettings(BaseProviderSettings):
 
 
 @dataclass
+class IKlingMultiPrompt(SerializableMixin):
+    prompt: str
+    duration: float
+
+
+@dataclass
 class IKlingAIProviderSettings(BaseProviderSettings):
     sound: Optional[bool] = None
     cameraControl: Optional[IKlingCameraControl] = None
-    soundVolume: Optional[float] = None  
+    soundVolume: Optional[float] = None
     originalAudioVolume: Optional[float] = None
-    soundEffectPrompt: Optional[str] = None  
-    bgmPrompt: Optional[str] = None  
+    soundEffectPrompt: Optional[str] = None
+    bgmPrompt: Optional[str] = None
     asmrMode: Optional[bool] = None
     keepOriginalSound: Optional[bool] = None
-    characterOrientation: Optional[str] = None  
+    characterOrientation: Optional[str] = None
+    multiPrompt: Optional[List[IKlingMultiPrompt]] = None
 
     @property
     def provider_key(self) -> str:
         return "klingai"
-
-    def serialize(self) -> Dict[str, Any]:
-        result = {}
-        if self.sound is not None:
-            result["sound"] = self.sound
-        if self.cameraControl:
-            camera_control_data = self.cameraControl.serialize()
-            if camera_control_data:
-                result["cameraControl"] = camera_control_data
-        if self.soundVolume is not None:
-            result["soundVolume"] = self.soundVolume
-        if self.originalAudioVolume is not None:
-            result["originalAudioVolume"] = self.originalAudioVolume
-        if self.soundEffectPrompt is not None:
-            result["soundEffectPrompt"] = self.soundEffectPrompt
-        if self.bgmPrompt is not None:
-            result["bgmPrompt"] = self.bgmPrompt
-        if self.asmrMode is not None:
-            result["asmrMode"] = self.asmrMode
-        if self.keepOriginalSound is not None:
-            result["keepOriginalSound"] = self.keepOriginalSound
-        if self.characterOrientation is not None:
-            result["characterOrientation"] = self.characterOrientation
-        return result
 
 
 @dataclass
@@ -1252,7 +1327,7 @@ class IPixverseProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class IViduTemplate:
+class IViduTemplate(SerializableMixin):
     name: Optional[str] = None
     area: Optional[str] = None
     beast: Optional[str] = None
@@ -1302,7 +1377,7 @@ class IRunwayProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class ISyncSegment:
+class ISyncSegment(SerializableMixin):
     startTime: float
     endTime: float
     ref: str
@@ -1323,36 +1398,6 @@ class ISyncProviderSettings(BaseProviderSettings):
     @property
     def provider_key(self) -> str:
         return "sync"
-
-    def serialize(self) -> Dict[str, Any]:
-        result = {}
-        if self.syncMode is not None:
-            result["syncMode"] = self.syncMode
-        if self.editRegion is not None:
-            result["editRegion"] = self.editRegion
-        if self.emotionPrompt is not None:
-            result["emotionPrompt"] = self.emotionPrompt
-        if self.temperature is not None:
-            result["temperature"] = self.temperature
-        if self.activeSpeakerDetection is not None:
-            result["activeSpeakerDetection"] = self.activeSpeakerDetection
-        if self.occlusionDetectionEnabled is not None:
-            result["occlusionDetectionEnabled"] = self.occlusionDetectionEnabled
-        if self.segments is not None:
-            segments_list = []
-            for segment in self.segments:
-                segment_dict = {
-                    "startTime": segment.startTime,
-                    "endTime": segment.endTime,
-                    "ref": segment.ref
-                }
-                if segment.audioStartTime is not None:
-                    segment_dict["audioStartTime"] = segment.audioStartTime
-                if segment.audioEndTime is not None:
-                    segment_dict["audioEndTime"] = segment.audioEndTime
-                segments_list.append(segment_dict)
-            result["segments"] = segments_list
-        return result
 
 
 AudioProviderSettings = IElevenLabsProviderSettings | IKlingAIProviderSettings | IMireloProviderSettings
@@ -1420,10 +1465,12 @@ class I3dInference:
     numberResults: Optional[int] = 1
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[I3dOutputFormat] = None  # "GLB" | "PLY"
+    outputQuality: Optional[int] = None
     includeCost: Optional[bool] = None
     deliveryMethod: str = "async"
     webhookURL: Optional[str] = None
     inputs: Optional[I3dInputs] = None
+    settings: Optional[ISettings] = None
 
 
 @dataclass
@@ -1437,10 +1484,30 @@ class IAudioInputs(SerializableMixin):
 
 
 @dataclass
+class IAudioSpeech(SerializableMixin):
+    text: Optional[str] = None  
+    voice: Optional[str] = None  
+    speed: Optional[float] = None
+    volume: Optional[int] = None
+    pitch: Optional[int] = None
+    emotion: Optional[str] = None
+    tone: Optional[List[str]] = None  
+
+    @property
+    def request_key(self) -> str:
+        return "speech"
+
+
+@dataclass
 class IAudioInference:
     model: str
     positivePrompt: Optional[str] = None  # Optional when using composition plan
+    negativePrompt: Optional[str] = None
     duration: Optional[float] = None  # Min: 10, Max: 300 - Optional when using composition plan
+    seed: Optional[int] = None
+    steps: Optional[int] = None
+    strength: Optional[float] = None
+    CFGScale: Optional[float] = None
     taskUUID: Optional[str] = None
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IAudioOutputFormat] = None
@@ -1452,6 +1519,8 @@ class IAudioInference:
     webhookURL: Optional[str] = None
     providerSettings: Optional[AudioProviderSettings] = None  
     inputs: Optional[IAudioInputs] = None
+    speech: Optional[IAudioSpeech] = None
+    settings: Optional[ISettings] = None  
 
 
 @dataclass

@@ -2187,6 +2187,8 @@ class RunwareBase:
             request3d.inputs.image = await process_image(request3d.inputs.image)
         if request3d.inputs.mask:
             request3d.inputs.mask = await process_image(request3d.inputs.mask)
+        if request3d.inputs.meshFile:
+            request3d.inputs.meshFile = await process_image(request3d.inputs.meshFile)
 
     def _build3dRequest(self, request3d: I3dInference) -> Dict[str, Any]:
         request_object: Dict[str, Any] = {
@@ -2204,6 +2206,8 @@ class RunwareBase:
             request_object["outputType"] = request3d.outputType
         if request3d.outputFormat is not None:
             request_object["outputFormat"] = request3d.outputFormat
+        if request3d.outputQuality is not None:
+            request_object["outputQuality"] = request3d.outputQuality
         if request3d.includeCost is not None:
             request_object["includeCost"] = request3d.includeCost
         if request3d.deliveryMethod is not None:
@@ -2211,6 +2215,8 @@ class RunwareBase:
         if request3d.webhookURL is not None:
             request_object["webhookURL"] = request3d.webhookURL
         self._addOptionalField(request_object, request3d.inputs)
+        self._addOptionalField(request_object, request3d.settings)
+
         return request_object
 
     async def _request3d(self, request3d: I3dInference) -> Union[List[I3d], IAsyncTaskResponse]:
@@ -2824,15 +2830,19 @@ class RunwareBase:
             request_object["duration"] = requestAudio.duration
 
         self._addOptionalAudioFields(request_object, requestAudio)
+        self._addOptionalField(request_object, requestAudio.speech)
         self._addOptionalField(request_object, requestAudio.audioSettings)
+        self._addOptionalField(request_object, requestAudio.settings)
         self._addAudioProviderSettings(request_object, requestAudio)
         self._addOptionalField(request_object, requestAudio.inputs)
-
+        self._addOptionalField(request_object, requestAudio.settings)
+        
         return request_object
 
     def _addOptionalAudioFields(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
         optional_fields = [
-            "outputType", "outputFormat", "includeCost", "uploadEndpoint", "webhookURL"
+            "outputType", "outputFormat", "includeCost", "uploadEndpoint", "webhookURL",
+            "negativePrompt", "steps", "seed", "CFGScale", "strength"
         ]
 
         for field in optional_fields:
