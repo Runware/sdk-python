@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.47]
+
+### Added
+- Added `IRGB` dataclass (`rgb: List[int]`) with validation (exactly 3 elements, each 0–255)
+- Added `IRecraftProviderSettings` with `styleId: Optional[str]`, `colors: Optional[List[IRGB]]`, `backgroundColor: Optional[IRGB]`; added as `ImageProviderSettings`.
+- Added `ISettings.lyrics: Optional[str]` and `ISettings.guidanceType: Optional[str]`.
+- Added `negativePrompt`, `seed`, `steps`, `CFGScale`, and `settings` to `IAudioInference` dataclass.
+- Added `IAudioSpeech` dataclass (`text`, `voice`, `speed`, `volume`, `pitch`, `emotion`, `tone: Optional[List[str]]`).
+- Added `channels: Optional[int]` to `IAudioSettings`.
+- Added `speech: Optional[IAudioSpeech]` and `settings: Optional[ISettings]` to `IAudioInference`.
+- Added `languageBoost: Optional[str]` and `turbo: Optional[bool]` to `ISettings`.
+- Added `edit`, `color`, `lightDirection`, `lightType`, `season` (all `Optional[str]`) to `IBriaProviderSettings`.
+
 ## [0.4.46]
 
 ### Added
