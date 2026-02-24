@@ -164,32 +164,21 @@ class RunwareBase:
                 existing_future = existing_op.get("future")
 
                 if existing_state == OperationState.REGISTERED:
-                    duplicated_exc_body = {
-                        "code": "conflictTaskUUID",
-                        "message": f"Task {task_uuid} already has a pending request. "
-                                   f"Use unique taskUUID for each concurrent request."
-                    }
-                    if existing_future and not existing_future.done():
-                        existing_future.set_exception(RunwareAPIError(duplicated_exc_body))
-                    raise RunwareAPIError(duplicated_exc_body)
-
-                if existing_state == OperationState.SENT:
-                    self.logger.info(
-                        f"Reusing pending operation for retry | TaskUUID: {task_uuid} | "
-                        f"Previous state: {existing_state.value} | "
+                    # Share the same in-flight request: second caller gets same future, does not send again.
+                    # Ensures one charge and both callers get the result when it arrives.
+                    self.logger.debug(
+                        f"Sharing pending operation | TaskUUID: {task_uuid} | "
                         f"Partial results: {len(existing_op.get('results', []))}"
                     )
-                    loop = asyncio.get_running_loop()
-                    new_future = loop.create_future()
-                    existing_op["future"] = new_future
-                    existing_op["state"] = OperationState.SENT
-                    if on_partial is not None:
-                        existing_op["on_partial"] = on_partial
-                    if complete_predicate is not None:
-                        existing_op["complete_predicate"] = complete_predicate
-                    if result_filter is not None:
-                        existing_op["result_filter"] = result_filter
-                    return new_future, False
+                    return existing_future, False
+
+                if existing_state == OperationState.SENT:
+                    # Share the same in-flight operation so both callers get the result.
+                    self.logger.debug(
+                        f"Sharing in-flight operation | TaskUUID: {task_uuid} | "
+                        f"Partial results: {len(existing_op.get('results', []))}"
+                    )
+                    return existing_future, False
 
                 if existing_state == OperationState.DISCONNECTED:
                     self.logger.info(
