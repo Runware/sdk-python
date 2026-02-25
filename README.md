@@ -1081,10 +1081,14 @@ The Runware SDK provides configurable timeout settings for different operations 
 Set environment variables to customize timeout behavior:
 
 ```bash
+# Concurrency
+RUNWARE_MAX_CONCURRENT_REQUESTS=15           # Max concurrent API requests per client (default: 15)
+
 # Image Operations (milliseconds)
 RUNWARE_IMAGE_INFERENCE_TIMEOUT=300000      # Image generation (default: 5 min)
 RUNWARE_IMAGE_OPERATION_TIMEOUT=120000      # Caption, upscale, background removal (default: 2 min)
 RUNWARE_IMAGE_UPLOAD_TIMEOUT=60000          # Image upload (default: 1 min)
+RUNWARE_MAX_POLLS_IMAGE_GENERATION=480      # Max polling attempts for async image / getResponse (default: 480)
 
 # Model Operations (milliseconds)
 RUNWARE_MODEL_UPLOAD_TIMEOUT=900000         # Model upload (default: 15 min)
@@ -1092,12 +1096,15 @@ RUNWARE_MODEL_UPLOAD_TIMEOUT=900000         # Model upload (default: 15 min)
 # Video Operations (milliseconds)
 RUNWARE_VIDEO_INITIAL_TIMEOUT=30000         # Initial response wait (default: 30 sec)
 RUNWARE_VIDEO_POLLING_DELAY=3000            # Delay between status checks (default: 3 sec)
-RUNWARE_MAX_POLLS_VIDEO_GENERATION=480      # Max polling attempts (default: 480, ~24 min total)
+RUNWARE_MAX_POLLS_VIDEO_GENERATION=480      # Max polling attempts for video / caption / upscale / bg removal (default: 480, ~24 min total)
+
+# 3D Operations
+RUNWARE_MAX_POLLS_3D_GENERATION=480        # Max polling attempts for 3D inference / getResponse (default: 480)
 
 # Audio Operations (milliseconds)
 RUNWARE_AUDIO_INFERENCE_TIMEOUT=300000      # Audio generation (default: 5 min)
 RUNWARE_AUDIO_POLLING_DELAY=1000            # Delay between status checks (default: 1 sec)
-RUNWARE_MAX_POLLS_AUDIO_GENERATION=240      # Max polling attempts (default: 240, ~4 min total)
+RUNWARE_MAX_POLLS_AUDIO_GENERATION=240      # Max polling attempts for audio inference (default: 240, ~4 min total)
 
 # Other Operations (milliseconds)
 RUNWARE_PROMPT_ENHANCE_TIMEOUT=60000        # Prompt enhancement (default: 1 min)

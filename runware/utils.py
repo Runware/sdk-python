@@ -51,7 +51,7 @@ RETRY_SDK_COUNTS = {
 # WebSocket connection health check timeout (milliseconds)
 # Maximum time to wait for pong response after sending ping
 # Used in: server.heartBeat() to detect connection loss
-PING_TIMEOUT_DURATION = 10000
+PING_TIMEOUT_DURATION = 30000
 
 # WebSocket ping interval (milliseconds)
 # How often to send ping messages to keep connection alive
@@ -189,17 +189,24 @@ TIMEOUT_DURATION = int(os.environ.get(
     480000
 ))
 # Maximum polling attempts for video generation
-# Number of polling iterations before timing out video generation
-# Used in: _pollVideoResults() for video generation status checks
+# Used in: _pollResults() for video inference / video caption / video background removal / video upscale
 MAX_POLLS_VIDEO_GENERATION = int(os.environ.get("RUNWARE_MAX_POLLS_VIDEO_GENERATION", 480))
 
 # Maximum polling attempts for audio generation
-# Number of polling iterations before timing out audio generation
-# Used in: _pollAudioResults() for audio generation status checks
+# Used in: _pollResults() for audio inference task type
 MAX_POLLS_AUDIO_GENERATION = int(os.environ.get("RUNWARE_MAX_POLLS_AUDIO_GENERATION", 240))
 
+# Maximum polling attempts for 3D generation
+# Used in: _pollResults() for 3d inference task type
+MAX_POLLS_3D_GENERATION = int(os.environ.get("RUNWARE_MAX_POLLS_3D_GENERATION", 480))
 
+# Maximum polling attempts for image generation
+# Used in: _pollResults() for image inference task type
+MAX_POLLS_IMAGE_GENERATION = int(os.environ.get("RUNWARE_MAX_POLLS_IMAGE_GENERATION", 480))
+
+# Default / fallback max polls (e.g. when task type unknown)
 MAX_POLLS = int(os.environ.get("RUNWARE_MAX_POLLS", 480))
+MAX_CONCURRENT_REQUESTS = int(os.environ.get("RUNWARE_MAX_CONCURRENT_REQUESTS", 15))
 
 class LISTEN_TO_IMAGES_KEY:
     REQUEST_IMAGES = "REQUEST_IMAGES"
