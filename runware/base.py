@@ -2315,7 +2315,19 @@ class RunwareBase:
         if safety_dict:
             request_object["safety"] = safety_dict
 
-    def _addProviderSettings(self, request_object: Dict[str, Any], payload: Any) -> None:
+    def _addProviderSettings(
+        self,
+        request_object: Dict[str, Any],
+        payload: Union[
+            IImageInference,
+            IImageBackgroundRemoval,
+            IImageUpscale,
+            IVectorize,
+            IVideoInference,
+            IAudioInference,
+            ITextInference,
+        ],
+    ) -> None:
         providerSettings = getattr(payload, "providerSettings", None)
         if not providerSettings:
             return
