@@ -1389,15 +1389,12 @@ class RunwareBase:
         :raises: Any error that occurs during the enhancement process.
         """
         async with self._request_semaphore:
-            try:
-                await self.ensureConnection()
-                return await asyncRetry(lambda: self._enhancePrompt(promptEnhancer))
-            except Exception as e:
-                raise e
+            return await self._retry_with_reconnect(self._enhancePrompt, promptEnhancer)
 
     async def _enhancePrompt(
         self, promptEnhancer: "IPromptEnhance"
     ) -> "Union[List[IEnhancedPrompt], IAsyncTaskResponse]":
+        self.ensureConnection()
         prompt = promptEnhancer.prompt
         promptMaxLength = getattr(promptEnhancer, "promptMaxLength", 380)
 
