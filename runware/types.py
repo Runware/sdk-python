@@ -1438,9 +1438,9 @@ class IVideoInference:
     advancedFeatures: Optional[IVideoAdvancedFeatures] = None
     acceleratorOptions: Optional[IAcceleratorOptions] = None
     inputs: Optional[IVideoInputs] = None
-    settings: Optional[Union[ISettings, Dict[str, Any]]] = None
     skipResponse: Optional[bool] = False
     resolution: Optional[str] = None
+    settings: Optional[Union[ISettings, Dict[str, Any]]] = None
 
     def __post_init__(self):
         if self.settings is not None and isinstance(self.settings, dict):
