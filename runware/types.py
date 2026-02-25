@@ -757,6 +757,14 @@ class ISettings(SerializableMixin):
     audio: Optional[bool] = None  
     promptUpsampling: Optional[bool] = None  
 
+    def __post_init__(self):
+        if self.sparseStructure is not None and isinstance(self.sparseStructure, dict):
+            self.sparseStructure = ISparseStructure(**self.sparseStructure)
+        if self.shapeSlat is not None and isinstance(self.shapeSlat, dict):
+            self.shapeSlat = IShapeSlat(**self.shapeSlat)
+        if self.texSlat is not None and isinstance(self.texSlat, dict):
+            self.texSlat = ITexSlat(**self.texSlat)
+
     @property
     def request_key(self) -> str:
         return "settings"
