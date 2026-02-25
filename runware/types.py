@@ -913,8 +913,8 @@ class IImageInference:
     acePlusPlus: Optional[IAcePlusPlus] = None
     puLID: Optional[IPuLID] = None
     providerSettings: Optional[ImageProviderSettings] = None
-    safety: Optional[ISafety] = None
-    settings: Optional[ISettings] = None
+    safety: Optional[Union[ISafety, Dict[str, Any]]] = None
+    settings: Optional[Union[ISettings, Dict[str, Any]]] = None
     inputs: Optional[Union[IInputs, Dict[str, Any]]] = None
     ultralytics: Optional[IUltralytics] = None
     useCache: Optional[bool] = None
@@ -924,6 +924,10 @@ class IImageInference:
     ttl: Optional[int] = None  # time-to-live (TTL) in seconds, only applies when outputType is "URL"
 
     def __post_init__(self):
+        if self.safety is not None and isinstance(self.safety, dict):
+            self.safety = ISafety(**self.safety)
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = ISettings(**self.settings)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = IInputs(**self.inputs)
 
@@ -997,9 +1001,15 @@ class IImageBackgroundRemoval(IImageCaption):
     outputQuality: Optional[int] = None
     model: Optional[Union[int, str]] = None
     taskUUID: Optional[str] = None
-    settings: Optional[IBackgroundRemovalSettings] = None
+    settings: Optional[Union[IBackgroundRemovalSettings, Dict[str, Any]]] = None
     providerSettings: Optional[ImageProviderSettings] = None
-    safety: Optional[ISafety] = None
+    safety: Optional[Union[ISafety, Dict[str, Any]]] = None
+
+    def __post_init__(self):
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = IBackgroundRemovalSettings(**self.settings)
+        if self.safety is not None and isinstance(self.safety, dict):
+            self.safety = ISafety(**self.safety)
 
 
 @dataclass
@@ -1058,16 +1068,20 @@ class IImageUpscale:
     upscaleFactor: float  # Changed to float to support decimal values like 1.5
     inputImage: Optional[Union[str, File]] = None
     model: Optional[str] = None  # Model AIR ID (runware:500@1, runware:501@1, runware:502@1, runware:503@1)
-    settings: Optional[IUpscaleSettings] = None  # Advanced upscaling settings
+    settings: Optional[Union[IUpscaleSettings, Dict[str, Any]]] = None  # Advanced upscaling settings
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IOutputFormat] = None
     includeCost: bool = False
     webhookURL: Optional[str] = None
     providerSettings: Optional[ImageProviderSettings] = None
-    safety: Optional[ISafety] = None
+    safety: Optional[Union[ISafety, Dict[str, Any]]] = None
     inputs: Optional[Union[IInputs, Dict[str, Any]]] = None
 
     def __post_init__(self):
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = IUpscaleSettings(**self.settings)
+        if self.safety is not None and isinstance(self.safety, dict):
+            self.safety = ISafety(**self.safety)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = IInputs(**self.inputs)
 
@@ -1429,7 +1443,7 @@ class IVideoInference:
     speech: Optional[IVideoSpeechSettings] = None
     webhookURL: Optional[str] = None
     nsfw_check: Optional[Literal["none", "fast", "full"]] = None
-    safety: Optional[ISafety] = None
+    safety: Optional[Union[ISafety, Dict[str, Any]]] = None
     advancedFeatures: Optional[IVideoAdvancedFeatures] = None
     acceleratorOptions: Optional[IAcceleratorOptions] = None
     inputs: Optional[Union[IVideoInputs, Dict[str, Any]]] = None
@@ -1437,6 +1451,8 @@ class IVideoInference:
     resolution: Optional[str] = None
 
     def __post_init__(self):
+        if self.safety is not None and isinstance(self.safety, dict):
+            self.safety = ISafety(**self.safety)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = IVideoInputs(**self.inputs)
 
@@ -1458,9 +1474,11 @@ class I3dInference:
     deliveryMethod: str = "async"
     webhookURL: Optional[str] = None
     inputs: Optional[Union[I3dInputs, Dict[str, Any]]] = None
-    settings: Optional[ISettings] = None
+    settings: Optional[Union[ISettings, Dict[str, Any]]] = None
 
     def __post_init__(self):
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = ISettings(**self.settings)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = I3dInputs(**self.inputs)
 
@@ -1512,9 +1530,11 @@ class IAudioInference:
     providerSettings: Optional[AudioProviderSettings] = None  
     inputs: Optional[Union[IAudioInputs, Dict[str, Any]]] = None
     speech: Optional[IAudioSpeech] = None
-    settings: Optional[ISettings] = None
+    settings: Optional[Union[ISettings, Dict[str, Any]]] = None
 
     def __post_init__(self):
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = ISettings(**self.settings)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = IAudioInputs(**self.inputs)
 
@@ -1663,7 +1683,11 @@ class IVideoBackgroundRemoval:
     includeCost: Optional[bool] = None
     webhookURL: Optional[str] = None
     outputFormat: Optional[str] = None  # MP4, WEBM
-    settings: Optional[IVideoBackgroundRemovalSettings] = None
+    settings: Optional[Union[IVideoBackgroundRemovalSettings, Dict[str, Any]]] = None
+
+    def __post_init__(self):
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = IVideoBackgroundRemovalSettings(**self.settings)
 
 
 @dataclass
