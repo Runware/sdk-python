@@ -752,6 +752,10 @@ class ISettings(SerializableMixin):
     turbo: Optional[bool] = None
     lyrics: Optional[str] = None  
     guidanceType: Optional[str] = None  
+    # Video
+    draft: Optional[bool] = None  
+    save_audio: Optional[bool] = None  
+    promptUpsampling: Optional[bool] = None  
 
     @property
     def request_key(self) -> str:
@@ -1217,6 +1221,7 @@ class IBytedanceProviderSettings(BaseProviderSettings):
     fastMode: Optional[bool] = None  # When enabled, speeds up generation by sacrificing some effects. Default: false. RTF: 25-28 (fast) vs 35 (normal)
     audio: Optional[bool] = None
     draft: Optional[bool] = None
+    optimizePromptMode: Optional[str] = None  
 
     @property
     def provider_key(self) -> str:
@@ -1425,8 +1430,13 @@ class IVideoInference:
     advancedFeatures: Optional[IVideoAdvancedFeatures] = None
     acceleratorOptions: Optional[IAcceleratorOptions] = None
     inputs: Optional[IVideoInputs] = None
+    settings: Optional[Union[ISettings, Dict[str, Any]]] = None
     skipResponse: Optional[bool] = False
     resolution: Optional[str] = None
+
+    def __post_init__(self):
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = ISettings(**self.settings)
 
 
 I3dOutputFormat = Literal["GLB", "PLY"]
