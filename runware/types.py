@@ -754,7 +754,7 @@ class ISettings(SerializableMixin):
     guidanceType: Optional[str] = None  
     # Video
     draft: Optional[bool] = None  
-    save_audio: Optional[bool] = None  
+    audio: Optional[bool] = None  
     promptUpsampling: Optional[bool] = None  
 
     @property
