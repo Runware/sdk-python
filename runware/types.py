@@ -744,9 +744,9 @@ class ISettings(SerializableMixin):
     decimationTarget: Optional[int] = None
     remesh: Optional[bool] = None
     resolution: Optional[int] = None
-    sparseStructure: Optional[ISparseStructure] = None
-    shapeSlat: Optional[IShapeSlat] = None
-    texSlat: Optional[ITexSlat] = None
+    sparseStructure: Optional[Union[ISparseStructure, Dict[str, Any]]] = None
+    shapeSlat: Optional[Union[IShapeSlat, Dict[str, Any]]] = None
+    texSlat: Optional[Union[ITexSlat, Dict[str, Any]]] = None
     # Audio 
     languageBoost: Optional[str] = None
     turbo: Optional[bool] = None
