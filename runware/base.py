@@ -2293,11 +2293,21 @@ class RunwareBase:
                 return True
             return False
 
-        future, should_send = await self._register_pending_operation(
-            task_uuid,
-            expected_results=1,
-            complete_predicate=is_text_complete,
-        )
+        # For async/webhook, only need an acknowledgment (single message).
+        # For sync, wait for `number_results` completed text outputs.
+        if delivery_method_enum is EDeliveryMethod.SYNC and not webhook_url:
+            future, should_send = await self._register_pending_operation(
+                task_uuid,
+                expected_results=number_results or 1,
+                complete_predicate=None,
+                result_filter=lambda r: r.get("text") is not None,
+            )
+        else:
+            future, should_send = await self._register_pending_operation(
+                task_uuid,
+                expected_results=1,
+                complete_predicate=is_text_complete,
+            )
 
         timeout = TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else TEXT_INITIAL_TIMEOUT
 
@@ -2546,11 +2556,23 @@ class RunwareBase:
                 return True
             return False
 
-        future, should_send = await self._register_pending_operation(
-            task_uuid,
-            expected_results=1,
-            complete_predicate=is_video_complete
-        )
+        # For async/webhook, we only need an acknowledgment (single message).
+        # For sync, mirror imageInference: wait for `number_results` final videos.
+        if delivery_method_enum is EDeliveryMethod.SYNC and not webhook_url:
+            future, should_send = await self._register_pending_operation(
+                task_uuid,
+                expected_results=number_results or 1,
+                complete_predicate=None,
+                result_filter=lambda r: (
+                    r.get("videoUUID") is not None or r.get("mediaUUID") is not None
+                ),
+            )
+        else:
+            future, should_send = await self._register_pending_operation(
+                task_uuid,
+                expected_results=1,
+                complete_predicate=is_video_complete,
+            )
 
         timeout = TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else VIDEO_INITIAL_TIMEOUT
 
@@ -2618,11 +2640,24 @@ class RunwareBase:
                 return True
             return False
 
-        future, should_send = await self._register_pending_operation(
-            task_uuid,
-            expected_results=1,
-            complete_predicate=is_3d_complete,
-        )
+        # For async/webhook, only need an acknowledgment (single message).
+        # For sync, wait for `number_results` completed 3d outputs.
+        if delivery_method_enum is EDeliveryMethod.SYNC and not webhook_url:
+            future, should_send = await self._register_pending_operation(
+                task_uuid,
+                expected_results=number_results or 1,
+                complete_predicate=None,
+                result_filter=lambda r: (
+                    isinstance(r.get("outputs"), dict)
+                    and r["outputs"].get("files") is not None
+                ),
+            )
+        else:
+            future, should_send = await self._register_pending_operation(
+                task_uuid,
+                expected_results=1,
+                complete_predicate=is_3d_complete,
+            )
 
         timeout = TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else VIDEO_INITIAL_TIMEOUT
 
@@ -2884,11 +2919,21 @@ class RunwareBase:
                 return True
             return False
 
-        future, should_send = await self._register_pending_operation(
-            task_uuid,
-            expected_results=1,
-            complete_predicate=is_audio_complete
-        )
+        # For async/webhook, only need an acknowledgment (single message).
+        # For sync, wait for `number_results` completed audio outputs.
+        if delivery_method_enum is EDeliveryMethod.SYNC and not webhook_url:
+            future, should_send = await self._register_pending_operation(
+                task_uuid,
+                expected_results=number_results or 1,
+                complete_predicate=None,
+                result_filter=lambda r: r.get("audioUUID") is not None,
+            )
+        else:
+            future, should_send = await self._register_pending_operation(
+                task_uuid,
+                expected_results=1,
+                complete_predicate=is_audio_complete,
+            )
 
         timeout = TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else AUDIO_INITIAL_TIMEOUT
 
