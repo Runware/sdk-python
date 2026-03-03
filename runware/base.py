@@ -209,6 +209,7 @@ class RunwareBase:
                 "complete_predicate": complete_predicate,
                 "result_filter": result_filter
             }
+            
             return future, True
 
     async def _mark_operation_sent(self, task_uuid: str) -> None:
@@ -2753,11 +2754,18 @@ class RunwareBase:
 
         return instantiateDataclassList(IImage, initial_response)
 
-    async def _sendPollRequest(self, task_uuid: str, poll_count: int) -> "List[Dict[str, Any]]":
+    # async def _sendPollRequest(self, task_uuid: str, poll_count: int) -> "List[Dict[str, Any]]":
+    #     future, should_send = await self._register_pending_operation(
+    #         task_uuid,
+    #         expected_results=1,
+    #         complete_predicate=lambda r: True
+    #     )
+    async def _sendPollRequest(self, task_uuid: str, poll_count: int, number_results: int, complete_predicate: Optional[Callable[[Dict[str, Any]], bool]] = None, result_filter: Optional[Callable[[Dict[str, Any]], bool]] = None) -> "List[Dict[str, Any]]":
         future, should_send = await self._register_pending_operation(
             task_uuid,
-            expected_results=1,
-            complete_predicate=lambda r: True
+            expected_results=number_results,
+            complete_predicate=None,
+            result_filter=result_filter
         )
         try:
             if should_send:
@@ -3023,8 +3031,21 @@ class RunwareBase:
         try:
             for poll_count in range(max_polls_loop):
                 try:
-                    responses = await self._sendPollRequest(task_uuid, poll_count)
-                    
+                    responses = await self._sendPollRequest(
+                        task_uuid,
+                        poll_count,
+                        number_results,
+                        complete_predicate=None,
+                        result_filter=lambda r: (
+                            r.get("imageUUID") is not None
+                            or r.get("videoUUID") is not None
+                            or r.get("mediaUUID") is not None
+                            or r.get("audioUUID") is not None
+                            or r.get("text") is not None
+                            or r.get("outputs") is not None
+                        ),
+                    )
+
                     for response in responses:
                         self._handle_error_response(response)
 
