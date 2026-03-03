@@ -2754,12 +2754,6 @@ class RunwareBase:
 
         return instantiateDataclassList(IImage, initial_response)
 
-    # async def _sendPollRequest(self, task_uuid: str, poll_count: int) -> "List[Dict[str, Any]]":
-    #     future, should_send = await self._register_pending_operation(
-    #         task_uuid,
-    #         expected_results=1,
-    #         complete_predicate=lambda r: True
-    #     )
     async def _sendPollRequest(self, task_uuid: str, poll_count: int, number_results: int, complete_predicate: Optional[Callable[[Dict[str, Any]], bool]] = None, result_filter: Optional[Callable[[Dict[str, Any]], bool]] = None) -> "List[Dict[str, Any]]":
         future, should_send = await self._register_pending_operation(
             task_uuid,
