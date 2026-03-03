@@ -2350,6 +2350,7 @@ class RunwareBase:
             "taskUUID": requestImage.taskUUID,
             "model": requestImage.model,
             "deliveryMethod": requestImage.deliveryMethod,
+            "numberResults": requestImage.numberResults,
         }
         if prompt:
             request_object["positivePrompt"] = prompt
