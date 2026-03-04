@@ -1395,7 +1395,7 @@ class RunwareBase:
     async def _enhancePrompt(
         self, promptEnhancer: "IPromptEnhance"
     ) -> "Union[List[IEnhancedPrompt], IAsyncTaskResponse]":
-        self.ensureConnection()
+        await self.ensureConnection()
         prompt = promptEnhancer.prompt
         promptMaxLength = getattr(promptEnhancer, "promptMaxLength", 380)
 
