@@ -763,6 +763,7 @@ class ISettings(SerializableMixin):
     layers: Optional[int] = None
     trueCFGScale: Optional[float] = None
     quality: Optional[str] = None
+    promptExtend: Optional[bool] = None
     # 3D inference
     textureSize: Optional[int] = None
     decimationTarget: Optional[int] = None
