@@ -107,6 +107,12 @@ class EDeliveryMethod(Enum):
     SYNC = "sync"
     ASYNC = "async"
 
+class OperationState(Enum):
+    """State machine for pending operations."""
+    REGISTERED = "registered"      # Future created, request NOT sent
+    SENT = "sent"                  # send() completed successfully
+    DISCONNECTED = "disconnected"  # Connection lost after SENT
+
 
 # Define the types using Literal
 IOutputType = Literal["base64Data", "dataURI", "URL"]
@@ -122,6 +128,24 @@ class File:
 @dataclass
 class IAsyncTaskResponse:
     taskType: str
+    taskUUID: str
+
+
+@dataclass
+class IGetResponseRequest:
+    taskUUID: str
+    numberResults: int = 1
+
+
+@dataclass
+class IUploadImageRequest:
+    file: Union[File, str]
+    taskUUID: str
+
+
+@dataclass
+class IUploadMediaRequest:
+    media_url: str
     taskUUID: str
 
 
@@ -1572,6 +1596,7 @@ class ITextInference:
     messages: List[ITextInferenceMessage]
     taskUUID: Optional[str] = None
     deliveryMethod: str = "sync"
+    numberResults: Optional[int] = 1
     maxTokens: Optional[int] = None
     temperature: Optional[float] = None
     topP: Optional[float] = None  
@@ -1580,6 +1605,7 @@ class ITextInference:
     stopSequences: Optional[List[str]] = None  
     includeCost: Optional[bool] = None
     providerSettings: Optional[TextProviderSettings] = None
+    webhookURL: Optional[str] = None
 
 
 @dataclass
