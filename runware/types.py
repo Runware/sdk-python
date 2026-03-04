@@ -769,14 +769,26 @@ class ISettings(SerializableMixin):
     decimationTarget: Optional[int] = None
     remesh: Optional[bool] = None
     resolution: Optional[int] = None
-    sparseStructure: Optional[ISparseStructure] = None
-    shapeSlat: Optional[IShapeSlat] = None
-    texSlat: Optional[ITexSlat] = None
+    sparseStructure: Optional[Union[ISparseStructure, Dict[str, Any]]] = None
+    shapeSlat: Optional[Union[IShapeSlat, Dict[str, Any]]] = None
+    texSlat: Optional[Union[ITexSlat, Dict[str, Any]]] = None
     # Audio 
     languageBoost: Optional[str] = None
     turbo: Optional[bool] = None
     lyrics: Optional[str] = None  
     guidanceType: Optional[str] = None  
+    # Video
+    draft: Optional[bool] = None  
+    audio: Optional[bool] = None  
+    promptUpsampling: Optional[bool] = None  
+
+    def __post_init__(self):
+        if self.sparseStructure is not None and isinstance(self.sparseStructure, dict):
+            self.sparseStructure = ISparseStructure(**self.sparseStructure)
+        if self.shapeSlat is not None and isinstance(self.shapeSlat, dict):
+            self.shapeSlat = IShapeSlat(**self.shapeSlat)
+        if self.texSlat is not None and isinstance(self.texSlat, dict):
+            self.texSlat = ITexSlat(**self.texSlat)
 
     @property
     def request_key(self) -> str:
@@ -1264,6 +1276,7 @@ class IBytedanceProviderSettings(BaseProviderSettings):
     fastMode: Optional[bool] = None  # When enabled, speeds up generation by sacrificing some effects. Default: false. RTF: 25-28 (fast) vs 35 (normal)
     audio: Optional[bool] = None
     draft: Optional[bool] = None
+    optimizePromptMode: Optional[str] = None  
 
     @property
     def provider_key(self) -> str:
@@ -1474,6 +1487,11 @@ class IVideoInference:
     inputs: Optional[Union[IVideoInputs, Dict[str, Any]]] = None
     skipResponse: Optional[bool] = False
     resolution: Optional[str] = None
+    settings: Optional[Union[ISettings, Dict[str, Any]]] = None
+
+    def __post_init__(self):
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = ISettings(**self.settings)
 
     def __post_init__(self):
         if self.safety is not None and isinstance(self.safety, dict):
