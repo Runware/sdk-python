@@ -184,6 +184,7 @@ class ILycoris:
 @dataclass
 class IEmbedding:
     model: str
+    weight: Optional[float] = None  
 
 
 @dataclass
@@ -353,22 +354,9 @@ class IPhotoMaker:
             raise ValueError("inputImages can contain a maximum of 4 elements.")
 
         # Validate `style` to ensure it matches one of the allowed case-sensitive options
-        valid_styles = {
-            "No style",
-            "Cinematic",
-            "Disney Character",
-            "Digital Art",
-            "Photographic",
-            "Fantasy art",
-            "Neonpunk",
-            "Enhance",
-            "Comic book",
-            "Lowpoly",
-            "Line art",
-        }
-        if self.style and self.style not in valid_styles:
+        if self.style and self.style not in _PHOTO_MAKER_VALID_STYLES:
             raise ValueError(
-                f"style must be one of the following: {', '.join(valid_styles)}."
+                f"style must be one of the following: {', '.join(sorted(_PHOTO_MAKER_VALID_STYLES))}."
             )
 
 
@@ -417,8 +405,13 @@ class IInstantID:
 @dataclass
 class IIpAdapter:
     model: Union[int, str]
-    guideImage: Union[File, str]
+    guideImage: Optional[Union[File, str]] = None
+    guideImages: Optional[List[Union[str, File]]] = None
     weight: Optional[float] = None
+    combineMethod: Optional[str] = None
+    weightType: Optional[str] = None
+    embedScaling: Optional[str] = None
+    weightComposition: Optional[float] = None
 
 
 @dataclass
@@ -448,6 +441,24 @@ class IPuLID:
     trueCFGScale: Optional[float] = None  # Min: 0, Max: 10
     CFGStartStep: Optional[int] = None  # Min: 0, Max: 10
     CFGStartStepPercentage: Optional[int] = None  # Min: 0, Max: 100
+
+
+_PHOTO_MAKER_VALID_STYLES = {"No style", "Cinematic", "Disney Character", "Digital Art", "Photographic", "Fantasy art", "Neonpunk", "Enhance", "Comic book", "Lowpoly", "Line art"}
+
+
+@dataclass
+class IPhotoMakerSettings:
+
+    images: List[Union[str, File]] = field(default_factory=list)
+    style: Optional[str] = None
+
+    def __post_init__(self):
+        if len(self.images) > 4:
+            raise ValueError("photoMaker.images can contain a maximum of 4 elements.")
+        if self.style and self.style not in _PHOTO_MAKER_VALID_STYLES:
+            raise ValueError(
+                f"photoMaker.style must be one of: {', '.join(sorted(_PHOTO_MAKER_VALID_STYLES))}."
+            )
 
 
 @dataclass
@@ -938,22 +949,23 @@ class IImageInference:
     lycoris: Optional[List[ILycoris]] = field(default_factory=list)
     includeCost: Optional[bool] = None
     onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]] = None
-    refiner: Optional[IRefiner] = None
+    refiner: Optional[Union[IRefiner, Dict[str, Any]]] = None
     vae: Optional[str] = None
     maskMargin: Optional[int] = None
     outputQuality: Optional[int] = None
-    embeddings: Optional[List[IEmbedding]] = field(default_factory=list)
-    outpaint: Optional[IOutpaint] = None
-    instantID: Optional[IInstantID] = None
+    embeddings: Optional[List[Union[IEmbedding, Dict[str, Any]]]] = field(default_factory=list)
+    outpaint: Optional[Union[IOutpaint, Dict[str, Any]]] = None
+    instantID: Optional[Union[IInstantID, Dict[str, Any]]] = None
     ipAdapters: Optional[List[IIpAdapter]] = field(default_factory=list)
     referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
-    acePlusPlus: Optional[IAcePlusPlus] = None
-    puLID: Optional[IPuLID] = None
+    acePlusPlus: Optional[Union[IAcePlusPlus, Dict[str, Any]]] = None
+    puLID: Optional[Union[IPuLID, Dict[str, Any]]] = None
+    photoMaker: Optional[Union[IPhotoMakerSettings, Dict[str, Any]]] = None
     providerSettings: Optional[ImageProviderSettings] = None
     safety: Optional[Union[ISafety, Dict[str, Any]]] = None
     settings: Optional[Union[ISettings, Dict[str, Any]]] = None
     inputs: Optional[Union[IInputs, Dict[str, Any]]] = None
-    ultralytics: Optional[IUltralytics] = None
+    ultralytics: Optional[Union[IUltralytics, Dict[str, Any]]] = None
     useCache: Optional[bool] = None
     resolution: Optional[str] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
@@ -967,6 +979,30 @@ class IImageInference:
             self.settings = ISettings(**self.settings)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = IInputs(**self.inputs)
+        if self.outpaint is not None and isinstance(self.outpaint, dict):
+            self.outpaint = IOutpaint(**self.outpaint)
+        if self.refiner is not None and isinstance(self.refiner, dict):
+            self.refiner = IRefiner(**self.refiner)
+        if self.embeddings:
+            self.embeddings = [
+                IEmbedding(**item) if isinstance(item, dict) else item
+                for item in self.embeddings
+            ]
+        if self.photoMaker is not None and isinstance(self.photoMaker, dict):
+            self.photoMaker = IPhotoMakerSettings(**self.photoMaker)
+        if self.instantID is not None and isinstance(self.instantID, dict):
+            self.instantID = IInstantID(**self.instantID)
+        if self.acePlusPlus is not None and isinstance(self.acePlusPlus, dict):
+            self.acePlusPlus = IAcePlusPlus(**self.acePlusPlus)
+        if self.puLID is not None and isinstance(self.puLID, dict):
+            self.puLID = IPuLID(**self.puLID)
+        if self.ultralytics is not None and isinstance(self.ultralytics, dict):
+            self.ultralytics = IUltralytics(**self.ultralytics)
+        if self.ipAdapters:
+            self.ipAdapters = [
+                IIpAdapter(**item) if isinstance(item, dict) else item
+                for item in self.ipAdapters
+            ]
 
 
 @dataclass

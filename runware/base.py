@@ -734,7 +734,9 @@ class RunwareBase:
                 ip_adapter_data = {
                     k: v for k, v in vars(ip_adapter).items() if v is not None
                 }
-                if "guideImage" in ip_adapter_data:
+                if "guideImages" in ip_adapter_data:
+                    ip_adapter_data["guideImages"] = await process_image(ip_adapter_data["guideImages"])
+                elif "guideImage" in ip_adapter_data:
                     ip_adapter_data["guideImage"] = await process_image(ip_adapter_data["guideImage"])
                 ip_adapters_data.append(ip_adapter_data)
 
@@ -762,9 +764,17 @@ class RunwareBase:
             if requestImage.puLID.inputImages:
                 pulid_data["inputImages"] = await process_image(requestImage.puLID.inputImages)
 
+        photo_maker_data = {}
+        if requestImage.photoMaker:
+            photo_maker_data = {"images": []}
+            if requestImage.photoMaker.style is not None:
+                photo_maker_data["style"] = requestImage.photoMaker.style
+            if requestImage.photoMaker.images:
+                photo_maker_data["images"] = await process_image(requestImage.photoMaker.images)
+
         request_object = self._buildImageRequest(
             requestImage, prompt, control_net_data_dicts,
-            instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data
+            instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data, photo_maker_data
         )
 
         delivery_method_enum = EDeliveryMethod(requestImage.deliveryMethod) if isinstance(requestImage.deliveryMethod,
@@ -2356,7 +2366,7 @@ class RunwareBase:
         finally:
             await self._unregister_pending_operation(task_uuid)
 
-    def _buildImageRequest(self, requestImage: IImageInference, prompt: Optional[str], control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> Dict[str, Any]:
+    def _buildImageRequest(self, requestImage: IImageInference, prompt: Optional[str], control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict], photo_maker_data: Optional[Dict]) -> Dict[str, Any]:
         request_object = {
             "taskType": ETaskType.IMAGE_INFERENCE.value,
             "taskUUID": requestImage.taskUUID,
@@ -2368,7 +2378,7 @@ class RunwareBase:
             request_object["positivePrompt"] = prompt
 
         self._addOptionalImageFields(request_object, requestImage)
-        self._addImageSpecialFields(request_object, requestImage, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
+        self._addImageSpecialFields(request_object, requestImage, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data, photo_maker_data)
         self._addOptionalField(request_object, requestImage.inputs)
         self._addImageProviderSettings(request_object, requestImage)
         self._addOptionalField(request_object, requestImage.ultralytics)
@@ -2396,7 +2406,7 @@ class RunwareBase:
                 else:
                     request_object[field] = value
 
-    def _addImageSpecialFields(self, request_object: Dict[str, Any], requestImage: IImageInference, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> None:
+    def _addImageSpecialFields(self, request_object: Dict[str, Any], requestImage: IImageInference, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict], photo_maker_data: Optional[Dict]) -> None:
         # Add controlNet if present
         if control_net_data_dicts:
             request_object["controlNet"] = control_net_data_dicts
@@ -2455,6 +2465,10 @@ class RunwareBase:
         # Add puLID if present
         if pulid_data:
             request_object["puLID"] = pulid_data
+
+        # Add photoMaker if present 
+        if photo_maker_data:
+            request_object["photoMaker"] = photo_maker_data
 
         # Add referenceImages if present
         if requestImage.referenceImages:
