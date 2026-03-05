@@ -2431,10 +2431,13 @@ class RunwareBase:
 
         # Add embeddings if present
         if requestImage.embeddings:
-            request_object["embeddings"] = [
-                {"model": embedding.model}
-                for embedding in requestImage.embeddings
-            ]
+            embeddings_payload = []
+            for embedding in requestImage.embeddings:
+                d: Dict[str, Any] = {"model": embedding.model}
+                if embedding.weight is not None:
+                    d["weight"] = embedding.weight
+                embeddings_payload.append(d)
+            request_object["embeddings"] = embeddings_payload
 
         # Add refiner if present
         if requestImage.refiner:
