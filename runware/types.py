@@ -772,11 +772,12 @@ class ISettings(SerializableMixin):
     sparseStructure: Optional[Union[ISparseStructure, Dict[str, Any]]] = None
     shapeSlat: Optional[Union[IShapeSlat, Dict[str, Any]]] = None
     texSlat: Optional[Union[ITexSlat, Dict[str, Any]]] = None
-    # Audio 
+    # Audio
     languageBoost: Optional[str] = None
     turbo: Optional[bool] = None
-    lyrics: Optional[str] = None  
-    guidanceType: Optional[str] = None  
+    lyrics: Optional[str] = None
+    guidanceType: Optional[str] = None
+    textNormalization: Optional[bool] = None
     # Video
     draft: Optional[bool] = None  
     audio: Optional[bool] = None  
@@ -1572,7 +1573,7 @@ class IAudioInference:
     webhookURL: Optional[str] = None
     providerSettings: Optional[AudioProviderSettings] = None  
     inputs: Optional[Union[IAudioInputs, Dict[str, Any]]] = None
-    speech: Optional[IAudioSpeech] = None
+    speech: Optional[Union[IAudioSpeech, Dict[str, Any]]] = None
     settings: Optional[Union[ISettings, Dict[str, Any]]] = None
 
     def __post_init__(self):
@@ -1580,6 +1581,8 @@ class IAudioInference:
             self.settings = ISettings(**self.settings)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = IAudioInputs(**self.inputs)
+        if self.speech is not None and isinstance(self.speech, dict):
+            self.speech = IAudioSpeech(**self.speech)
 
 
 @dataclass
