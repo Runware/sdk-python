@@ -333,32 +333,21 @@ class IModelSearch:
 
 @dataclass
 class IPhotoMaker:
-    model: Union[int, str]
-    positivePrompt: str
-    height: int
-    width: int
+    model: Optional[Union[int, str]] = None
+    positivePrompt: Optional[str] = None
+    height: Optional[int] = None
+    width: Optional[int] = None
     numberResults: int = 1
     steps: Optional[int] = None
     outputType: Optional[IOutputType] = None
     inputImages: List[Union[str, File]] = field(default_factory=list)
+    images: Optional[List[Union[str, File]]] = None
     style: Optional[str] = None
     strength: Optional[float] = None
     outputFormat: Optional[IOutputFormat] = None
     includeCost: Optional[bool] = None
     taskUUID: Optional[str] = None
     webhookURL: Optional[str] = None
-
-    def __post_init__(self):
-        # Validate `inputImages` to ensure it has a maximum of 4 elements
-        if len(self.inputImages) > 4:
-            raise ValueError("inputImages can contain a maximum of 4 elements.")
-
-        # Validate `style` to ensure it matches one of the allowed case-sensitive options
-        if self.style and self.style not in _PHOTO_MAKER_VALID_STYLES:
-            raise ValueError(
-                f"style must be one of the following: {', '.join(sorted(_PHOTO_MAKER_VALID_STYLES))}."
-            )
-
 
 class SerializableMixin:
     def serialize(self) -> Dict[str, Any]:
@@ -441,24 +430,6 @@ class IPuLID:
     trueCFGScale: Optional[float] = None  # Min: 0, Max: 10
     CFGStartStep: Optional[int] = None  # Min: 0, Max: 10
     CFGStartStepPercentage: Optional[int] = None  # Min: 0, Max: 100
-
-
-_PHOTO_MAKER_VALID_STYLES = {"No style", "Cinematic", "Disney Character", "Digital Art", "Photographic", "Fantasy art", "Neonpunk", "Enhance", "Comic book", "Lowpoly", "Line art"}
-
-
-@dataclass
-class IPhotoMakerSettings:
-
-    images: List[Union[str, File]] = field(default_factory=list)
-    style: Optional[str] = None
-
-    def __post_init__(self):
-        if len(self.images) > 4:
-            raise ValueError("photoMaker.images can contain a maximum of 4 elements.")
-        if self.style and self.style not in _PHOTO_MAKER_VALID_STYLES:
-            raise ValueError(
-                f"photoMaker.style must be one of: {', '.join(sorted(_PHOTO_MAKER_VALID_STYLES))}."
-            )
 
 
 @dataclass
@@ -956,11 +927,11 @@ class IImageInference:
     embeddings: Optional[List[Union[IEmbedding, Dict[str, Any]]]] = field(default_factory=list)
     outpaint: Optional[Union[IOutpaint, Dict[str, Any]]] = None
     instantID: Optional[Union[IInstantID, Dict[str, Any]]] = None
-    ipAdapters: Optional[List[IIpAdapter]] = field(default_factory=list)
+    ipAdapters: Optional[List[Union[IIpAdapter, Dict[str, Any]]]] = field(default_factory=list)
     referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
     acePlusPlus: Optional[Union[IAcePlusPlus, Dict[str, Any]]] = None
     puLID: Optional[Union[IPuLID, Dict[str, Any]]] = None
-    photoMaker: Optional[Union[IPhotoMakerSettings, Dict[str, Any]]] = None
+    photoMaker: Optional[Union[IPhotoMaker, Dict[str, Any]]] = None
     providerSettings: Optional[ImageProviderSettings] = None
     safety: Optional[Union[ISafety, Dict[str, Any]]] = None
     settings: Optional[Union[ISettings, Dict[str, Any]]] = None
@@ -989,7 +960,7 @@ class IImageInference:
                 for item in self.embeddings
             ]
         if self.photoMaker is not None and isinstance(self.photoMaker, dict):
-            self.photoMaker = IPhotoMakerSettings(**self.photoMaker)
+            self.photoMaker = IPhotoMaker(**self.photoMaker)
         if self.instantID is not None and isinstance(self.instantID, dict):
             self.instantID = IInstantID(**self.instantID)
         if self.acePlusPlus is not None and isinstance(self.acePlusPlus, dict):

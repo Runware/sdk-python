@@ -596,6 +596,9 @@ class RunwareBase:
     async def _photoMaker(self, requestPhotoMaker: "IPhotoMaker") -> "Union[List[IImage], IAsyncTaskResponse]":
         await self.ensureConnection()
 
+        if requestPhotoMaker.model is None or requestPhotoMaker.positivePrompt is None or requestPhotoMaker.height is None or requestPhotoMaker.width is None:
+            raise ValueError("Standalone photoMaker requires model, positivePrompt, height, and width.")
+
         task_uuid = requestPhotoMaker.taskUUID or getUUID()
         requestPhotoMaker.taskUUID = task_uuid
 
@@ -781,6 +784,7 @@ class RunwareBase:
                                                                                           str) else requestImage.deliveryMethod
         task_uuid = requestImage.taskUUID
         number_results = requestImage.numberResults or 1
+
 
         if delivery_method_enum is EDeliveryMethod.ASYNC:
             if requestImage.webhookURL:
