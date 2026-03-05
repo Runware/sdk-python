@@ -726,10 +726,12 @@ class RunwareBase:
                 for k, v in vars(requestImage.instantID).items()
                 if v is not None
             }
-            if "inputImage" in instant_id_data:
-                instant_id_data["inputImage"] = await process_image(instant_id_data["inputImage"])
             if "poseImage" in instant_id_data:
                 instant_id_data["poseImage"] = await process_image(instant_id_data["poseImage"])
+            if "inputImages" in instant_id_data:
+                instant_id_data["inputImages"] = await process_image(instant_id_data["inputImages"])
+            else:
+                instant_id_data["inputImages"] = await process_image([instant_id_data["inputImage"]])
 
         ip_adapters_data = []
         if requestImage.ipAdapters:
@@ -769,11 +771,14 @@ class RunwareBase:
 
         photo_maker_data = {}
         if requestImage.photoMaker:
-            photo_maker_data = {"images": []}
-            if requestImage.photoMaker.style is not None:
-                photo_maker_data["style"] = requestImage.photoMaker.style
-            if requestImage.photoMaker.images:
-                photo_maker_data["images"] = await process_image(requestImage.photoMaker.images)
+            photo_maker_data = {
+                k: v for k, v in vars(requestImage.photoMaker).items()
+                if v is not None and not (k in ("images", "inputImages") and v == [])
+            }
+            if "images" in photo_maker_data:
+                photo_maker_data["images"] = await process_image(photo_maker_data["images"])
+            if "inputImages" in photo_maker_data:
+                photo_maker_data["inputImages"] = await process_image(photo_maker_data["inputImages"])
 
         request_object = self._buildImageRequest(
             requestImage, prompt, control_net_data_dicts,

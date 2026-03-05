@@ -340,7 +340,7 @@ class IPhotoMaker:
     numberResults: int = 1
     steps: Optional[int] = None
     outputType: Optional[IOutputType] = None
-    inputImages: List[Union[str, File]] = field(default_factory=list)
+    inputImages: Optional[List[Union[str, File]]] = None
     images: Optional[List[Union[str, File]]] = None
     style: Optional[str] = None
     strength: Optional[float] = None
@@ -382,8 +382,9 @@ class IOutpaint:
 
 @dataclass
 class IInstantID:
-    inputImage: Union[File, str]
+    inputImage: Optional[Union[File, str]] = None
     poseImage: Optional[Union[File, str]] = None
+    inputImages: Optional[List[Union[str, File]]] = None
     identityNetStrength: Optional[float] = None
     adapterStrength: Optional[float] = None
     controlNetCannyWeight: Optional[float] = None
