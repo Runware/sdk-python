@@ -337,7 +337,7 @@ class IPhotoMaker:
     positivePrompt: Optional[str] = None
     height: Optional[int] = None
     width: Optional[int] = None
-    numberResults: int = 1
+    numberResults: Optional[int] = 1
     steps: Optional[int] = None
     outputType: Optional[IOutputType] = None
     inputImages: Optional[List[Union[str, File]]] = None
@@ -348,6 +348,11 @@ class IPhotoMaker:
     includeCost: Optional[bool] = None
     taskUUID: Optional[str] = None
     webhookURL: Optional[str] = None
+    negativePrompt: Optional[str] = None
+    CFGScale: Optional[float] = None
+    seed: Optional[int] = None
+    scheduler: Optional[str] = None
+    checkNsfw: Optional[bool] = None
 
 class SerializableMixin:
     def serialize(self) -> Dict[str, Any]:

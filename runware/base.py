@@ -635,6 +635,16 @@ class RunwareBase:
             request_object["includeCost"] = requestPhotoMaker.includeCost
         if requestPhotoMaker.outputType:
             request_object["outputType"] = requestPhotoMaker.outputType
+        if requestPhotoMaker.negativePrompt is not None:
+            request_object["negativePrompt"] = requestPhotoMaker.negativePrompt
+        if requestPhotoMaker.CFGScale is not None:
+            request_object["CFGScale"] = requestPhotoMaker.CFGScale
+        if requestPhotoMaker.seed is not None:
+            request_object["seed"] = requestPhotoMaker.seed
+        if requestPhotoMaker.scheduler is not None:
+            request_object["scheduler"] = requestPhotoMaker.scheduler
+        if requestPhotoMaker.checkNsfw is not None:
+            request_object["checkNSFW"] = requestPhotoMaker.checkNsfw
         if requestPhotoMaker.webhookURL:
             request_object["webhookURL"] = requestPhotoMaker.webhookURL
             return await self._handleWebhookRequest(
@@ -645,6 +655,9 @@ class RunwareBase:
             )
 
         numberOfResults = requestPhotoMaker.numberResults
+
+        import json
+        print(f"request_object: {json.dumps(request_object, indent=4)}")
 
         future, should_send = await self._register_pending_operation(
             task_uuid,
@@ -771,14 +784,12 @@ class RunwareBase:
 
         photo_maker_data = {}
         if requestImage.photoMaker:
-            photo_maker_data = {
-                k: v for k, v in vars(requestImage.photoMaker).items()
-                if v is not None and not (k in ("images", "inputImages") and v == [])
-            }
-            if "images" in photo_maker_data:
-                photo_maker_data["images"] = await process_image(photo_maker_data["images"])
-            if "inputImages" in photo_maker_data:
-                photo_maker_data["inputImages"] = await process_image(photo_maker_data["inputImages"])
+            photo_maker_data = {}
+            if requestImage.photoMaker.style is not None:
+                photo_maker_data["style"] = requestImage.photoMaker.style
+            image_list = requestImage.photoMaker.images or requestImage.photoMaker.inputImages
+            if image_list:
+                photo_maker_data["images"] = await process_image(image_list)
 
         request_object = self._buildImageRequest(
             requestImage, prompt, control_net_data_dicts,
@@ -790,6 +801,8 @@ class RunwareBase:
         task_uuid = requestImage.taskUUID
         number_results = requestImage.numberResults or 1
 
+        import json
+        print(f"request_object1: {json.dumps(request_object, indent=4)}")
 
         if delivery_method_enum is EDeliveryMethod.ASYNC:
             if requestImage.webhookURL:
