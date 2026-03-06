@@ -65,7 +65,6 @@ from .utils import (
     getUUID,
     fileToBase64,
     createImageFromResponse,
-    createImageToTextFromResponse,
     createEnhancedPromptsFromResponse,
     instantiateDataclassList,
     RunwareAPIError,
@@ -599,6 +598,11 @@ class RunwareBase:
         if requestPhotoMaker.model is None or requestPhotoMaker.positivePrompt is None or requestPhotoMaker.height is None or requestPhotoMaker.width is None:
             raise ValueError("Standalone photoMaker requires model, positivePrompt, height, and width.")
 
+        input_images = requestPhotoMaker.inputImages if requestPhotoMaker.inputImages is not None else []
+        if not input_images:
+            raise ValueError("Standalone photoMaker requires at least one image in inputImages.")
+        requestPhotoMaker.inputImages = input_images
+
         task_uuid = requestPhotoMaker.taskUUID or getUUID()
         requestPhotoMaker.taskUUID = task_uuid
 
@@ -656,8 +660,6 @@ class RunwareBase:
 
         numberOfResults = requestPhotoMaker.numberResults
 
-        import json
-        print(f"request_object: {json.dumps(request_object, indent=4)}")
 
         future, should_send = await self._register_pending_operation(
             task_uuid,
@@ -801,9 +803,6 @@ class RunwareBase:
         task_uuid = requestImage.taskUUID
         number_results = requestImage.numberResults or 1
 
-        import json
-        print(f"request_object1: {json.dumps(request_object, indent=4)}")
-
         if delivery_method_enum is EDeliveryMethod.ASYNC:
             if requestImage.webhookURL:
                 request_object["webhookURL"] = requestImage.webhookURL
@@ -935,9 +934,8 @@ class RunwareBase:
         # Add template parameter if specified
         if requestImageToText.template is not None:
             task_params["template"] = requestImageToText.template
-            # When using template, do NOT include prompt parameter
-        else:
-            # Use the provided prompt when no template
+        # Add prompt only when explicitly provided (API does not support prompt in all cases)
+        elif requestImageToText.prompt is not None:
             task_params["prompt"] = requestImageToText.prompt
 
         # Add optional parameters if they are provided
@@ -965,7 +963,7 @@ class RunwareBase:
             results = await asyncio.wait_for(future, timeout=IMAGE_OPERATION_TIMEOUT / 1000)
             response = results[0]
             self._handle_error_response(response)
-            return createImageToTextFromResponse(response)
+            return instantiateDataclass(IImageToText, response)
         except asyncio.TimeoutError:
             raise Exception(
                 f"Timeout waiting for image caption | TaskUUID: {taskUUID} | "

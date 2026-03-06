@@ -184,7 +184,7 @@ class ILycoris:
 @dataclass
 class IEmbedding:
     model: str
-    weight: Optional[float] = None  
+    weight: Optional[float] = None
 
 
 @dataclass
@@ -337,7 +337,7 @@ class IPhotoMaker:
     positivePrompt: Optional[str] = None
     height: Optional[int] = None
     width: Optional[int] = None
-    numberResults: Optional[int] = 1
+    numberResults: Optional[int] = None
     steps: Optional[int] = None
     outputType: Optional[IOutputType] = None
     inputImages: Optional[List[Union[str, File]]] = None
@@ -986,7 +986,7 @@ class IImageInference:
 class IImageCaption:
     inputImages: Optional[List[Union[File, str]]] = None  # Primary: array of images (UUIDs, URLs, base64, dataURI)
     inputImage: Optional[Union[File, str]] = None  # Convenience: single image, defaults to inputImages[0] if not provided
-    prompt: List[str] = field(default_factory=lambda: ["Describe this image in detail"])  # Array of prompts with default
+    prompt: Optional[List[str]] = None  
     model: Optional[str] = None  # Optional: AIR ID (runware:150@1, runware:150@2) - backend handles default
     includeCost: bool = False
     template: Optional[str] = None
@@ -1026,10 +1026,17 @@ class IElevenLabsMusicSettings(SerializableMixin):
 
 
 @dataclass
+class IImageToTextStructuredData:
+    ageGroup: Optional[str] = None
+    confidence: Optional[float] = None
+
+
+@dataclass
 class IImageToText:
     taskType: ETaskType
     taskUUID: str
-    text: str
+    text: Optional[str] = None  
+    structuredData: Optional[IImageToTextStructuredData] = None
     cost: Optional[float] = None
 
 

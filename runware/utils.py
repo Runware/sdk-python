@@ -767,22 +767,6 @@ def createImageFromResponse(response: dict) -> IImage:
     return instantiateDataclass(IImage, processed_fields)
 
 
-def createImageToTextFromResponse(response: dict) -> IImageToText:
-    processed_fields = {}
-
-    for field in fields(IImageToText):
-        if field.name in response:
-            if field.name == "taskType":
-                # Convert string to ETaskType enum
-                processed_fields[field.name] = ETaskType(response[field.name])
-            elif field.type == float or field.type == Optional[float]:
-                processed_fields[field.name] = float(response[field.name])
-            else:
-                processed_fields[field.name] = response[field.name]
-
-    return instantiateDataclass(IImageToText, processed_fields)
-
-
 def createVideoToTextFromResponse(response: dict) -> IVideoToText:
     processed_fields = {}
 
