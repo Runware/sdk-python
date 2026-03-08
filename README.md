@@ -1106,6 +1106,9 @@ RUNWARE_AUDIO_INFERENCE_TIMEOUT=300000      # Audio generation (default: 5 min)
 RUNWARE_AUDIO_POLLING_DELAY=1000            # Delay between status checks (default: 1 sec)
 RUNWARE_MAX_POLLS_AUDIO_GENERATION=240      # Max polling attempts for audio inference (default: 240, ~4 min total)
 
+# Text Operations (milliseconds)
+RUNWARE_TEXT_STREAM_TIMEOUT=600000          # Text inference streaming (SSE) read timeout (default: 10 min)
+
 # Other Operations (milliseconds)
 RUNWARE_PROMPT_ENHANCE_TIMEOUT=60000        # Prompt enhancement (default: 1 min)
 RUNWARE_WEBHOOK_TIMEOUT=30000               # Webhook acknowledgment (default: 30 sec)
