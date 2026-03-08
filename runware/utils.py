@@ -144,6 +144,14 @@ TEXT_INITIAL_TIMEOUT = int(os.environ.get(
     30000
 ))
 
+# Text streaming read timeout (milliseconds)
+# Maximum time to wait for data on the SSE stream; long to avoid ReadTimeout mid-stream
+# Used in: _requestTextStream() for deliveryMethod=stream
+TEXT_STREAM_READ_TIMEOUT = int(os.environ.get(
+    "RUNWARE_TEXT_STREAM_TIMEOUT",
+    600000
+))
+
 # Audio generation timeout (milliseconds)
 # Maximum time to wait for audio generation completion
 # Used in: _waitForAudioCompletion() for single audio generation

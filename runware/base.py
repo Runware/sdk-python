@@ -85,6 +85,7 @@ from .utils import (
     createAsyncTaskResponse,
     VIDEO_INITIAL_TIMEOUT,
     TEXT_INITIAL_TIMEOUT,
+    TEXT_STREAM_READ_TIMEOUT,
     VIDEO_POLLING_DELAY,
     WEBHOOK_TIMEOUT,
     IMAGE_INFERENCE_TIMEOUT,
@@ -2041,7 +2042,11 @@ class RunwareBase:
             else EDeliveryMethod(requestText.deliveryMethod)
         )
         if delivery_method_enum == EDeliveryMethod.STREAM:
-            return self._requestTextStream(requestText)
+            async def stream_with_semaphore() -> AsyncIterator[Union[str, IText]]:
+                async with self._request_semaphore:
+                    async for chunk in self._requestTextStream(requestText):
+                        yield chunk
+            return stream_with_semaphore()
         async with self._request_semaphore:
             return await self._retry_async_with_reconnect(
                 self._requestText,
@@ -2269,7 +2274,6 @@ class RunwareBase:
     async def _requestTextStream(
         self, requestText: ITextInference
     ) -> AsyncIterator[Union[str, IText]]:
-    
         requestText.taskUUID = requestText.taskUUID or getUUID()
         request_object = self._buildTextRequest(requestText)
         body = [request_object]
@@ -2279,43 +2283,37 @@ class RunwareBase:
             "Authorization": f"Bearer {self._apiKey}",
             "Content-Type": "application/json",
         }
-        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
-            async with client.stream(
-                "POST",
-                http_url,
-                json=body,
-                headers=headers,
-            ) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    line = line.strip().strip("\r")
-                    if not line or not line.startswith("data:"):
-                        continue
-                    _, _, payload = line.partition("data:")
-                    payload = payload.strip()
-                    if not payload:
-                        continue
-                    try:
-                        obj = json.loads(payload)
-                    except json.JSONDecodeError:
-                        continue
-                    choices = obj.get("choices") or []
-                    if choices and isinstance(choices[0], dict):
-                        delta = choices[0].get("delta") or {}
-                        content = delta.get("content") or delta.get("text") or ""
-                        if content:
-                            yield content
-                    if choices and choices[0].get("finish_reason") is not None:
-                        usage_data = obj.get("usage")
-                        usage = instantiateDataclass(ITextInferenceUsage, usage_data) if usage_data else None
-                        yield IText(
-                            taskType=ETaskType.TEXT_INFERENCE.value,
-                            taskUUID=obj.get("taskUUID") or "",
-                            finishReason=choices[0].get("finish_reason"),
-                            usage=usage,
-                            cost=obj.get("cost"),
-                        )
-                        return
+        try:
+            async with httpx.AsyncClient(timeout=TEXT_STREAM_READ_TIMEOUT / 1000) as client:
+                async with client.stream(
+                    "POST",
+                    http_url,
+                    json=body,
+                    headers=headers,
+                ) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        try:
+                            line = json.loads(line.replace("data:", "", 1))
+                        except json.JSONDecodeError:
+                            continue
+                        data = line.get("data") or line
+                        choice = (data.get("choices") or [{}])[0]
+                        delta = choice.get("delta") or {}
+                        if delta.get("content"):
+                            yield delta.get("content")
+                        if choice.get("finish_reason") is not None:
+                            usage = instantiateDataclass(ITextInferenceUsage, data.get("usage"))
+                            yield IText(
+                                taskType=ETaskType.TEXT_INFERENCE.value,
+                                taskUUID=data.get("taskUUID") or "",
+                                finishReason=choice.get("finish_reason"),
+                                usage=usage,
+                                cost=data.get("cost"),
+                            )
+                            return
+        except Exception as e:
+            raise RunwareAPIError({"message": str(e)})
 
     async def _requestText(self, requestText: ITextInference) -> Union[List[IText], IAsyncTaskResponse]:
         await self.ensureConnection()
