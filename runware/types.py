@@ -106,6 +106,7 @@ class EOpenPosePreProcessor(Enum):
 class EDeliveryMethod(Enum):
     SYNC = "sync"
     ASYNC = "async"
+    STREAM = "stream"
 
 class OperationState(Enum):
     """State machine for pending operations."""
@@ -1665,6 +1666,16 @@ class ITextInference:
     includeCost: Optional[bool] = None
     providerSettings: Optional[TextProviderSettings] = None
     webhookURL: Optional[str] = None
+
+
+@dataclass
+class ITextStreamChunk:
+    """One chunk of a streaming text inference response (SSE)."""
+    content: Optional[str] = None
+    finishReason: Optional[str] = None
+    usage: Optional[ITextInferenceUsage] = None
+    cost: Optional[float] = None
+    taskUUID: Optional[str] = None
 
 
 @dataclass

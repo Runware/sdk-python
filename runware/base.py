@@ -1,13 +1,15 @@
 import asyncio
 import inspect
+import json
 import logging
 import os
 import re
 from asyncio import gather
 from dataclasses import asdict
 from random import uniform
-from typing import List, Optional, Union, Callable, Any, Dict, Tuple
+from typing import List, Optional, Union, Callable, Any, Dict, Tuple, AsyncIterator
 
+import httpx
 from websockets.protocol import State
 
 from .logging_config import configure_logging
@@ -58,11 +60,14 @@ from .types import (
     IUploadMediaRequest,
     ITextInference,
     IText,
+    ITextInferenceUsage,
+    ITextStreamChunk,
 )
 from .types import IImage, IError, SdkType, ListenerType
 from .utils import (
     BASE_RUNWARE_URLS,
     getUUID,
+    get_http_url_from_ws_url,
     fileToBase64,
     createImageFromResponse,
     createImageToTextFromResponse,
@@ -2028,7 +2033,12 @@ class RunwareBase:
         await self.ensureConnection()
         return await self._request3d(request3d)
 
-    async def textInference(self, requestText: ITextInference) -> Union[List[IText], IAsyncTaskResponse]:
+    async def textInference(
+        self, requestText: ITextInference
+    ) -> Union[List[IText], IAsyncTaskResponse, AsyncIterator[Union[str, ITextStreamChunk]]]:
+        delivery = getattr(requestText, "deliveryMethod", "sync")
+        if isinstance(delivery, str) and delivery.lower() == "stream":
+            return self._requestTextStream(requestText)
         async with self._request_semaphore:
             return await self._retry_async_with_reconnect(
                 self._requestText,
@@ -2252,6 +2262,56 @@ class RunwareBase:
             request_object["numberResults"] = requestText.numberResults
         self._addTextProviderSettings(request_object, requestText)
         return request_object
+
+    async def _requestTextStream(
+        self, requestText: ITextInference
+    ) -> AsyncIterator[Union[str, ITextStreamChunk]]:
+        """Stream text inference via HTTP SSE. Yields content (str), then one ITextStreamChunk with cost/finishReason."""
+        requestText.taskUUID = requestText.taskUUID or getUUID()
+        request_object = self._buildTextRequest(requestText)
+        body = [request_object]
+        http_url = get_http_url_from_ws_url(self._url or "")
+        headers = {
+            "Accept": "text/event-stream",
+            "Authorization": f"Bearer {self._apiKey}",
+            "Content-Type": "application/json",
+        }
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
+            async with client.stream(
+                "POST",
+                http_url,
+                json=body,
+                headers=headers,
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    line = line.strip().strip("\r")
+                    if not line or not line.startswith("data:"):
+                        continue
+                    _, _, payload = line.partition("data:")
+                    payload = payload.strip()
+                    if not payload:
+                        continue
+                    try:
+                        obj = json.loads(payload)
+                    except json.JSONDecodeError:
+                        continue
+                    choices = obj.get("choices") or []
+                    if choices and isinstance(choices[0], dict):
+                        delta = choices[0].get("delta") or {}
+                        content = delta.get("content") or delta.get("text") or ""
+                        if content:
+                            yield content
+                    if choices and choices[0].get("finish_reason") is not None:
+                        usage_data = obj.get("usage")
+                        usage = instantiateDataclass(ITextInferenceUsage, usage_data) if usage_data else None
+                        yield ITextStreamChunk(
+                            cost=obj.get("cost"),
+                            finishReason=choices[0].get("finish_reason"),
+                            usage=usage,
+                            taskUUID=obj.get("taskUUID"),
+                        )
+                        return
 
     async def _requestText(self, requestText: ITextInference) -> Union[List[IText], IAsyncTaskResponse]:
         await self.ensureConnection()

@@ -42,6 +42,23 @@ BASE_RUNWARE_URLS = {
     Environment.TEST: "ws://localhost:8080",
 }
 
+# HTTP REST base URL for streaming (e.g. textInference with deliveryMethod=stream)
+BASE_RUNWARE_HTTP_URLS = {
+    Environment.PRODUCTION: "https://api.runware.ai/v1",
+    Environment.TEST: "http://localhost:8080",
+}
+
+
+def get_http_url_from_ws_url(ws_url: str) -> str:
+    """Derive HTTP API URL from WebSocket URL for streaming requests."""
+    if not ws_url:
+        return BASE_RUNWARE_HTTP_URLS[Environment.PRODUCTION]
+    if "ws-api.runware.ai" in ws_url:
+        return "https://api.runware.ai/v1"
+    if "localhost" in ws_url or "127.0.0.1" in ws_url:
+        return ws_url.replace("wss://", "https://", 1).replace("ws://", "http://", 1)
+    return ws_url.replace("wss://", "https://", 1).replace("ws://", "http://", 1)
+
 
 RETRY_SDK_COUNTS = {
     "GLOBAL": 2,
