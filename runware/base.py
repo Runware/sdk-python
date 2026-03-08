@@ -61,7 +61,6 @@ from .types import (
     ITextInference,
     IText,
     ITextInferenceUsage,
-    ITextStreamChunk,
 )
 from .types import IImage, IError, SdkType, ListenerType
 from .utils import (
@@ -2035,9 +2034,13 @@ class RunwareBase:
 
     async def textInference(
         self, requestText: ITextInference
-    ) -> Union[List[IText], IAsyncTaskResponse, AsyncIterator[Union[str, ITextStreamChunk]]]:
-        delivery = getattr(requestText, "deliveryMethod", "sync")
-        if isinstance(delivery, str) and delivery.lower() == "stream":
+    ) -> Union[List[IText], IAsyncTaskResponse, AsyncIterator[Union[str, IText]]]:
+        delivery_method_enum = (
+            requestText.deliveryMethod
+            if isinstance(requestText.deliveryMethod, EDeliveryMethod)
+            else EDeliveryMethod(requestText.deliveryMethod)
+        )
+        if delivery_method_enum == EDeliveryMethod.STREAM:
             return self._requestTextStream(requestText)
         async with self._request_semaphore:
             return await self._retry_async_with_reconnect(
@@ -2265,8 +2268,8 @@ class RunwareBase:
 
     async def _requestTextStream(
         self, requestText: ITextInference
-    ) -> AsyncIterator[Union[str, ITextStreamChunk]]:
-        """Stream text inference via HTTP SSE. Yields content (str), then one ITextStreamChunk with cost/finishReason."""
+    ) -> AsyncIterator[Union[str, IText]]:
+    
         requestText.taskUUID = requestText.taskUUID or getUUID()
         request_object = self._buildTextRequest(requestText)
         body = [request_object]
@@ -2305,11 +2308,12 @@ class RunwareBase:
                     if choices and choices[0].get("finish_reason") is not None:
                         usage_data = obj.get("usage")
                         usage = instantiateDataclass(ITextInferenceUsage, usage_data) if usage_data else None
-                        yield ITextStreamChunk(
-                            cost=obj.get("cost"),
+                        yield IText(
+                            taskType=ETaskType.TEXT_INFERENCE.value,
+                            taskUUID=obj.get("taskUUID") or "",
                             finishReason=choices[0].get("finish_reason"),
                             usage=usage,
-                            taskUUID=obj.get("taskUUID"),
+                            cost=obj.get("cost"),
                         )
                         return
 

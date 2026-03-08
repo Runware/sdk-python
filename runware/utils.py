@@ -48,16 +48,18 @@ BASE_RUNWARE_HTTP_URLS = {
     Environment.TEST: "http://localhost:8080",
 }
 
+# Map each WebSocket base URL to its HTTP counterpart (for streaming requests).
+_WS_TO_HTTP = {
+    BASE_RUNWARE_URLS[Environment.PRODUCTION]: BASE_RUNWARE_HTTP_URLS[Environment.PRODUCTION],
+    BASE_RUNWARE_URLS[Environment.TEST]: BASE_RUNWARE_HTTP_URLS[Environment.TEST],
+}
+
 
 def get_http_url_from_ws_url(ws_url: str) -> str:
-    """Derive HTTP API URL from WebSocket URL for streaming requests."""
+    """Return the HTTP URL for this ws_url from _WS_TO_HTTP."""
     if not ws_url:
         return BASE_RUNWARE_HTTP_URLS[Environment.PRODUCTION]
-    if "ws-api.runware.ai" in ws_url:
-        return "https://api.runware.ai/v1"
-    if "localhost" in ws_url or "127.0.0.1" in ws_url:
-        return ws_url.replace("wss://", "https://", 1).replace("ws://", "http://", 1)
-    return ws_url.replace("wss://", "https://", 1).replace("ws://", "http://", 1)
+    return _WS_TO_HTTP.get(ws_url, BASE_RUNWARE_HTTP_URLS[Environment.PRODUCTION])
 
 
 RETRY_SDK_COUNTS = {

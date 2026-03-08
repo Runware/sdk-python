@@ -1669,16 +1669,6 @@ class ITextInference:
 
 
 @dataclass
-class ITextStreamChunk:
-    """One chunk of a streaming text inference response (SSE)."""
-    content: Optional[str] = None
-    finishReason: Optional[str] = None
-    usage: Optional[ITextInferenceUsage] = None
-    cost: Optional[float] = None
-    taskUUID: Optional[str] = None
-
-
-@dataclass
 class IText:
     taskType: str
     taskUUID: str
