@@ -482,10 +482,54 @@ class IFluxKontext(SerializableMixin):
 
 
 @dataclass
+class IRegion(SerializableMixin):
+    prompt: str
+    mask: Union[List[int], str]  
+
+    @property
+    def request_key(self) -> str:
+        return "regions"
+
+    def __post_init__(self) -> None:
+        if isinstance(self.mask, list):
+            if len(self.mask) != 4:
+                raise ValueError("IRegion.mask must be a list of exactly 4 integers [x0, y0, x1, y1]")
+
+
+@dataclass
+class IRegionalPrompting(SerializableMixin):
+    injectSteps: int
+    backgroundPrompt: Optional[str] = None
+    baseRatio: Optional[float] = None
+    regions: Optional[List[IRegion]] = None
+
+    @property
+    def request_key(self) -> str:
+        return "regionalPrompting"
+
+
+@dataclass
+class IWatermark(SerializableMixin):
+    text: Optional[str] = None  
+    image: Optional[str] = None  
+    displayPosition: Optional[str] = None
+    tiled: Optional[bool] = None  
+    opacity: Optional[float] = None  
+    fontColor: Optional[str] = None  
+    bgColor: Optional[str] = None  
+
+    @property
+    def request_key(self) -> str:
+      return "watermark"
+
+
+@dataclass
 class IAdvancedFeatures(SerializableMixin):
     fluxKontext: Optional[IFluxKontext] = None
     layerDiffuse: Optional[bool] = None  
     hiresfix: Optional[bool] = None  
+    regionalPrompting: Optional[IRegionalPrompting] = None
+    watermark: Optional[IWatermark] = None  
 
     @property
     def request_key(self) -> str:
@@ -504,20 +548,6 @@ class IWanAnimate(SerializableMixin):
 
 
 VideoAdvancedFeatureTypes = IWanAnimate
-
-@dataclass
-class IWatermark(SerializableMixin):
-    text: Optional[str] = None  
-    image: Optional[str] = None  
-    displayPosition: Optional[str] = None
-    tiled: Optional[bool] = None  
-    opacity: Optional[float] = None  
-    fontColor: Optional[str] = None  
-    bgColor: Optional[str] = None  
-
-    @property
-    def request_key(self) -> str:
-        return "watermark"
 
 
 @dataclass
