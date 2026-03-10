@@ -2298,6 +2298,8 @@ class RunwareBase:
                         except json.JSONDecodeError:
                             continue
                         data = line.get("data") or line
+                        if data.get("error") is not None:
+                            raise RunwareAPIError(data["error"])
                         choice = (data.get("choices") or [{}])[0]
                         delta = choice.get("delta") or {}
                         if delta.get("content"):
