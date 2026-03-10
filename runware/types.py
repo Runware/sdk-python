@@ -527,7 +527,7 @@ class IWatermark(SerializableMixin):
 class IAdvancedFeatures(SerializableMixin):
     fluxKontext: Optional[IFluxKontext] = None
     layerDiffuse: Optional[bool] = None  
-    hiresfix: Optional[bool] = None  
+    hiresFix: Optional[bool] = None  
     regionalPrompting: Optional[IRegionalPrompting] = None
     watermark: Optional[IWatermark] = None  
 
