@@ -870,6 +870,37 @@ The `IAudioInference` class supports the following parameters:
 - `duration`: Duration of the generated audio in seconds
 - `includeCost`: Whether to include cost information in the response
 
+### Text inference streaming
+
+To stream text inference (e.g. LLM chat) over HTTP SSE, set `deliveryMethod="stream"`. The SDK yields content chunks (strings) and a final `IText` with usage and cost:
+
+```python
+import asyncio
+from runware import Runware, ITextInference, ITextInferenceMessage
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    request = ITextInference(
+        model="runware:qwen3-thinking@1",
+        messages=[ITextInferenceMessage(role="user", content="Explain photosynthesis in one sentence.")],
+        deliveryMethod="stream",
+        includeCost=True,
+    )
+
+    stream = await runware.textInference(request)
+    async for chunk in stream:
+        if isinstance(chunk, str):
+            print(chunk, end="", flush=True)
+        else:
+            print(chunk)
+
+asyncio.run(main())
+```
+
+Streaming uses the same concurrency limit as other requests (`RUNWARE_MAX_CONCURRENT_REQUESTS`). To allow longer streams, set `RUNWARE_TEXT_STREAM_TIMEOUT` (milliseconds; default 600000).
+
 ### Model Upload
 
 To upload model using the Runware API, you can use the `uploadModel` method of the `Runware` class. Here are examples:
@@ -1105,6 +1136,9 @@ RUNWARE_MAX_POLLS_3D_GENERATION=480        # Max polling attempts for 3D inferen
 RUNWARE_AUDIO_INFERENCE_TIMEOUT=300000      # Audio generation (default: 5 min)
 RUNWARE_AUDIO_POLLING_DELAY=1000            # Delay between status checks (default: 1 sec)
 RUNWARE_MAX_POLLS_AUDIO_GENERATION=240      # Max polling attempts for audio inference (default: 240, ~4 min total)
+
+# Text Operations (milliseconds)
+RUNWARE_TEXT_STREAM_TIMEOUT=600000          # Text inference streaming (SSE) read timeout (default: 10 min)
 
 # Other Operations (milliseconds)
 RUNWARE_PROMPT_ENHANCE_TIMEOUT=60000        # Prompt enhancement (default: 1 min)

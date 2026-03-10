@@ -1,13 +1,15 @@
 import asyncio
 import inspect
+import json
 import logging
 import os
 import re
 from asyncio import gather
 from dataclasses import asdict
 from random import uniform
-from typing import List, Optional, Union, Callable, Any, Dict, Tuple
+from typing import List, Optional, Union, Callable, Any, Dict, Tuple, AsyncIterator
 
+import httpx
 from websockets.protocol import State
 
 from .logging_config import configure_logging
@@ -58,11 +60,13 @@ from .types import (
     IUploadMediaRequest,
     ITextInference,
     IText,
+    ITextInferenceUsage,
 )
 from .types import IImage, IError, SdkType, ListenerType
 from .utils import (
     BASE_RUNWARE_URLS,
     getUUID,
+    get_http_url_from_ws_url,
     fileToBase64,
     createImageFromResponse,
     createImageToTextFromResponse,
@@ -81,6 +85,7 @@ from .utils import (
     createAsyncTaskResponse,
     VIDEO_INITIAL_TIMEOUT,
     TEXT_INITIAL_TIMEOUT,
+    TEXT_STREAM_READ_TIMEOUT,
     VIDEO_POLLING_DELAY,
     WEBHOOK_TIMEOUT,
     IMAGE_INFERENCE_TIMEOUT,
@@ -2028,7 +2033,20 @@ class RunwareBase:
         await self.ensureConnection()
         return await self._request3d(request3d)
 
-    async def textInference(self, requestText: ITextInference) -> Union[List[IText], IAsyncTaskResponse]:
+    async def textInference(
+        self, requestText: ITextInference
+    ) -> Union[List[IText], IAsyncTaskResponse, AsyncIterator[Union[str, IText]]]:
+        delivery_method_enum = (
+            requestText.deliveryMethod
+            if isinstance(requestText.deliveryMethod, EDeliveryMethod)
+            else EDeliveryMethod(requestText.deliveryMethod)
+        )
+        if delivery_method_enum == EDeliveryMethod.STREAM:
+            async def stream_with_semaphore() -> AsyncIterator[Union[str, IText]]:
+                async with self._request_semaphore:
+                    async for chunk in self._requestTextStream(requestText):
+                        yield chunk
+            return stream_with_semaphore()
         async with self._request_semaphore:
             return await self._retry_async_with_reconnect(
                 self._requestText,
@@ -2252,6 +2270,52 @@ class RunwareBase:
             request_object["numberResults"] = requestText.numberResults
         self._addTextProviderSettings(request_object, requestText)
         return request_object
+
+    async def _requestTextStream(
+        self, requestText: ITextInference
+    ) -> AsyncIterator[Union[str, IText]]:
+        requestText.taskUUID = requestText.taskUUID or getUUID()
+        request_object = self._buildTextRequest(requestText)
+        body = [request_object]
+        http_url = get_http_url_from_ws_url(self._url or "")
+        headers = {
+            "Accept": "text/event-stream",
+            "Authorization": f"Bearer {self._apiKey}",
+            "Content-Type": "application/json",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=TEXT_STREAM_READ_TIMEOUT / 1000) as client:
+                async with client.stream(
+                    "POST",
+                    http_url,
+                    json=body,
+                    headers=headers,
+                ) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        try:
+                            line = json.loads(line.replace("data:", "", 1))
+                        except json.JSONDecodeError:
+                            continue
+                        data = line.get("data") or line
+                        if data.get("error") is not None:
+                            raise RunwareAPIError(data["error"])
+                        choice = (data.get("choices") or [{}])[0]
+                        delta = choice.get("delta") or {}
+                        if delta.get("content"):
+                            yield delta.get("content")
+                        if choice.get("finish_reason") is not None:
+                            usage = instantiateDataclass(ITextInferenceUsage, data.get("usage"))
+                            yield IText(
+                                taskType=ETaskType.TEXT_INFERENCE.value,
+                                taskUUID=data.get("taskUUID") or "",
+                                finishReason=choice.get("finish_reason"),
+                                usage=usage,
+                                cost=data.get("cost"),
+                            )
+                            return
+        except Exception as e:
+            raise RunwareAPIError({"message": str(e)})
 
     async def _requestText(self, requestText: ITextInference) -> Union[List[IText], IAsyncTaskResponse]:
         await self.ensureConnection()

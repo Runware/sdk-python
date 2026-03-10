@@ -106,6 +106,7 @@ class EOpenPosePreProcessor(Enum):
 class EDeliveryMethod(Enum):
     SYNC = "sync"
     ASYNC = "async"
+    STREAM = "stream"
 
 class OperationState(Enum):
     """State machine for pending operations."""
