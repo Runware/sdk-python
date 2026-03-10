@@ -472,14 +472,24 @@ class IAcceleratorOptions(SerializableMixin):
 
 
 @dataclass
-class IFluxKontext:
+class IFluxKontext(SerializableMixin):
     guidanceEndStep: Optional[int] = None
     guidanceEndStepPercentage: Optional[float] = None
 
+    @property
+    def request_key(self) -> str:
+        return "fluxKontext"
+
 
 @dataclass
-class IAdvancedFeatures:
+class IAdvancedFeatures(SerializableMixin):
     fluxKontext: Optional[IFluxKontext] = None
+    layerDiffuse: Optional[bool] = None  
+    hiresfix: Optional[bool] = None  
+
+    @property
+    def request_key(self) -> str:
+        return "advancedFeatures"  
 
 
 @dataclass
@@ -495,6 +505,20 @@ class IWanAnimate(SerializableMixin):
 
 VideoAdvancedFeatureTypes = IWanAnimate
 
+@dataclass
+class IWatermark(SerializableMixin):
+    text: Optional[str] = None  
+    image: Optional[str] = None  
+    displayPosition: Optional[str] = None
+    tiled: Optional[bool] = None  
+    opacity: Optional[float] = None  
+    fontColor: Optional[str] = None  
+    bgColor: Optional[str] = None  
+
+    @property
+    def request_key(self) -> str:
+        return "watermark"
+
 
 @dataclass
 class IVideoAdvancedFeatures(SerializableMixin):
@@ -505,20 +529,23 @@ class IVideoAdvancedFeatures(SerializableMixin):
     audioNegativePrompt: Optional[str] = None  
     slgLayer: Optional[int] = None
     advancedFeature: Optional[VideoAdvancedFeatureTypes] = None
+    watermark: Optional[IWatermark] = None
 
     @property
     def request_key(self) -> str:
         return "advancedFeatures"
 
     def serialize(self) -> Dict[str, Any]:
-        result = {k: v for k, v in asdict(self).items()
-                  if v is not None and not k.startswith('_')}
-        
-
-        if self.advancedFeature:
-            result.pop('advancedFeature', None)
-            result.update(self.advancedFeature.to_request_dict())
-        
+        result: Dict[str, Any] = {}
+        for k, v in vars(self).items():
+            if v is None or k.startswith("_"):
+                continue
+            if isinstance(v, SerializableMixin):
+                result.update(v.to_request_dict())
+            elif isinstance(v, (list, tuple)) and v and all(isinstance(x, SerializableMixin) for x in v):
+                result[k] = [x.serialize() for x in v]
+            else:
+                result[k] = v
         return result
 
 

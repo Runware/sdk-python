@@ -2063,6 +2063,8 @@ class RunwareBase:
         await self._processVideoImages(requestVideo)
         requestVideo.taskUUID = requestVideo.taskUUID or getUUID()
         request_object = self._buildVideoRequest(requestVideo)
+        import json
+        print(f"request_object: {json.dumps(request_object, indent=4)}")
 
         if requestVideo.webhookURL:
             request_object["webhookURL"] = requestVideo.webhookURL
@@ -2462,15 +2464,7 @@ class RunwareBase:
 
         # Add acceleratorOptions if present
         self._addOptionalField(request_object, requestImage.acceleratorOptions)
-
-        # Add advancedFeatures if present
-        if requestImage.advancedFeatures:
-            pipeline_options_dict = {
-                k: v.__dict__
-                for k, v in vars(requestImage.advancedFeatures).items()
-                if v is not None
-            }
-            request_object["advancedFeatures"] = pipeline_options_dict
+        self._addOptionalField(request_object, requestImage.advancedFeatures)
 
         # Add extraArgs if present
         if hasattr(requestImage, "extraArgs") and isinstance(requestImage.extraArgs, dict):
