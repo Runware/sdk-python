@@ -494,6 +494,8 @@ class IRegion(SerializableMixin):
         if isinstance(self.mask, list):
             if len(self.mask) != 4:
                 raise ValueError("IRegion.mask must be a list of exactly 4 integers [x0, y0, x1, y1]")
+            if not all(isinstance(v, int) for v in self.mask):
+                raise TypeError("IRegion.mask list elements must all be ints")
 
 
 @dataclass
@@ -520,7 +522,7 @@ class IWatermark(SerializableMixin):
 
     @property
     def request_key(self) -> str:
-      return "watermark"
+        return "watermark"
 
 
 @dataclass
