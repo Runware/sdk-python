@@ -914,10 +914,10 @@ def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
             else:
                 filtered_data[k] = v
 
-        elif isinstance(field_type, type) and issubclass(field_type, Enum):
-            filtered_data[k] = field_type(v)
-
-        elif field_type in (int, float) and isinstance(v, str):
+        elif (
+            (isinstance(field_type, type) and issubclass(field_type, Enum))
+            or (field_type in (int, float) and isinstance(v, str))
+        ):
             filtered_data[k] = field_type(v)
         else:
             filtered_data[k] = v

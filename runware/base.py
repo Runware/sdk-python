@@ -794,7 +794,6 @@ class RunwareBase:
 
         photo_maker_data = {}
         if requestImage.photoMaker:
-            photo_maker_data = {}
             if requestImage.photoMaker.style is not None:
                 photo_maker_data["style"] = requestImage.photoMaker.style
             image_list = requestImage.photoMaker.images or requestImage.photoMaker.inputImages
