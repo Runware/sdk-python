@@ -2462,15 +2462,7 @@ class RunwareBase:
 
         # Add acceleratorOptions if present
         self._addOptionalField(request_object, requestImage.acceleratorOptions)
-
-        # Add advancedFeatures if present
-        if requestImage.advancedFeatures:
-            pipeline_options_dict = {
-                k: v.__dict__
-                for k, v in vars(requestImage.advancedFeatures).items()
-                if v is not None
-            }
-            request_object["advancedFeatures"] = pipeline_options_dict
+        self._addOptionalField(request_object, requestImage.advancedFeatures)
 
         # Add extraArgs if present
         if hasattr(requestImage, "extraArgs") and isinstance(requestImage.extraArgs, dict):
