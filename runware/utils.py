@@ -13,6 +13,7 @@ import mimetypes
 import inspect
 from typing import Any, Dict, List, Union, Optional, TypeVar, Type, Coroutine, get_type_hints, get_origin, get_args
 from dataclasses import fields, is_dataclass
+from enum import Enum
 from .types import (
     Environment,
     EPreProcessor,
@@ -906,9 +907,18 @@ def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
         elif get_origin(field_type) is list and isinstance(v, list):
             inner = get_args(field_type)[0] if get_args(field_type) else None
             if inner and is_dataclass(inner):
-                filtered_data[k] = [instantiateDataclass(inner, i) if isinstance(i, dict) else i for i in v]
+                filtered_data[k] = [
+                    instantiateDataclass(inner, i) if isinstance(i, dict) else i
+                    for i in v
+                ]
             else:
                 filtered_data[k] = v
+
+        elif isinstance(field_type, type) and issubclass(field_type, Enum):
+            filtered_data[k] = field_type(v)
+
+        elif field_type in (int, float) and isinstance(v, str):
+            filtered_data[k] = field_type(v)
         else:
             filtered_data[k] = v
     

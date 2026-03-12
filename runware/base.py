@@ -741,12 +741,20 @@ class RunwareBase:
                 for k, v in vars(requestImage.instantID).items()
                 if v is not None
             }
+
             if "poseImage" in instant_id_data:
                 instant_id_data["poseImage"] = await process_image(instant_id_data["poseImage"])
-            if "inputImages" in instant_id_data:
-                instant_id_data["inputImages"] = await process_image(instant_id_data["inputImages"])
-            else:
-                instant_id_data["inputImages"] = await process_image([instant_id_data["inputImage"]])
+
+            input_images = instant_id_data.get("inputImages")
+            single_input = instant_id_data.get("inputImage")
+
+            if input_images is None and single_input is not None:
+                input_images = [single_input]
+
+            if input_images is not None:
+                instant_id_data["inputImages"] = await process_image(input_images)
+
+            instant_id_data.pop("inputImage", None)
 
         ip_adapters_data = []
         if requestImage.ipAdapters:
