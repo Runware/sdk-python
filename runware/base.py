@@ -772,6 +772,7 @@ class RunwareBase:
         task_uuid = requestImage.taskUUID
         number_results = requestImage.numberResults or 1
 
+
         if delivery_method_enum is EDeliveryMethod.ASYNC:
             if requestImage.webhookURL:
                 request_object["webhookURL"] = requestImage.webhookURL
@@ -808,6 +809,7 @@ class RunwareBase:
             finally:
                 await self._unregister_pending_operation(task_uuid)
 
+        
         future, should_send = await self._register_pending_operation(
             task_uuid,
             expected_results=number_results,
@@ -2453,6 +2455,7 @@ class RunwareBase:
             if (
                 name in request_object
                 or value is None
+                or (isinstance(value, (list, tuple, dict)) and not value)
                 or callable(value)
                 or is_dataclass(value)
                 or (
@@ -2823,6 +2826,7 @@ class RunwareBase:
         await self.ensureConnection()
         requestAudio.taskUUID = requestAudio.taskUUID or getUUID()
         request_object = self._buildAudioRequest(requestAudio)
+
 
         return await self._handleInitialAudioResponse(
             request_object=request_object,
