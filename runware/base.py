@@ -4,7 +4,7 @@ import logging
 import os
 import re
 from asyncio import gather
-from dataclasses import asdict
+from dataclasses import asdict, is_dataclass, fields
 from random import uniform
 from typing import List, Optional, Union, Callable, Any, Dict, Tuple
 
@@ -2063,6 +2063,8 @@ class RunwareBase:
         await self._processVideoImages(requestVideo)
         requestVideo.taskUUID = requestVideo.taskUUID or getUUID()
         request_object = self._buildVideoRequest(requestVideo)
+        import json
+        print(f"Request Object: {json.dumps(request_object, indent=4)}")
 
         if requestVideo.webhookURL:
             request_object["webhookURL"] = requestVideo.webhookURL
@@ -2132,8 +2134,9 @@ class RunwareBase:
         if requestVideo.positivePrompt is not None:
             request_object["positivePrompt"] = requestVideo.positivePrompt.strip()
 
+        self._addOptionalBuiltInDataTypesFields(request_object, requestVideo)
+
         self._addOptionalField(request_object, requestVideo.speech)
-        self._addOptionalVideoFields(request_object, requestVideo)
         self._addVideoImages(request_object, requestVideo)
         self._addOptionalField(request_object, requestVideo.inputs)
         self._addProviderSettings(request_object, requestVideo)
@@ -2143,18 +2146,6 @@ class RunwareBase:
         self._addOptionalField(request_object, requestVideo.acceleratorOptions)
 
         return request_object
-
-    def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
-        optional_fields = [
-            "outputType", "outputFormat", "outputQuality", "uploadEndpoint",
-            "includeCost", "negativePrompt", "inputAudios", "referenceVideos", "fps", "steps", "scheduler", "seed",
-            "CFGScale", "seedImage", "duration", "width", "height", "nsfw_check", "resolution",
-        ]
-
-        for field in optional_fields:
-            value = getattr(requestVideo, field, None)
-            if value is not None:
-                request_object[field] = value
 
     def _addVideoImages(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
         if requestVideo.frameImages:
@@ -2367,7 +2358,7 @@ class RunwareBase:
         if prompt:
             request_object["positivePrompt"] = prompt
 
-        self._addOptionalImageFields(request_object, requestImage)
+        self._addOptionalBuiltInDataTypesFields(request_object, requestImage)
         self._addImageSpecialFields(request_object, requestImage, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
         self._addOptionalField(request_object, requestImage.inputs)
         self._addImageProviderSettings(request_object, requestImage)
@@ -2377,24 +2368,6 @@ class RunwareBase:
 
 
         return request_object
-
-    def _addOptionalImageFields(self, request_object: Dict[str, Any], requestImage: IImageInference) -> None:
-        optional_fields = [
-            "outputType", "outputFormat", "outputQuality", "uploadEndpoint",
-            "includeCost", "checkNsfw", "negativePrompt", "seedImage", "maskImage",
-            "strength", "height", "width", "steps", "scheduler", "seed", "CFGScale",
-            "clipSkip", "promptWeighting", "maskMargin", "vae", "webhookURL", "acceleration",
-            "useCache", "ttl", "resolution"
-        ]
-
-        for field in optional_fields:
-            value = getattr(requestImage, field, None)
-            if value is not None:
-                # Special handling for checkNsfw -> checkNSFW
-                if field == "checkNsfw":
-                    request_object["checkNSFW"] = value
-                else:
-                    request_object[field] = value
 
     def _addImageSpecialFields(self, request_object: Dict[str, Any], requestImage: IImageInference, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> None:
         # Add controlNet if present
@@ -2475,6 +2448,29 @@ class RunwareBase:
         # Add extraArgs if present
         if hasattr(requestImage, "extraArgs") and isinstance(requestImage.extraArgs, dict):
             request_object.update(requestImage.extraArgs)
+
+    def _addOptionalBuiltInDataTypesFields(self, request_object: Dict[str, Any], obj: Any) -> None:
+        if not is_dataclass(obj):
+            return
+
+        cls = obj.__class__
+        for field in fields(cls):
+            name = field.name
+            value = getattr(obj, name, None)
+
+            if (
+                name in request_object
+                or value is None
+                or is_dataclass(value)
+                or (
+                    isinstance(value, (list, tuple))
+                    and value
+                    and any(is_dataclass(v) for v in value)
+                )
+            ):
+                continue
+
+            request_object[name] = value
 
     def _addSafetySettings(self, request_object: Dict[str, Any], safety: ISafety) -> None:
         safety_dict = asdict(safety)
@@ -2861,7 +2857,7 @@ class RunwareBase:
         if requestAudio.duration is not None:
             request_object["duration"] = requestAudio.duration
 
-        self._addOptionalAudioFields(request_object, requestAudio)
+        self._addOptionalBuiltInDataTypesFields(request_object, requestAudio)
         self._addOptionalField(request_object, requestAudio.speech)
         self._addOptionalField(request_object, requestAudio.audioSettings)
         self._addOptionalField(request_object, requestAudio.settings)
@@ -2870,17 +2866,6 @@ class RunwareBase:
         self._addOptionalField(request_object, requestAudio.settings)
         
         return request_object
-
-    def _addOptionalAudioFields(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
-        optional_fields = [
-            "outputType", "outputFormat", "includeCost", "uploadEndpoint", "webhookURL",
-            "negativePrompt", "steps", "seed", "CFGScale", "strength"
-        ]
-
-        for field in optional_fields:
-            value = getattr(requestAudio, field, None)
-            if value is not None:
-                request_object[field] = value
 
 
     def _addAudioProviderSettings(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
