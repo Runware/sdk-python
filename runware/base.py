@@ -2063,18 +2063,9 @@ class RunwareBase:
         await self._processVideoImages(requestVideo)
         requestVideo.taskUUID = requestVideo.taskUUID or getUUID()
         request_object = self._buildVideoRequest(requestVideo)
-        import json
-        print(f"Request Object: {json.dumps(request_object, indent=4)}")
 
         if requestVideo.webhookURL:
             request_object["webhookURL"] = requestVideo.webhookURL
-
-        if requestVideo.skipResponse:
-            await self.send([request_object])
-            return IAsyncTaskResponse(
-                taskType=ETaskType.VIDEO_INFERENCE.value,
-                taskUUID=requestVideo.taskUUID
-            )
 
         return await self._handleInitialVideoResponse(
             request_object=request_object,
@@ -2454,6 +2445,7 @@ class RunwareBase:
             return
 
         cls = obj.__class__
+
         for field in fields(cls):
             name = field.name
             value = getattr(obj, name, None)
@@ -2461,6 +2453,7 @@ class RunwareBase:
             if (
                 name in request_object
                 or value is None
+                or callable(value)
                 or is_dataclass(value)
                 or (
                     isinstance(value, (list, tuple))

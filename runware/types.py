@@ -1485,19 +1485,18 @@ class IVideoInference:
     advancedFeatures: Optional[IVideoAdvancedFeatures] = None
     acceleratorOptions: Optional[IAcceleratorOptions] = None
     inputs: Optional[Union[IVideoInputs, Dict[str, Any]]] = None
-    skipResponse: Optional[bool] = False
     resolution: Optional[str] = None
     settings: Optional[Union[ISettings, Dict[str, Any]]] = None
 
     def __post_init__(self):
         if self.settings is not None and isinstance(self.settings, dict):
             self.settings = ISettings(**self.settings)
-
-    def __post_init__(self):
         if self.safety is not None and isinstance(self.safety, dict):
             self.safety = ISafety(**self.safety)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = IVideoInputs(**self.inputs)
+        if hasattr(self, "skipResponse"):
+            raise ValueError("skipResponse has been removed; use deliveryMethod='async' instead")
 
 
 I3dOutputFormat = Literal["GLB", "PLY"]
