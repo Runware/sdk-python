@@ -962,7 +962,17 @@ class IImageInference:
 
     def __post_init__(self, checkNsfw: Optional[bool] = None):
         if checkNsfw is not None:
-            raise ValueError("checkNsfw has been deprecated; use safety.checkContent instead")
+            warnings.warn(
+                "checkNsfw has been deprecated and will be removed in a future version; please use safety.checkContent instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if checkNsfw:
+                if isinstance(self.safety, dict):
+                    self.safety.setdefault("checkContent", True)
+                elif self.safety is not None and hasattr(self.safety, "checkContent"):
+                    if getattr(self.safety, "checkContent") is None:
+                        self.safety.checkContent = True
         if self.safety is not None and isinstance(self.safety, dict):
             self.safety = ISafety(**self.safety)
         if self.settings is not None and isinstance(self.settings, dict):
@@ -1493,7 +1503,13 @@ class IVideoInference:
 
     def __post_init__(self, skipResponse: Optional[bool] = None) -> None:
         if skipResponse is not None:
-            raise ValueError("skipResponse has been deprecated; use deliveryMethod='async' instead")
+            warnings.warn(
+                "skipResponse has been deprecated; use deliveryMethod='async' instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if skipResponse and getattr(self, "deliveryMethod", None) is None:
+                self.deliveryMethod = "async"
         if self.settings is not None and isinstance(self.settings, dict):
             self.settings = ISettings(**self.settings)
         if self.safety is not None and isinstance(self.safety, dict):

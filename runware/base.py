@@ -5,6 +5,7 @@ import os
 import re
 from asyncio import gather
 from dataclasses import asdict, is_dataclass, fields
+from enum import Enum
 from random import uniform
 from typing import List, Optional, Union, Callable, Any, Dict, Tuple
 
@@ -809,7 +810,6 @@ class RunwareBase:
             finally:
                 await self._unregister_pending_operation(task_uuid)
 
-        
         future, should_send = await self._register_pending_operation(
             task_uuid,
             expected_results=number_results,
@@ -2442,6 +2442,22 @@ class RunwareBase:
         if hasattr(requestImage, "extraArgs") and isinstance(requestImage.extraArgs, dict):
             request_object.update(requestImage.extraArgs)
 
+    def _convert_enums(self, val: Any) -> Any:
+        if is_dataclass(val):
+            return val
+        if isinstance(val, Enum):
+            return val.value
+        if isinstance(val, list):
+            return [self._convert_enums(v) for v in val]
+        if isinstance(val, tuple):
+            return tuple(self._convert_enums(v) for v in val)
+        if isinstance(val, dict):
+            return {
+                self._convert_enums(k) if isinstance(k, Enum) else k: self._convert_enums(v)
+                for k, v in val.items()
+            }
+        return val
+
     def _addOptionalBuiltInDataTypesFields(self, request_object: Dict[str, Any], obj: Any) -> None:
         if not is_dataclass(obj):
             return
@@ -2467,7 +2483,7 @@ class RunwareBase:
             ):
                 continue
 
-            request_object[name] = value
+            request_object[name] = self._convert_enums(value)
 
     def _addSafetySettings(self, request_object: Dict[str, Any], safety: ISafety) -> None:
         safety_dict = asdict(safety)
