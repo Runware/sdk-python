@@ -778,9 +778,12 @@ class ISettings(SerializableMixin):
     lyrics: Optional[str] = None  
     guidanceType: Optional[str] = None  
     # Video
-    draft: Optional[bool] = None  
-    audio: Optional[bool] = None  
-    promptUpsampling: Optional[bool] = None  
+    draft: Optional[bool] = None
+    audio: Optional[bool] = None
+    promptUpsampling: Optional[bool] = None
+    expressiveness: Optional[str] = None
+    removeBackground: Optional[bool] = None
+    backgroundColor: Optional[str] = None
 
     def __post_init__(self):
         if self.sparseStructure is not None and isinstance(self.sparseStructure, dict):
@@ -861,7 +864,9 @@ class IVideoInputs(SerializableMixin):
     frame: Optional[str] = None
     draftId: Optional[str] = None
     videoId: Optional[str] = None
-    
+    avatar: Optional[str] = None
+    background: Optional[str] = None
+
     def __post_init__(self):
         if self.frames is not None:
             warnings.warn(
@@ -1328,6 +1333,9 @@ class ILumaProviderSettings(BaseProviderSettings):
 class IVideoSpeechSettings(SerializableMixin):
     voice: Optional[str] = None  # Speaker voice from the available TTS speaker list
     text: Optional[str] = None  # Text script to be converted to speech (~200 characters, not UTF-8 Encoding)
+    speed: Optional[float] = None
+    pitch: Optional[float] = None
+    language: Optional[str] = None
 
     @property
     def request_key(self) -> str:
