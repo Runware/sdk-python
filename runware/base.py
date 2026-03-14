@@ -2454,6 +2454,7 @@ class RunwareBase:
 
             if (
                 name in request_object
+                or name == "extraArgs"
                 or value is None
                 or (isinstance(value, (list, tuple, dict)) and not value)
                 or callable(value)
@@ -2860,8 +2861,7 @@ class RunwareBase:
         self._addOptionalField(request_object, requestAudio.settings)
         self._addAudioProviderSettings(request_object, requestAudio)
         self._addOptionalField(request_object, requestAudio.inputs)
-        self._addOptionalField(request_object, requestAudio.settings)
-        
+
         return request_object
 
 
