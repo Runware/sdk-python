@@ -201,44 +201,6 @@ Your webhook endpoint will receive a POST request with the same format as synchr
 }
 ```
 
-### Video Inference with Skip Response
-
-For long-running video generation tasks, you can use `skipResponse` to submit the task and retrieve results later. This is useful for handling system interruptions, batch processing, or building queue-based systems.
-```python
-from runware import Runware, IVideoInference
-
-async def main() -> None:
-    runware = Runware(api_key=RUNWARE_API_KEY)
-    await runware.connect()
-
-    # Submit video task without waiting
-    request = IVideoInference(
-            model="openai:3@2",
-            positivePrompt="A beautiful sunset over the ocean",
-            duration=4,
-            width=1280,
-            height=720,
-            skipResponse=True,
-    )
-
-    response = await runware.videoInference(requestVideo=request)
-    task_uuid = response.taskUUID
-    print(f"Task submitted: {task_uuid}")
-    
-    # Later, retrieve results
-    videos = await runware.getResponse(
-        taskUUID=task_uuid,
-        numberResults=1
-    )
-    
-    for video in videos:
-        print(f"Video URL: {video.videoURL}")
-```
-
-**Parameters:**
-- `skipResponse`: Set to `True` to return immediately with `taskUUID` instead of waiting for completion
-- Use `getResponse(taskUUID)` to retrieve results at any time
-
 ### Video Inference with Async Delivery Method
 
 For long-running video generation tasks, you can use `deliveryMethod="async"` to submit the task and retrieve results later. This is useful for handling system interruptions, batch processing, or building queue-based systems.
@@ -1129,4 +1091,4 @@ async def main():
     # Your code here
 ```
 
-**Note:** For long-running video operations, consider using webhooks or `skipResponse=True` to avoid timeout issues with extended generation times.
+**Note:** For long-running video operations, consider using webhooks or `deliveryMethod="async"` to avoid timeout issues with extended generation times.

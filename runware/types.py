@@ -1,6 +1,6 @@
 from abc import abstractmethod, ABC
 from enum import Enum
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, InitVar
 from typing import List, Union, Optional, Callable, Any, Dict, TypeVar, Literal
 import warnings
 
@@ -916,7 +916,7 @@ class IImageInference:
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IOutputFormat] = None
     uploadEndpoint: Optional[str] = None
-    checkNsfw: Optional[bool] = None
+    checkNsfw: InitVar[Optional[bool]] = None
     negativePrompt: Optional[str] = None
     seedImage: Optional[Union[File, str]] = None
     maskImage: Optional[Union[File, str]] = None
@@ -960,7 +960,19 @@ class IImageInference:
     webhookURL: Optional[str] = None
     ttl: Optional[int] = None  # time-to-live (TTL) in seconds, only applies when outputType is "URL"
 
-    def __post_init__(self):
+    def __post_init__(self, checkNsfw: Optional[bool] = None):
+        if checkNsfw is not None:
+            warnings.warn(
+                "checkNsfw has been deprecated and will be removed in a future version; please use safety.checkContent instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if checkNsfw:
+                if isinstance(self.safety, dict):
+                    self.safety.setdefault("checkContent", True)
+                elif self.safety is not None and hasattr(self.safety, "checkContent"):
+                    if getattr(self.safety, "checkContent") is None:
+                        self.safety.checkContent = True
         if self.safety is not None and isinstance(self.safety, dict):
             self.safety = ISafety(**self.safety)
         if self.settings is not None and isinstance(self.settings, dict):
@@ -1485,15 +1497,21 @@ class IVideoInference:
     advancedFeatures: Optional[IVideoAdvancedFeatures] = None
     acceleratorOptions: Optional[IAcceleratorOptions] = None
     inputs: Optional[Union[IVideoInputs, Dict[str, Any]]] = None
-    skipResponse: Optional[bool] = False
     resolution: Optional[str] = None
     settings: Optional[Union[ISettings, Dict[str, Any]]] = None
+    skipResponse: InitVar[Optional[bool]] = None
 
-    def __post_init__(self):
+    def __post_init__(self, skipResponse: Optional[bool] = None) -> None:
+        if skipResponse is not None:
+            warnings.warn(
+                "skipResponse has been deprecated; use deliveryMethod='async' instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if skipResponse and getattr(self, "deliveryMethod", None) is None:
+                self.deliveryMethod = "async"
         if self.settings is not None and isinstance(self.settings, dict):
             self.settings = ISettings(**self.settings)
-
-    def __post_init__(self):
         if self.safety is not None and isinstance(self.safety, dict):
             self.safety = ISafety(**self.safety)
         if self.inputs is not None and isinstance(self.inputs, dict):
