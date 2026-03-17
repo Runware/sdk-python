@@ -968,11 +968,12 @@ class IImageInference:
                 stacklevel=2,
             )
             if checkNsfw:
-                if isinstance(self.safety, dict):
+                if self.safety is None:
+                    self.safety = {"checkContent": True}
+                elif isinstance(self.safety, dict):
                     self.safety.setdefault("checkContent", True)
-                elif self.safety is not None and hasattr(self.safety, "checkContent"):
-                    if getattr(self.safety, "checkContent") is None:
-                        self.safety.checkContent = True
+                elif hasattr(self.safety, "checkContent") and getattr(self.safety, "checkContent") is None:
+                    self.safety.checkContent = True
         if self.safety is not None and isinstance(self.safety, dict):
             self.safety = ISafety(**self.safety)
         if self.settings is not None and isinstance(self.settings, dict):
@@ -1508,8 +1509,6 @@ class IVideoInference:
                 DeprecationWarning,
                 stacklevel=2,
             )
-            if skipResponse and getattr(self, "deliveryMethod", None) is None:
-                self.deliveryMethod = "async"
         if self.settings is not None and isinstance(self.settings, dict):
             self.settings = ISettings(**self.settings)
         if self.safety is not None and isinstance(self.safety, dict):
