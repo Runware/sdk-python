@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0]
+
+### Changed
+- Replace polling with asyncio.Future for O(1) message routing via `_pending_operations` HashMap
+- Add semaphore to limit concurrent requests (default 15, env `RUNWARE_MAX_CONCURRENT_REQUESTS`)
+- Add jitter on reconnect to prevent thundering herd
+- Increase `PING_TIMEOUT_DURATION` from 10s to 30s for stability
+- Graceful cancellation of pending operations on disconnect
+
+### Added
+- Added `post_init` to `IImageInference`, `IImageCaption`, `IImageUpscale`, `IVideoInference`, `I3dInference`, `IAudioInference`, `IVideoBackgroundRemoval`
+- Added `promptExtend: Optional[bool]` to `ISettings`
+- Added `IBytedanceProviderSettings.optimizePromptMode: Optional[str]`
+- Added `settings` to `IVideoInference` dataclass
+- Added `draft: Optional[bool]`, `audio: Optional[bool]`, and `promptUpsampling: Optional[bool]` to `ISettings` dataclass
+- Added `post_init` to `ISettings` dataclass
+
 ## [0.4.47]
 
 ### Added

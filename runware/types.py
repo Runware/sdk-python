@@ -107,6 +107,12 @@ class EDeliveryMethod(Enum):
     SYNC = "sync"
     ASYNC = "async"
 
+class OperationState(Enum):
+    """State machine for pending operations."""
+    REGISTERED = "registered"      # Future created, request NOT sent
+    SENT = "sent"                  # send() completed successfully
+    DISCONNECTED = "disconnected"  # Connection lost after SENT
+
 
 # Define the types using Literal
 IOutputType = Literal["base64Data", "dataURI", "URL"]
@@ -122,6 +128,24 @@ class File:
 @dataclass
 class IAsyncTaskResponse:
     taskType: str
+    taskUUID: str
+
+
+@dataclass
+class IGetResponseRequest:
+    taskUUID: str
+    numberResults: int = 1
+
+
+@dataclass
+class IUploadImageRequest:
+    file: Union[File, str]
+    taskUUID: str
+
+
+@dataclass
+class IUploadMediaRequest:
+    media_url: str
     taskUUID: str
 
 
@@ -741,19 +765,32 @@ class ISettings(SerializableMixin):
     layers: Optional[int] = None
     trueCFGScale: Optional[float] = None
     quality: Optional[str] = None
+    promptExtend: Optional[bool] = None
     # 3D inference
     textureSize: Optional[int] = None
     decimationTarget: Optional[int] = None
     remesh: Optional[bool] = None
     resolution: Optional[int] = None
-    sparseStructure: Optional[ISparseStructure] = None
-    shapeSlat: Optional[IShapeSlat] = None
-    texSlat: Optional[ITexSlat] = None
+    sparseStructure: Optional[Union[ISparseStructure, Dict[str, Any]]] = None
+    shapeSlat: Optional[Union[IShapeSlat, Dict[str, Any]]] = None
+    texSlat: Optional[Union[ITexSlat, Dict[str, Any]]] = None
     # Audio 
     languageBoost: Optional[str] = None
     turbo: Optional[bool] = None
     lyrics: Optional[str] = None  
     guidanceType: Optional[str] = None  
+    # Video
+    draft: Optional[bool] = None  
+    audio: Optional[bool] = None  
+    promptUpsampling: Optional[bool] = None  
+
+    def __post_init__(self):
+        if self.sparseStructure is not None and isinstance(self.sparseStructure, dict):
+            self.sparseStructure = ISparseStructure(**self.sparseStructure)
+        if self.shapeSlat is not None and isinstance(self.shapeSlat, dict):
+            self.shapeSlat = IShapeSlat(**self.shapeSlat)
+        if self.texSlat is not None and isinstance(self.texSlat, dict):
+            self.texSlat = ITexSlat(**self.texSlat)
 
     @property
     def request_key(self) -> str:
@@ -915,15 +952,23 @@ class IImageInference:
     acePlusPlus: Optional[IAcePlusPlus] = None
     puLID: Optional[IPuLID] = None
     providerSettings: Optional[ImageProviderSettings] = None
-    safety: Optional[ISafety] = None
-    settings: Optional[ISettings] = None
-    inputs: Optional[IInputs] = None
+    safety: Optional[Union[ISafety, Dict[str, Any]]] = None
+    settings: Optional[Union[ISettings, Dict[str, Any]]] = None
+    inputs: Optional[Union[IInputs, Dict[str, Any]]] = None
     ultralytics: Optional[IUltralytics] = None
     useCache: Optional[bool] = None
     resolution: Optional[str] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
     webhookURL: Optional[str] = None
     ttl: Optional[int] = None  # time-to-live (TTL) in seconds, only applies when outputType is "URL"
+
+    def __post_init__(self):
+        if self.safety is not None and isinstance(self.safety, dict):
+            self.safety = ISafety(**self.safety)
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = ISettings(**self.settings)
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = IInputs(**self.inputs)
 
 
 @dataclass
@@ -995,9 +1040,15 @@ class IImageBackgroundRemoval(IImageCaption):
     outputQuality: Optional[int] = None
     model: Optional[Union[int, str]] = None
     taskUUID: Optional[str] = None
-    settings: Optional[IBackgroundRemovalSettings] = None
+    settings: Optional[Union[IBackgroundRemovalSettings, Dict[str, Any]]] = None
     providerSettings: Optional[ImageProviderSettings] = None
-    safety: Optional[ISafety] = None
+    safety: Optional[Union[ISafety, Dict[str, Any]]] = None
+
+    def __post_init__(self):
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = IBackgroundRemovalSettings(**self.settings)
+        if self.safety is not None and isinstance(self.safety, dict):
+            self.safety = ISafety(**self.safety)
 
 
 @dataclass
@@ -1059,14 +1110,22 @@ class IImageUpscale:
     upscaleFactor: float  # Changed to float to support decimal values like 1.5
     inputImage: Optional[Union[str, File]] = None
     model: Optional[str] = None  # Model AIR ID (runware:500@1, runware:501@1, runware:502@1, runware:503@1)
-    settings: Optional[IUpscaleSettings] = None  # Advanced upscaling settings
+    settings: Optional[Union[IUpscaleSettings, Dict[str, Any]]] = None  # Advanced upscaling settings
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IOutputFormat] = None
     includeCost: bool = False
     webhookURL: Optional[str] = None
     providerSettings: Optional[ImageProviderSettings] = None
-    safety: Optional[ISafety] = None
-    inputs: Optional[IInputs] = None
+    safety: Optional[Union[ISafety, Dict[str, Any]]] = None
+    inputs: Optional[Union[IInputs, Dict[str, Any]]] = None
+
+    def __post_init__(self):
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = IUpscaleSettings(**self.settings)
+        if self.safety is not None and isinstance(self.safety, dict):
+            self.safety = ISafety(**self.safety)
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = IInputs(**self.inputs)
 
 
 class ReconnectingWebsocketProps:
@@ -1222,6 +1281,7 @@ class IBytedanceProviderSettings(BaseProviderSettings):
     fastMode: Optional[bool] = None  # When enabled, speeds up generation by sacrificing some effects. Default: false. RTF: 25-28 (fast) vs 35 (normal)
     audio: Optional[bool] = None
     draft: Optional[bool] = None
+    optimizePromptMode: Optional[str] = None  
 
     @property
     def provider_key(self) -> str:
@@ -1426,12 +1486,23 @@ class IVideoInference:
     speech: Optional[IVideoSpeechSettings] = None
     webhookURL: Optional[str] = None
     nsfw_check: Optional[Literal["none", "fast", "full"]] = None
-    safety: Optional[ISafety] = None
+    safety: Optional[Union[ISafety, Dict[str, Any]]] = None
     advancedFeatures: Optional[IVideoAdvancedFeatures] = None
     acceleratorOptions: Optional[IAcceleratorOptions] = None
-    inputs: Optional[IVideoInputs] = None
+    inputs: Optional[Union[IVideoInputs, Dict[str, Any]]] = None
     skipResponse: Optional[bool] = False
     resolution: Optional[str] = None
+    settings: Optional[Union[ISettings, Dict[str, Any]]] = None
+
+    def __post_init__(self):
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = ISettings(**self.settings)
+
+    def __post_init__(self):
+        if self.safety is not None and isinstance(self.safety, dict):
+            self.safety = ISafety(**self.safety)
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = IVideoInputs(**self.inputs)
 
 
 I3dOutputFormat = Literal["GLB", "PLY"]
@@ -1450,8 +1521,14 @@ class I3dInference:
     includeCost: Optional[bool] = None
     deliveryMethod: str = "async"
     webhookURL: Optional[str] = None
-    inputs: Optional[I3dInputs] = None
-    settings: Optional[ISettings] = None
+    inputs: Optional[Union[I3dInputs, Dict[str, Any]]] = None
+    settings: Optional[Union[ISettings, Dict[str, Any]]] = None
+
+    def __post_init__(self):
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = ISettings(**self.settings)
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = I3dInputs(**self.inputs)
 
 
 @dataclass
@@ -1499,9 +1576,15 @@ class IAudioInference:
     uploadEndpoint: Optional[str] = None
     webhookURL: Optional[str] = None
     providerSettings: Optional[AudioProviderSettings] = None  
-    inputs: Optional[IAudioInputs] = None
+    inputs: Optional[Union[IAudioInputs, Dict[str, Any]]] = None
     speech: Optional[IAudioSpeech] = None
-    settings: Optional[ISettings] = None  
+    settings: Optional[Union[ISettings, Dict[str, Any]]] = None
+
+    def __post_init__(self):
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = ISettings(**self.settings)
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = IAudioInputs(**self.inputs)
 
 
 @dataclass
@@ -1577,6 +1660,7 @@ class ITextInference:
     messages: List[ITextInferenceMessage]
     taskUUID: Optional[str] = None
     deliveryMethod: str = "sync"
+    numberResults: Optional[int] = 1
     maxTokens: Optional[int] = None
     temperature: Optional[float] = None
     topP: Optional[float] = None  
@@ -1585,6 +1669,7 @@ class ITextInference:
     stopSequences: Optional[List[str]] = None  
     includeCost: Optional[bool] = None
     providerSettings: Optional[TextProviderSettings] = None
+    webhookURL: Optional[str] = None
 
 
 @dataclass
@@ -1648,7 +1733,11 @@ class IVideoBackgroundRemoval:
     includeCost: Optional[bool] = None
     webhookURL: Optional[str] = None
     outputFormat: Optional[str] = None  # MP4, WEBM
-    settings: Optional[IVideoBackgroundRemovalSettings] = None
+    settings: Optional[Union[IVideoBackgroundRemovalSettings, Dict[str, Any]]] = None
+
+    def __post_init__(self):
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = IVideoBackgroundRemovalSettings(**self.settings)
 
 
 @dataclass
