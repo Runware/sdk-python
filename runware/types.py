@@ -472,14 +472,70 @@ class IAcceleratorOptions(SerializableMixin):
 
 
 @dataclass
-class IFluxKontext:
+class IFluxKontext(SerializableMixin):
     guidanceEndStep: Optional[int] = None
     guidanceEndStepPercentage: Optional[float] = None
 
+    @property
+    def request_key(self) -> str:
+        return "fluxKontext"
+
 
 @dataclass
-class IAdvancedFeatures:
+class IRegion(SerializableMixin):
+    prompt: str
+    mask: Union[List[int], str]  
+
+    @property
+    def request_key(self) -> str:
+        return "regions"
+
+    def __post_init__(self) -> None:
+        if isinstance(self.mask, list):
+            if len(self.mask) != 4:
+                raise ValueError("IRegion.mask must be a list of exactly 4 integers [x0, y0, x1, y1]")
+            if not all(isinstance(v, int) for v in self.mask):
+                raise TypeError("IRegion.mask list elements must all be ints")
+
+
+@dataclass
+class IRegionalPrompting(SerializableMixin):
+    injectSteps: int
+    backgroundPrompt: Optional[str] = None
+    baseRatio: Optional[float] = None
+    regions: Optional[List[IRegion]] = None
+
+    @property
+    def request_key(self) -> str:
+        return "regionalPrompting"
+
+
+@dataclass
+class IWatermark(SerializableMixin):
+    text: Optional[str] = None  
+    image: Optional[str] = None  
+    displayPosition: Optional[str] = None
+    tiled: Optional[bool] = None  
+    opacity: Optional[float] = None  
+    fontColor: Optional[str] = None  
+    bgColor: Optional[str] = None  
+
+    @property
+    def request_key(self) -> str:
+        return "watermark"
+
+
+@dataclass
+class IAdvancedFeatures(SerializableMixin):
     fluxKontext: Optional[IFluxKontext] = None
+    layerDiffuse: Optional[bool] = None  
+    hiresFix: Optional[bool] = None  
+    regionalPrompting: Optional[IRegionalPrompting] = None
+    watermark: Optional[IWatermark] = None  
+
+    @property
+    def request_key(self) -> str:
+        return "advancedFeatures"  
 
 
 @dataclass
@@ -505,20 +561,23 @@ class IVideoAdvancedFeatures(SerializableMixin):
     audioNegativePrompt: Optional[str] = None  
     slgLayer: Optional[int] = None
     advancedFeature: Optional[VideoAdvancedFeatureTypes] = None
+    watermark: Optional[IWatermark] = None
 
     @property
     def request_key(self) -> str:
         return "advancedFeatures"
 
     def serialize(self) -> Dict[str, Any]:
-        result = {k: v for k, v in asdict(self).items()
-                  if v is not None and not k.startswith('_')}
-        
-
-        if self.advancedFeature:
-            result.pop('advancedFeature', None)
-            result.update(self.advancedFeature.to_request_dict())
-        
+        result: Dict[str, Any] = {}
+        for k, v in vars(self).items():
+            if v is None or k.startswith("_"):
+                continue
+            if isinstance(v, SerializableMixin):
+                result.update(v.to_request_dict())
+            elif isinstance(v, (list, tuple)) and v and all(isinstance(x, SerializableMixin) for x in v):
+                result[k] = [x.serialize() for x in v]
+            else:
+                result[k] = v
         return result
 
 
