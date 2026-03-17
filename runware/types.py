@@ -980,7 +980,6 @@ class I3dInputs(SerializableMixin):
 class IImageInference:
     model: Union[int, str]
     positivePrompt: Optional[str] = None
-    style: Optional[str] = None
     taskUUID: Optional[str] = None
     deliveryMethod: str = "sync"  
     outputType: Optional[IOutputType] = None
