@@ -870,8 +870,15 @@ class IInputFrame(SerializableMixin):
 class IInputReference(SerializableMixin):
     image: Union[str, File]
     tag: Optional[str] = None
-    type: Optional[str] = None  
-    strength: Optional[float] = None  
+    refType: Optional[str] = None
+    strength: Optional[float] = None
+
+    def serialize(self) -> Dict[str, Any]:
+        data = super().serialize()
+        if self.refType is not None:
+            data["type"] = self.refType
+            data.pop("refType", None)
+        return data
 
 
 @dataclass
