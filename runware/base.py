@@ -1332,6 +1332,7 @@ class RunwareBase:
         return request_object
 
     async def _vectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
+        await self.ensureConnection()
         await self._processVectorizeInputs(vectorizePayload)
         vectorizePayload.taskUUID = vectorizePayload.taskUUID or getUUID()
         task_params = self._buildVectorizeRequest(vectorizePayload)
