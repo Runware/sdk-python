@@ -870,6 +870,8 @@ class IInputFrame(SerializableMixin):
 class IInputReference(SerializableMixin):
     image: Union[str, File]
     tag: Optional[str] = None
+    type: Optional[str] = None  
+    strength: Optional[float] = None  
 
 
 @dataclass
@@ -879,11 +881,11 @@ class IInputs(SerializableMixin):
     image: Optional[Union[str, File]] = None
     mask: Optional[Union[str, File]] = None
     superResolutionReferences: Optional[List[Union[str, File]]] = None
-    
+
     @property
     def request_key(self) -> str:
         return "inputs"
-    
+
     def __post_init__(self):
         if self.references:
             warnings.warn(
@@ -978,6 +980,7 @@ class I3dInputs(SerializableMixin):
 class IImageInference:
     model: Union[int, str]
     positivePrompt: Optional[str] = None
+    style: Optional[str] = None
     taskUUID: Optional[str] = None
     deliveryMethod: str = "sync"  
     outputType: Optional[IOutputType] = None

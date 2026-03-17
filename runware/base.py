@@ -17,6 +17,7 @@ from .async_retry import asyncRetry
 from .reconnection import ConnectionState, ReconnectionManager
 from .types import (
     Environment,
+    IInputReference,
     IImageInference,
     IPhotoMaker,
     IImageCaption,
@@ -703,6 +704,11 @@ class RunwareBase:
 
         if requestImage.referenceImages:
             requestImage.referenceImages = await process_image(requestImage.referenceImages)
+
+        if requestImage.inputs and requestImage.inputs.referenceImages:
+            for ref in requestImage.inputs.referenceImages:
+                if isinstance(ref, IInputReference):
+                    ref.image = await process_image(ref.image)
 
         if requestImage.controlNet:
             for control_data in requestImage.controlNet:
