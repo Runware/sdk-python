@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1]
+
+### Added
+- `IVectorize`: `width`, `height`, `positivePrompt`, `providerSettings` (optional).
+- `IVectorize.inputs` optional (prompt-only vectorize e.g. recraft:v4@vector).
+- `VectorizeProviderSettings` type alias (`IRecraftProviderSettings`) in types.
+- `_processVectorizeInputs` and `_buildVectorizeRequest` in base (vectorize follows video/3D flow).
+- Single `_addProviderSettings(request_object, payload)` for image, image background removal, image upscale, vectorize, video, audio, text (replaces `_addImageProviderSettings`, `_addAudioProviderSettings`, `_addTextProviderSettings`).
+- Added `post_init` to `IAudioInference` dataclass for `speech` = `Optional[Union[IAudioSpeech, Dict[str, Any]]]`.
+- Added `textNormalization: Optional[bool] = None` to `ISettings` dataclass.
+- Image `IAdvancedFeatures`: `layerDiffuse`, `hiresFix`, `watermark` (`IWatermark`), and `regionalPrompting` (`IRegionalPrompting` with `regions`: `List[IRegion]`).
+- Video `IVideoAdvancedFeatures`: `IWatermark` (text/image, position, opacity, colors) and `watermark` field.
+- Serializable advanced features: `IFluxKontext`, `IRegion`, `IRegionalPrompting`, `IWatermark`, `IAdvancedFeatures`, and `IVideoAdvancedFeatures` use `SerializableMixin` for request serialization.
+- Added `avatar: Optional[str]`, `background: Optional[str]` to `IVideoInputs`.
+- Added `speed: Optional[float]`, `pitch: Optional[float]`, `language: Optional[str]` to `IVideoSpeechSettings`.
+- Added `expressiveness: Optional[str]`, `removeBackground: Optional[bool]`, `backgroundColor: Optional[str]` to `ISettings`.
+
+### Changed
+- Vectorize: `inputs` resolved via `process_image` when present; optional and added with `_addOptionalField`.
+- `_addProviderSettings` payload type: `Union[IImageInference, IImageBackgroundRemoval, IImageUpscale, IVectorize, IVideoInference, IAudioInference, ITextInference]`.
+- Request wiring: Image/video/audio builders now rely on `_addOptionalBuiltInDataTypesFields()` instead of hardcoded optional field lists, ensuring fields like `acceleration` and `webhookURL` are always forwarded when set.
+
 ## [0.5.0]
 
 ### Changed
