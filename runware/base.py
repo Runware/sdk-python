@@ -62,6 +62,7 @@ from .types import (
     ITextInference,
     IText,
     ITextInferenceUsage,
+    ITextInputs,
 )
 from .types import IImage, IError, SdkType, ListenerType
 from .utils import (
@@ -2224,20 +2225,12 @@ class RunwareBase:
             "deliveryMethod": requestText.deliveryMethod,
             "messages": [asdict(m) for m in requestText.messages],
         }
-        if requestText.maxTokens is not None:
-            request_object["maxTokens"] = requestText.maxTokens
-        if requestText.temperature is not None:
-            request_object["temperature"] = requestText.temperature
-        if requestText.topP is not None:
-            request_object["topP"] = requestText.topP
-        if requestText.topK is not None:
-            request_object["topK"] = requestText.topK
         if requestText.seed is not None:
             request_object["seed"] = requestText.seed
-        if requestText.stopSequences is not None:
-            request_object["stopSequences"] = requestText.stopSequences
         if requestText.includeCost is not None:
             request_object["includeCost"] = requestText.includeCost
+        self._addOptionalField(request_object, requestText.settings)
+        self._addOptionalField(request_object, requestText.inputs)
         self._addProviderSettings(request_object, requestText)
         return request_object
 
@@ -2290,6 +2283,17 @@ class RunwareBase:
     async def _requestText(self, requestText: ITextInference) -> Union[List[IText], IAsyncTaskResponse]:
         await self.ensureConnection()
         requestText.taskUUID = requestText.taskUUID or getUUID()
+
+        
+        if requestText.inputs:
+            inputs = requestText.inputs
+            if isinstance(inputs, dict):
+                inputs = ITextInputs(**inputs)
+                requestText.inputs = inputs
+
+            if inputs.images:
+                inputs.images = await process_image(inputs.images)
+
         request_object = self._buildTextRequest(requestText)
 
         if requestText.webhookURL:

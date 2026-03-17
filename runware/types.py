@@ -818,7 +818,7 @@ class ITexSlat(SerializableMixin):
 
 @dataclass
 class ISettings(SerializableMixin):
-    # Image
+    # Image / Text
     temperature: Optional[float] = None
     systemPrompt: Optional[str] = None
     topP: Optional[float] = None
@@ -847,6 +847,10 @@ class ISettings(SerializableMixin):
     expressiveness: Optional[str] = None
     removeBackground: Optional[bool] = None
     backgroundColor: Optional[str] = None
+    # Text
+    maxTokens: Optional[int] = None
+    topK: Optional[int] = None
+    stopSequences: Optional[List[str]] = None
 
     def __post_init__(self):
         if self.sparseStructure is not None and isinstance(self.sparseStructure, dict):
@@ -894,6 +898,15 @@ class IInputs(SerializableMixin):
             )
             if self.referenceImages is None:
                 self.referenceImages = self.references
+
+
+@dataclass
+class ITextInputs(SerializableMixin):
+    images: Optional[List[Union[str, File]]] = None
+
+    @property
+    def request_key(self) -> str:
+        return "inputs"
 
 
 @dataclass
@@ -1338,6 +1351,7 @@ class IGoogleProviderSettings(BaseProviderSettings):
     generateAudio: Optional[bool] = None
     enhancePrompt: Optional[bool] = None
     search: Optional[bool] = None
+    thinkingLevel: Optional[str] = None
 
     @property
     def provider_key(self) -> str:
@@ -1730,16 +1744,7 @@ class ITextInferenceUsage:
     thinkingTokens: Optional[int] = None
 
 
-@dataclass
-class IGoogleTextProviderSettings(BaseProviderSettings):
-    thinkingLevel: Optional[str] = None
-
-    @property
-    def provider_key(self) -> str:
-        return "google"
-
-
-TextProviderSettings = IGoogleTextProviderSettings
+TextProviderSettings = IGoogleProviderSettings
 
 
 @dataclass
@@ -1749,15 +1754,18 @@ class ITextInference:
     taskUUID: Optional[str] = None
     deliveryMethod: str = "sync"
     numberResults: Optional[int] = 1
-    maxTokens: Optional[int] = None
-    temperature: Optional[float] = None
-    topP: Optional[float] = None  
-    topK: Optional[int] = None  
-    seed: Optional[int] = None  
-    stopSequences: Optional[List[str]] = None  
+    seed: Optional[int] = None
     includeCost: Optional[bool] = None
+    settings: Optional[Union[ISettings, Dict[str, Any]]] = None
+    inputs: Optional[Union[ITextInputs, Dict[str, Any]]] = None
     providerSettings: Optional[TextProviderSettings] = None
     webhookURL: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = ISettings(**self.settings)
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = ITextInputs(**self.inputs)
 
 
 @dataclass
