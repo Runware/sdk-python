@@ -706,6 +706,8 @@ ImageProviderSettings = (
     | IRecraftProviderSettings
 )
 
+VectorizeProviderSettings = IRecraftProviderSettings
+
 @dataclass
 class ISafety(SerializableMixin):
     tolerance: Optional[bool] = None
@@ -1051,14 +1053,17 @@ class IImageBackgroundRemoval(IImageCaption):
 
 @dataclass
 class IVectorize:
-    
-    inputs: IInputs  = None
+    inputs: Optional[IInputs] = None
     includeCost: bool = False
     taskUUID: Optional[str] = None
-    model: Optional[str] = None  
-    outputType: Optional[IOutputType] = "URL"  
-    outputFormat: Optional[IOutputFormat] = "SVG"  
+    model: Optional[str] = None
+    outputType: Optional[IOutputType] = "URL"
+    outputFormat: Optional[IOutputFormat] = "SVG"
     webhookURL: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    positivePrompt: Optional[str] = None
+    providerSettings: Optional[VectorizeProviderSettings] = None
 
 
 @dataclass
