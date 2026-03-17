@@ -969,7 +969,7 @@ class IImageInference:
             )
             if checkNsfw:
                 if self.safety is None:
-                    self.safety = {"checkContent": True}
+                    self.safety = ISafety(checkContent=True)
                 elif isinstance(self.safety, dict):
                     self.safety.setdefault("checkContent", True)
                 elif hasattr(self.safety, "checkContent") and getattr(self.safety, "checkContent") is None:
