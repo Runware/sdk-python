@@ -801,8 +801,6 @@ class RunwareBase:
         task_uuid = requestImage.taskUUID
         number_results = requestImage.numberResults or 1
 
-        import pprint
-        pprint.pprint(request_object)
 
         if delivery_method_enum is EDeliveryMethod.ASYNC:
             if requestImage.webhookURL:
