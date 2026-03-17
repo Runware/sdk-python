@@ -184,6 +184,7 @@ class ILycoris:
 @dataclass
 class IEmbedding:
     model: str
+    weight: Optional[float] = None
 
 
 @dataclass
@@ -339,38 +340,26 @@ class IPhotoMaker:
     numberResults: int = 1
     steps: Optional[int] = None
     outputType: Optional[IOutputType] = None
-    inputImages: List[Union[str, File]] = field(default_factory=list)
+    inputImages: Optional[List[Union[str, File]]] = None
     style: Optional[str] = None
     strength: Optional[float] = None
     outputFormat: Optional[IOutputFormat] = None
     includeCost: Optional[bool] = None
     taskUUID: Optional[str] = None
     webhookURL: Optional[str] = None
+    negativePrompt: Optional[str] = None
+    CFGScale: Optional[float] = None
+    seed: Optional[int] = None
+    scheduler: Optional[str] = None
+    checkNsfw: Optional[bool] = None
 
-    def __post_init__(self):
-        # Validate `inputImages` to ensure it has a maximum of 4 elements
-        if len(self.inputImages) > 4:
-            raise ValueError("inputImages can contain a maximum of 4 elements.")
 
-        # Validate `style` to ensure it matches one of the allowed case-sensitive options
-        valid_styles = {
-            "No style",
-            "Cinematic",
-            "Disney Character",
-            "Digital Art",
-            "Photographic",
-            "Fantasy art",
-            "Neonpunk",
-            "Enhance",
-            "Comic book",
-            "Lowpoly",
-            "Line art",
-        }
-        if self.style and self.style not in valid_styles:
-            raise ValueError(
-                f"style must be one of the following: {', '.join(valid_styles)}."
-            )
-
+@dataclass
+class IPhotoMakerSettings:
+    images: Optional[List[Union[str, File]]] = None
+    inputImages: Optional[List[Union[str, File]]] = None
+    style: Optional[str] = None
+    strength: Optional[float] = None
 
 class SerializableMixin:
     def serialize(self) -> Dict[str, Any]:
@@ -405,8 +394,9 @@ class IOutpaint:
 
 @dataclass
 class IInstantID:
-    inputImage: Union[File, str]
+    inputImage: Optional[Union[File, str]] = None
     poseImage: Optional[Union[File, str]] = None
+    inputImages: Optional[List[Union[str, File]]] = None
     identityNetStrength: Optional[float] = None
     adapterStrength: Optional[float] = None
     controlNetCannyWeight: Optional[float] = None
@@ -417,8 +407,13 @@ class IInstantID:
 @dataclass
 class IIpAdapter:
     model: Union[int, str]
-    guideImage: Union[File, str]
+    guideImage: Optional[Union[File, str]] = None
+    guideImages: Optional[List[Union[str, File]]] = None
     weight: Optional[float] = None
+    combineMethod: Optional[str] = None
+    weightType: Optional[str] = None
+    embedScaling: Optional[str] = None
+    weightComposition: Optional[float] = None
 
 
 @dataclass
@@ -1005,22 +1000,23 @@ class IImageInference:
     lycoris: Optional[List[ILycoris]] = field(default_factory=list)
     includeCost: Optional[bool] = None
     onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]] = None
-    refiner: Optional[IRefiner] = None
+    refiner: Optional[Union[IRefiner, Dict[str, Any]]] = None
     vae: Optional[str] = None
     maskMargin: Optional[int] = None
     outputQuality: Optional[int] = None
-    embeddings: Optional[List[IEmbedding]] = field(default_factory=list)
-    outpaint: Optional[IOutpaint] = None
-    instantID: Optional[IInstantID] = None
-    ipAdapters: Optional[List[IIpAdapter]] = field(default_factory=list)
+    embeddings: Optional[List[Union[IEmbedding, Dict[str, Any]]]] = field(default_factory=list)
+    outpaint: Optional[Union[IOutpaint, Dict[str, Any]]] = None
+    instantID: Optional[Union[IInstantID, Dict[str, Any]]] = None
+    ipAdapters: Optional[List[Union[IIpAdapter, Dict[str, Any]]]] = field(default_factory=list)
     referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
-    acePlusPlus: Optional[IAcePlusPlus] = None
-    puLID: Optional[IPuLID] = None
+    acePlusPlus: Optional[Union[IAcePlusPlus, Dict[str, Any]]] = None
+    puLID: Optional[Union[IPuLID, Dict[str, Any]]] = None
+    photoMaker: Optional[Union[IPhotoMakerSettings, Dict[str, Any]]] = None
     providerSettings: Optional[ImageProviderSettings] = None
     safety: Optional[Union[ISafety, Dict[str, Any]]] = None
     settings: Optional[Union[ISettings, Dict[str, Any]]] = None
     inputs: Optional[Union[IInputs, Dict[str, Any]]] = None
-    ultralytics: Optional[IUltralytics] = None
+    ultralytics: Optional[Union[IUltralytics, Dict[str, Any]]] = None
     useCache: Optional[bool] = None
     resolution: Optional[str] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
@@ -1047,13 +1043,37 @@ class IImageInference:
             self.settings = ISettings(**self.settings)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = IInputs(**self.inputs)
+        if self.outpaint is not None and isinstance(self.outpaint, dict):
+            self.outpaint = IOutpaint(**self.outpaint)
+        if self.refiner is not None and isinstance(self.refiner, dict):
+            self.refiner = IRefiner(**self.refiner)
+        if self.embeddings:
+            self.embeddings = [
+                IEmbedding(**item) if isinstance(item, dict) else item
+                for item in self.embeddings
+            ]
+        if self.photoMaker is not None and isinstance(self.photoMaker, dict):
+            self.photoMaker = IPhotoMakerSettings(**self.photoMaker)
+        if self.instantID is not None and isinstance(self.instantID, dict):
+            self.instantID = IInstantID(**self.instantID)
+        if self.acePlusPlus is not None and isinstance(self.acePlusPlus, dict):
+            self.acePlusPlus = IAcePlusPlus(**self.acePlusPlus)
+        if self.puLID is not None and isinstance(self.puLID, dict):
+            self.puLID = IPuLID(**self.puLID)
+        if self.ultralytics is not None and isinstance(self.ultralytics, dict):
+            self.ultralytics = IUltralytics(**self.ultralytics)
+        if self.ipAdapters:
+            self.ipAdapters = [
+                IIpAdapter(**item) if isinstance(item, dict) else item
+                for item in self.ipAdapters
+            ]
 
 
 @dataclass
 class IImageCaption:
     inputImages: Optional[List[Union[File, str]]] = None  # Primary: array of images (UUIDs, URLs, base64, dataURI)
     inputImage: Optional[Union[File, str]] = None  # Convenience: single image, defaults to inputImages[0] if not provided
-    prompt: List[str] = field(default_factory=lambda: ["Describe this image in detail"])  # Array of prompts with default
+    prompt: Optional[List[str]] = None  
     model: Optional[str] = None  # Optional: AIR ID (runware:150@1, runware:150@2) - backend handles default
     includeCost: bool = False
     template: Optional[str] = None
@@ -1093,10 +1113,17 @@ class IElevenLabsMusicSettings(SerializableMixin):
 
 
 @dataclass
+class IImageToTextStructuredData:
+    ageGroup: Optional[str] = None
+    confidence: Optional[float] = None
+
+
+@dataclass
 class IImageToText:
     taskType: ETaskType
     taskUUID: str
-    text: str
+    text: Optional[str] = None  
+    structuredData: Optional[IImageToTextStructuredData] = None
     cost: Optional[float] = None
 
 
