@@ -870,6 +870,15 @@ class IInputFrame(SerializableMixin):
 class IInputReference(SerializableMixin):
     image: Union[str, File]
     tag: Optional[str] = None
+    refType: Optional[str] = None
+    strength: Optional[float] = None
+
+    def serialize(self) -> Dict[str, Any]:
+        data = super().serialize()
+        if self.refType is not None:
+            data["type"] = self.refType
+            data.pop("refType", None)
+        return data
 
 
 @dataclass
@@ -879,11 +888,11 @@ class IInputs(SerializableMixin):
     image: Optional[Union[str, File]] = None
     mask: Optional[Union[str, File]] = None
     superResolutionReferences: Optional[List[Union[str, File]]] = None
-    
+
     @property
     def request_key(self) -> str:
         return "inputs"
-    
+
     def __post_init__(self):
         if self.references:
             warnings.warn(
