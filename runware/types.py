@@ -333,11 +333,11 @@ class IModelSearch:
 
 @dataclass
 class IPhotoMaker:
-    model: Optional[Union[int, str]] = None
-    positivePrompt: Optional[str] = None
-    height: Optional[int] = None
-    width: Optional[int] = None
-    numberResults: Optional[int] = None
+    model: Union[int, str]
+    positivePrompt: str
+    height: int
+    width: int
+    numberResults: int = 1
     steps: Optional[int] = None
     outputType: Optional[IOutputType] = None
     inputImages: Optional[List[Union[str, File]]] = None
@@ -353,6 +353,14 @@ class IPhotoMaker:
     seed: Optional[int] = None
     scheduler: Optional[str] = None
     checkNsfw: Optional[bool] = None
+
+
+@dataclass
+class IPhotoMakerSettings:
+    images: Optional[List[Union[str, File]]] = None
+    inputImages: Optional[List[Union[str, File]]] = None
+    style: Optional[str] = None
+    strength: Optional[float] = None
 
 class SerializableMixin:
     def serialize(self) -> Dict[str, Any]:
@@ -1004,7 +1012,7 @@ class IImageInference:
     referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
     acePlusPlus: Optional[Union[IAcePlusPlus, Dict[str, Any]]] = None
     puLID: Optional[Union[IPuLID, Dict[str, Any]]] = None
-    photoMaker: Optional[Union[IPhotoMaker, Dict[str, Any]]] = None
+    photoMaker: Optional[Union[IPhotoMakerSettings, Dict[str, Any]]] = None
     providerSettings: Optional[ImageProviderSettings] = None
     safety: Optional[Union[ISafety, Dict[str, Any]]] = None
     settings: Optional[Union[ISettings, Dict[str, Any]]] = None
@@ -1046,7 +1054,7 @@ class IImageInference:
                 for item in self.embeddings
             ]
         if self.photoMaker is not None and isinstance(self.photoMaker, dict):
-            self.photoMaker = IPhotoMaker(**self.photoMaker)
+            self.photoMaker = IPhotoMakerSettings(**self.photoMaker)
         if self.instantID is not None and isinstance(self.instantID, dict):
             self.instantID = IInstantID(**self.instantID)
         if self.acePlusPlus is not None and isinstance(self.acePlusPlus, dict):
