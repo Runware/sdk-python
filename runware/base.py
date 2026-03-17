@@ -5,7 +5,8 @@ import logging
 import os
 import re
 from asyncio import gather
-from dataclasses import asdict
+from dataclasses import asdict, is_dataclass, fields
+from enum import Enum
 from random import uniform
 from typing import List, Optional, Union, Callable, Any, Dict, Tuple, AsyncIterator
 
@@ -777,6 +778,7 @@ class RunwareBase:
         task_uuid = requestImage.taskUUID
         number_results = requestImage.numberResults or 1
 
+
         if delivery_method_enum is EDeliveryMethod.ASYNC:
             if requestImage.webhookURL:
                 request_object["webhookURL"] = requestImage.webhookURL
@@ -1162,8 +1164,7 @@ class RunwareBase:
 
         # Add provider settings if provided
         if removeImageBackgroundPayload.providerSettings:
-            self._addImageProviderSettings(task_params, removeImageBackgroundPayload)
-
+            self._addProviderSettings(task_params, removeImageBackgroundPayload)
         # Add safety settings if provided
         if removeImageBackgroundPayload.safety:
             self._addSafetySettings(task_params, removeImageBackgroundPayload.safety)
@@ -1264,8 +1265,7 @@ class RunwareBase:
 
         # Add provider settings if provided
         if upscaleGanPayload.providerSettings:
-            self._addImageProviderSettings(task_params, upscaleGanPayload)
-
+            self._addProviderSettings(task_params, upscaleGanPayload)
         # Add safety settings if provided
         if upscaleGanPayload.safety:
             self._addSafetySettings(task_params, upscaleGanPayload.safety)
@@ -1308,81 +1308,71 @@ class RunwareBase:
         async with self._request_semaphore:
             return await self._retry_with_reconnect(self._vectorize, vectorizePayload)
 
-    async def _vectorize(self, vectorizePayload: "IVectorize") -> Union[List["IImage"], "IAsyncTaskResponse"]:
-        await self.ensureConnection()
-        # Process the image from inputs
-        input_image = vectorizePayload.inputs.image
+    async def _processVectorizeInputs(self, vectorizePayload: IVectorize) -> None:
+        if not vectorizePayload.inputs or not vectorizePayload.inputs.image:
+            return
+        vectorizePayload.inputs.image = await process_image(vectorizePayload.inputs.image)
 
-        if not input_image:
-            raise ValueError("Image is required in inputs for vectorize task")
-
-        # Upload the image if it's a local file
-        image_uploaded = await self.uploadImage(input_image)
-
-        if not image_uploaded or not image_uploaded.imageUUID:
-            return []
-
-        taskUUID = getUUID()
-
-        # Create a dictionary with mandatory parameters
-        task_params = {
+    def _buildVectorizeRequest(self, vectorizePayload: IVectorize) -> Dict[str, Any]:
+        request_object = {
             "taskType": ETaskType.IMAGE_VECTORIZE.value,
-            "taskUUID": taskUUID,
-            "inputs": {
-                "image": image_uploaded.imageUUID
-            }
+            "taskUUID": vectorizePayload.taskUUID,
         }
-
-        # Add optional parameters if they are provided
         if vectorizePayload.model is not None:
-            task_params["model"] = vectorizePayload.model
+            request_object["model"] = vectorizePayload.model
         if vectorizePayload.outputType is not None:
-            task_params["outputType"] = vectorizePayload.outputType
+            request_object["outputType"] = vectorizePayload.outputType
         if vectorizePayload.outputFormat is not None:
-            task_params["outputFormat"] = vectorizePayload.outputFormat
+            request_object["outputFormat"] = vectorizePayload.outputFormat
         if vectorizePayload.includeCost:
-            task_params["includeCost"] = vectorizePayload.includeCost
+            request_object["includeCost"] = vectorizePayload.includeCost
         if vectorizePayload.webhookURL:
-            task_params["webhookURL"] = vectorizePayload.webhookURL
+            request_object["webhookURL"] = vectorizePayload.webhookURL
+        if vectorizePayload.width is not None:
+            request_object["width"] = vectorizePayload.width
+        if vectorizePayload.height is not None:
+            request_object["height"] = vectorizePayload.height
+        if vectorizePayload.positivePrompt is not None:
+            request_object["positivePrompt"] = vectorizePayload.positivePrompt.strip()
+        self._addOptionalField(request_object, vectorizePayload.inputs)
+        self._addProviderSettings(request_object, vectorizePayload)
+        return request_object
+
+    async def _vectorize(self, vectorizePayload: IVectorize) -> Union[List[IImage], IAsyncTaskResponse]:
+        await self.ensureConnection()
+        await self._processVectorizeInputs(vectorizePayload)
+        vectorizePayload.taskUUID = vectorizePayload.taskUUID or getUUID()
+        task_params = self._buildVectorizeRequest(vectorizePayload)
+
+        await self.send([task_params])
+
+        if vectorizePayload.webhookURL:
             return await self._handleWebhookRequest(
                 request_object=task_params,
-                task_uuid=taskUUID,
+                task_uuid=vectorizePayload.taskUUID,
                 task_type="vectorize",
                 debug_key="image-vectorize-webhook"
             )
 
-        future, should_send = await self._register_pending_operation(
-            taskUUID,
-            expected_results=1,
-            complete_predicate=None,
-            result_filter=lambda r: r.get("imageUUID") is not None
+        let_lis = await self.listenToImages(
+            onPartialImages=None,
+            taskUUID=vectorizePayload.taskUUID,
+            groupKey=LISTEN_TO_IMAGES_KEY.REQUEST_IMAGES,
         )
 
-        try:
+        images = await self.getSimililarImage(
+            taskUUID=vectorizePayload.taskUUID,
+            numberOfImages=1,
+            shouldThrowError=True,
+            lis=let_lis,
+        )
 
-            if should_send:
-                await self.send([task_params])
-                await self._mark_operation_sent(taskUUID)
-            results = await asyncio.wait_for(future, timeout=IMAGE_OPERATION_TIMEOUT / 1000)
+        let_lis["destroy"]()
 
-            if not results:
-                raise Exception(f"No results received | TaskUUID: {taskUUID}")
+        if "code" in images or "errors" in images:
+            raise RunwareAPIError(images)
 
-            for result in results:
-                if "code" in result or "errors" in result:
-                    raise RunwareAPIError(result)
-
-            return instantiateDataclassList(IImage, results)
-
-        except asyncio.TimeoutError:
-            raise Exception(
-                f"Timeout waiting for vectorize | TaskUUID: {taskUUID} | "
-                f"Timeout: {IMAGE_OPERATION_TIMEOUT}ms"
-            )
-        except RunwareAPIError:
-            raise
-        finally:
-            await self._unregister_pending_operation(taskUUID)
+        return instantiateDataclassList(IImage, images)
 
     async def promptEnhance(
         self, promptEnhancer: "IPromptEnhance"
@@ -2085,13 +2075,6 @@ class RunwareBase:
         if requestVideo.webhookURL:
             request_object["webhookURL"] = requestVideo.webhookURL
 
-        if requestVideo.skipResponse:
-            await self.send([request_object])
-            return IAsyncTaskResponse(
-                taskType=ETaskType.VIDEO_INFERENCE.value,
-                taskUUID=requestVideo.taskUUID
-            )
-
         return await self._handleInitialVideoResponse(
             request_object=request_object,
             task_uuid=requestVideo.taskUUID,
@@ -2150,8 +2133,9 @@ class RunwareBase:
         if requestVideo.positivePrompt is not None:
             request_object["positivePrompt"] = requestVideo.positivePrompt.strip()
 
+        self._addOptionalBuiltInDataTypesFields(request_object, requestVideo)
+
         self._addOptionalField(request_object, requestVideo.speech)
-        self._addOptionalVideoFields(request_object, requestVideo)
         self._addVideoImages(request_object, requestVideo)
         self._addOptionalField(request_object, requestVideo.inputs)
         self._addProviderSettings(request_object, requestVideo)
@@ -2161,18 +2145,6 @@ class RunwareBase:
         self._addOptionalField(request_object, requestVideo.acceleratorOptions)
 
         return request_object
-
-    def _addOptionalVideoFields(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
-        optional_fields = [
-            "outputType", "outputFormat", "outputQuality", "uploadEndpoint",
-            "includeCost", "negativePrompt", "inputAudios", "referenceVideos", "fps", "steps", "scheduler", "seed",
-            "CFGScale", "seedImage", "duration", "width", "height", "nsfw_check", "resolution",
-        ]
-
-        for field in optional_fields:
-            value = getattr(requestVideo, field, None)
-            if value is not None:
-                request_object[field] = value
 
     def _addVideoImages(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
         if requestVideo.frameImages:
@@ -2266,9 +2238,7 @@ class RunwareBase:
             request_object["stopSequences"] = requestText.stopSequences
         if requestText.includeCost is not None:
             request_object["includeCost"] = requestText.includeCost
-        if requestText.numberResults is not None:
-            request_object["numberResults"] = requestText.numberResults
-        self._addTextProviderSettings(request_object, requestText)
+        self._addProviderSettings(request_object, requestText)
         return request_object
 
     async def _requestTextStream(
@@ -2431,34 +2401,16 @@ class RunwareBase:
         if prompt:
             request_object["positivePrompt"] = prompt
 
-        self._addOptionalImageFields(request_object, requestImage)
+        self._addOptionalBuiltInDataTypesFields(request_object, requestImage)
         self._addImageSpecialFields(request_object, requestImage, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
         self._addOptionalField(request_object, requestImage.inputs)
-        self._addImageProviderSettings(request_object, requestImage)
+        self._addProviderSettings(request_object, requestImage)
         self._addOptionalField(request_object, requestImage.ultralytics)
         self._addOptionalField(request_object, requestImage.safety)
         self._addOptionalField(request_object, requestImage.settings)
 
 
         return request_object
-
-    def _addOptionalImageFields(self, request_object: Dict[str, Any], requestImage: IImageInference) -> None:
-        optional_fields = [
-            "outputType", "outputFormat", "outputQuality", "uploadEndpoint",
-            "includeCost", "checkNsfw", "negativePrompt", "seedImage", "maskImage",
-            "strength", "height", "width", "steps", "scheduler", "seed", "CFGScale",
-            "clipSkip", "promptWeighting", "maskMargin", "vae", "webhookURL", "acceleration",
-            "useCache", "ttl", "resolution"
-        ]
-
-        for field in optional_fields:
-            value = getattr(requestImage, field, None)
-            if value is not None:
-                # Special handling for checkNsfw -> checkNSFW
-                if field == "checkNsfw":
-                    request_object["checkNSFW"] = value
-                else:
-                    request_object[field] = value
 
     def _addImageSpecialFields(self, request_object: Dict[str, Any], requestImage: IImageInference, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> None:
         # Add controlNet if present
@@ -2526,19 +2478,54 @@ class RunwareBase:
 
         # Add acceleratorOptions if present
         self._addOptionalField(request_object, requestImage.acceleratorOptions)
-
-        # Add advancedFeatures if present
-        if requestImage.advancedFeatures:
-            pipeline_options_dict = {
-                k: v.__dict__
-                for k, v in vars(requestImage.advancedFeatures).items()
-                if v is not None
-            }
-            request_object["advancedFeatures"] = pipeline_options_dict
+        self._addOptionalField(request_object, requestImage.advancedFeatures)
 
         # Add extraArgs if present
         if hasattr(requestImage, "extraArgs") and isinstance(requestImage.extraArgs, dict):
             request_object.update(requestImage.extraArgs)
+
+    def _convert_enums(self, val: Any) -> Any:
+        if is_dataclass(val):
+            return val
+        if isinstance(val, Enum):
+            return val.value
+        if isinstance(val, list):
+            return [self._convert_enums(v) for v in val]
+        if isinstance(val, tuple):
+            return tuple(self._convert_enums(v) for v in val)
+        if isinstance(val, dict):
+            return {
+                self._convert_enums(k) if isinstance(k, Enum) else k: self._convert_enums(v)
+                for k, v in val.items()
+            }
+        return val
+
+    def _addOptionalBuiltInDataTypesFields(self, request_object: Dict[str, Any], obj: Any) -> None:
+        if not is_dataclass(obj):
+            return
+
+        cls = obj.__class__
+
+        for field in fields(cls):
+            name = field.name
+            value = getattr(obj, name, None)
+
+            if (
+                name in request_object
+                or name == "extraArgs"
+                or value is None
+                or (isinstance(value, (list, tuple, dict)) and not value)
+                or callable(value)
+                or is_dataclass(value)
+                or (
+                    isinstance(value, (list, tuple))
+                    and value
+                    and any(is_dataclass(v) for v in value)
+                )
+            ):
+                continue
+
+            request_object[name] = self._convert_enums(value)
 
     def _addSafetySettings(self, request_object: Dict[str, Any], safety: ISafety) -> None:
         safety_dict = asdict(safety)
@@ -2546,17 +2533,23 @@ class RunwareBase:
         if safety_dict:
             request_object["safety"] = safety_dict
 
-    def _addImageProviderSettings(self, request_object: Dict[str, Any], requestImage: IImageInference) -> None:
-        if not requestImage.providerSettings:
+    def _addProviderSettings(
+        self,
+        request_object: Dict[str, Any],
+        payload: Union[
+            IImageInference,
+            IImageBackgroundRemoval,
+            IImageUpscale,
+            IVectorize,
+            IVideoInference,
+            IAudioInference,
+            ITextInference,
+        ],
+    ) -> None:
+        providerSettings = getattr(payload, "providerSettings", None)
+        if not providerSettings:
             return
-        provider_dict = requestImage.providerSettings.to_request_dict()
-        if provider_dict:
-            request_object["providerSettings"] = provider_dict
-
-    def _addProviderSettings(self, request_object: Dict[str, Any], requestVideo: IVideoInference) -> None:
-        if not requestVideo.providerSettings:
-            return
-        provider_dict = requestVideo.providerSettings.to_request_dict()
+        provider_dict = providerSettings.to_request_dict()
         if provider_dict:
             request_object["providerSettings"] = provider_dict
 
@@ -2899,6 +2892,7 @@ class RunwareBase:
         requestAudio.taskUUID = requestAudio.taskUUID or getUUID()
         request_object = self._buildAudioRequest(requestAudio)
 
+
         return await self._handleInitialAudioResponse(
             request_object=request_object,
             task_uuid=requestAudio.taskUUID,
@@ -2925,41 +2919,15 @@ class RunwareBase:
         if requestAudio.duration is not None:
             request_object["duration"] = requestAudio.duration
 
-        self._addOptionalAudioFields(request_object, requestAudio)
+        self._addOptionalBuiltInDataTypesFields(request_object, requestAudio)
         self._addOptionalField(request_object, requestAudio.speech)
         self._addOptionalField(request_object, requestAudio.audioSettings)
         self._addOptionalField(request_object, requestAudio.settings)
-        self._addAudioProviderSettings(request_object, requestAudio)
+        self._addProviderSettings(request_object, requestAudio)
         self._addOptionalField(request_object, requestAudio.inputs)
-        self._addOptionalField(request_object, requestAudio.settings)
-        
+
         return request_object
 
-    def _addOptionalAudioFields(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
-        optional_fields = [
-            "outputType", "outputFormat", "includeCost", "uploadEndpoint", "webhookURL",
-            "negativePrompt", "steps", "seed", "CFGScale", "strength"
-        ]
-
-        for field in optional_fields:
-            value = getattr(requestAudio, field, None)
-            if value is not None:
-                request_object[field] = value
-
-
-    def _addAudioProviderSettings(self, request_object: Dict[str, Any], requestAudio: IAudioInference) -> None:
-        if not requestAudio.providerSettings:
-            return
-        provider_dict = requestAudio.providerSettings.to_request_dict()
-        if provider_dict:
-            request_object["providerSettings"] = provider_dict
-
-    def _addTextProviderSettings(self, request_object: Dict[str, Any], requestText: ITextInference) -> None:
-        if not requestText.providerSettings:
-            return
-        provider_dict = requestText.providerSettings.to_request_dict()
-        if provider_dict:
-            request_object["providerSettings"] = provider_dict
 
     async def _handleInitialAudioResponse(
             self,

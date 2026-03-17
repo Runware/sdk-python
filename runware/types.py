@@ -1,6 +1,6 @@
 from abc import abstractmethod, ABC
 from enum import Enum
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, InitVar
 from typing import List, Union, Optional, Callable, Any, Dict, TypeVar, Literal
 import warnings
 
@@ -473,14 +473,70 @@ class IAcceleratorOptions(SerializableMixin):
 
 
 @dataclass
-class IFluxKontext:
+class IFluxKontext(SerializableMixin):
     guidanceEndStep: Optional[int] = None
     guidanceEndStepPercentage: Optional[float] = None
 
+    @property
+    def request_key(self) -> str:
+        return "fluxKontext"
+
 
 @dataclass
-class IAdvancedFeatures:
+class IRegion(SerializableMixin):
+    prompt: str
+    mask: Union[List[int], str]  
+
+    @property
+    def request_key(self) -> str:
+        return "regions"
+
+    def __post_init__(self) -> None:
+        if isinstance(self.mask, list):
+            if len(self.mask) != 4:
+                raise ValueError("IRegion.mask must be a list of exactly 4 integers [x0, y0, x1, y1]")
+            if not all(isinstance(v, int) for v in self.mask):
+                raise TypeError("IRegion.mask list elements must all be ints")
+
+
+@dataclass
+class IRegionalPrompting(SerializableMixin):
+    injectSteps: int
+    backgroundPrompt: Optional[str] = None
+    baseRatio: Optional[float] = None
+    regions: Optional[List[IRegion]] = None
+
+    @property
+    def request_key(self) -> str:
+        return "regionalPrompting"
+
+
+@dataclass
+class IWatermark(SerializableMixin):
+    text: Optional[str] = None  
+    image: Optional[str] = None  
+    displayPosition: Optional[str] = None
+    tiled: Optional[bool] = None  
+    opacity: Optional[float] = None  
+    fontColor: Optional[str] = None  
+    bgColor: Optional[str] = None  
+
+    @property
+    def request_key(self) -> str:
+        return "watermark"
+
+
+@dataclass
+class IAdvancedFeatures(SerializableMixin):
     fluxKontext: Optional[IFluxKontext] = None
+    layerDiffuse: Optional[bool] = None  
+    hiresFix: Optional[bool] = None  
+    regionalPrompting: Optional[IRegionalPrompting] = None
+    watermark: Optional[IWatermark] = None  
+
+    @property
+    def request_key(self) -> str:
+        return "advancedFeatures"  
 
 
 @dataclass
@@ -506,20 +562,23 @@ class IVideoAdvancedFeatures(SerializableMixin):
     audioNegativePrompt: Optional[str] = None  
     slgLayer: Optional[int] = None
     advancedFeature: Optional[VideoAdvancedFeatureTypes] = None
+    watermark: Optional[IWatermark] = None
 
     @property
     def request_key(self) -> str:
         return "advancedFeatures"
 
     def serialize(self) -> Dict[str, Any]:
-        result = {k: v for k, v in asdict(self).items()
-                  if v is not None and not k.startswith('_')}
-        
-
-        if self.advancedFeature:
-            result.pop('advancedFeature', None)
-            result.update(self.advancedFeature.to_request_dict())
-        
+        result: Dict[str, Any] = {}
+        for k, v in vars(self).items():
+            if v is None or k.startswith("_"):
+                continue
+            if isinstance(v, SerializableMixin):
+                result.update(v.to_request_dict())
+            elif isinstance(v, (list, tuple)) and v and all(isinstance(x, SerializableMixin) for x in v):
+                result[k] = [x.serialize() for x in v]
+            else:
+                result[k] = v
         return result
 
 
@@ -707,6 +766,8 @@ ImageProviderSettings = (
     | IRecraftProviderSettings
 )
 
+VectorizeProviderSettings = IRecraftProviderSettings
+
 @dataclass
 class ISafety(SerializableMixin):
     tolerance: Optional[bool] = None
@@ -773,15 +834,19 @@ class ISettings(SerializableMixin):
     sparseStructure: Optional[Union[ISparseStructure, Dict[str, Any]]] = None
     shapeSlat: Optional[Union[IShapeSlat, Dict[str, Any]]] = None
     texSlat: Optional[Union[ITexSlat, Dict[str, Any]]] = None
-    # Audio 
+    # Audio
     languageBoost: Optional[str] = None
     turbo: Optional[bool] = None
-    lyrics: Optional[str] = None  
-    guidanceType: Optional[str] = None  
+    lyrics: Optional[str] = None
+    guidanceType: Optional[str] = None
+    textNormalization: Optional[bool] = None
     # Video
-    draft: Optional[bool] = None  
-    audio: Optional[bool] = None  
-    promptUpsampling: Optional[bool] = None  
+    draft: Optional[bool] = None
+    audio: Optional[bool] = None
+    promptUpsampling: Optional[bool] = None
+    expressiveness: Optional[str] = None
+    removeBackground: Optional[bool] = None
+    backgroundColor: Optional[str] = None
 
     def __post_init__(self):
         if self.sparseStructure is not None and isinstance(self.sparseStructure, dict):
@@ -862,7 +927,9 @@ class IVideoInputs(SerializableMixin):
     frame: Optional[str] = None
     draftId: Optional[str] = None
     videoId: Optional[str] = None
-    
+    avatar: Optional[str] = None
+    background: Optional[str] = None
+
     def __post_init__(self):
         if self.frames is not None:
             warnings.warn(
@@ -917,7 +984,7 @@ class IImageInference:
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IOutputFormat] = None
     uploadEndpoint: Optional[str] = None
-    checkNsfw: Optional[bool] = None
+    checkNsfw: InitVar[Optional[bool]] = None
     negativePrompt: Optional[str] = None
     seedImage: Optional[Union[File, str]] = None
     maskImage: Optional[Union[File, str]] = None
@@ -961,7 +1028,20 @@ class IImageInference:
     webhookURL: Optional[str] = None
     ttl: Optional[int] = None  # time-to-live (TTL) in seconds, only applies when outputType is "URL"
 
-    def __post_init__(self):
+    def __post_init__(self, checkNsfw: Optional[bool] = None):
+        if checkNsfw is not None:
+            warnings.warn(
+                "checkNsfw has been deprecated and will be removed in a future version; please use safety.checkContent instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if checkNsfw:
+                if self.safety is None:
+                    self.safety = ISafety(checkContent=True)
+                elif isinstance(self.safety, dict):
+                    self.safety.setdefault("checkContent", True)
+                elif hasattr(self.safety, "checkContent") and getattr(self.safety, "checkContent") is None:
+                    self.safety.checkContent = True
         if self.safety is not None and isinstance(self.safety, dict):
             self.safety = ISafety(**self.safety)
         if self.settings is not None and isinstance(self.settings, dict):
@@ -1052,14 +1132,17 @@ class IImageBackgroundRemoval(IImageCaption):
 
 @dataclass
 class IVectorize:
-    
-    inputs: IInputs  = None
+    inputs: Optional[IInputs] = None
     includeCost: bool = False
     taskUUID: Optional[str] = None
-    model: Optional[str] = None  
-    outputType: Optional[IOutputType] = "URL"  
-    outputFormat: Optional[IOutputFormat] = "SVG"  
+    model: Optional[str] = None
+    outputType: Optional[IOutputType] = "URL"
+    outputFormat: Optional[IOutputFormat] = "SVG"
     webhookURL: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    positivePrompt: Optional[str] = None
+    providerSettings: Optional[VectorizeProviderSettings] = None
 
 
 @dataclass
@@ -1329,6 +1412,9 @@ class ILumaProviderSettings(BaseProviderSettings):
 class IVideoSpeechSettings(SerializableMixin):
     voice: Optional[str] = None  # Speaker voice from the available TTS speaker list
     text: Optional[str] = None  # Text script to be converted to speech (~200 characters, not UTF-8 Encoding)
+    speed: Optional[float] = None
+    pitch: Optional[float] = None
+    language: Optional[str] = None
 
     @property
     def request_key(self) -> str:
@@ -1486,15 +1572,19 @@ class IVideoInference:
     advancedFeatures: Optional[IVideoAdvancedFeatures] = None
     acceleratorOptions: Optional[IAcceleratorOptions] = None
     inputs: Optional[Union[IVideoInputs, Dict[str, Any]]] = None
-    skipResponse: Optional[bool] = False
     resolution: Optional[str] = None
     settings: Optional[Union[ISettings, Dict[str, Any]]] = None
+    skipResponse: InitVar[Optional[bool]] = None
 
-    def __post_init__(self):
+    def __post_init__(self, skipResponse: Optional[bool] = None) -> None:
+        if skipResponse is not None:
+            warnings.warn(
+                "skipResponse has been deprecated; use deliveryMethod='async' instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         if self.settings is not None and isinstance(self.settings, dict):
             self.settings = ISettings(**self.settings)
-
-    def __post_init__(self):
         if self.safety is not None and isinstance(self.safety, dict):
             self.safety = ISafety(**self.safety)
         if self.inputs is not None and isinstance(self.inputs, dict):
@@ -1573,7 +1663,7 @@ class IAudioInference:
     webhookURL: Optional[str] = None
     providerSettings: Optional[AudioProviderSettings] = None  
     inputs: Optional[Union[IAudioInputs, Dict[str, Any]]] = None
-    speech: Optional[IAudioSpeech] = None
+    speech: Optional[Union[IAudioSpeech, Dict[str, Any]]] = None
     settings: Optional[Union[ISettings, Dict[str, Any]]] = None
 
     def __post_init__(self):
@@ -1581,6 +1671,8 @@ class IAudioInference:
             self.settings = ISettings(**self.settings)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = IAudioInputs(**self.inputs)
+        if self.speech is not None and isinstance(self.speech, dict):
+            self.speech = IAudioSpeech(**self.speech)
 
 
 @dataclass
