@@ -706,9 +706,14 @@ class RunwareBase:
             requestImage.referenceImages = await process_image(requestImage.referenceImages)
 
         if requestImage.inputs and requestImage.inputs.referenceImages:
+            processed_refs = []
             for ref in requestImage.inputs.referenceImages:
                 if isinstance(ref, IInputReference):
                     ref.image = await process_image(ref.image)
+                    processed_refs.append(ref)
+                else:
+                    processed_refs.append(await process_image(ref))
+            requestImage.inputs.referenceImages = processed_refs
 
         if requestImage.controlNet:
             for control_data in requestImage.controlNet:
