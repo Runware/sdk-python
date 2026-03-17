@@ -341,7 +341,6 @@ class IPhotoMaker:
     steps: Optional[int] = None
     outputType: Optional[IOutputType] = None
     inputImages: Optional[List[Union[str, File]]] = None
-    images: Optional[List[Union[str, File]]] = None
     style: Optional[str] = None
     strength: Optional[float] = None
     outputFormat: Optional[IOutputFormat] = None

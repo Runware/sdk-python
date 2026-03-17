@@ -793,10 +793,13 @@ class RunwareBase:
             if requestImage.puLID.inputImages:
                 pulid_data["inputImages"] = await process_image(requestImage.puLID.inputImages)
 
-        photo_maker_data = {}
+        photo_maker_data: Dict[str, Any] = {}
         if requestImage.photoMaker:
             if requestImage.photoMaker.style is not None:
                 photo_maker_data["style"] = requestImage.photoMaker.style
+            if requestImage.photoMaker.strength is not None:
+                photo_maker_data["strength"] = requestImage.photoMaker.strength
+
             image_list = requestImage.photoMaker.images or requestImage.photoMaker.inputImages
             if image_list:
                 photo_maker_data["images"] = await process_image(image_list)
