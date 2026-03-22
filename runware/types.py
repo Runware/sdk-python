@@ -1351,6 +1351,8 @@ class IGoogleProviderSettings(BaseProviderSettings):
     generateAudio: Optional[bool] = None
     enhancePrompt: Optional[bool] = None
     search: Optional[bool] = None
+    searchLatitude: Optional[float] = None
+    searchLongitude: Optional[float] = None
     thinkingLevel: Optional[str] = None
 
     @property
@@ -1737,11 +1739,57 @@ class ITextInferenceMessage:
 
 
 @dataclass
+class ITextInferenceCompletionTokensDetails:
+    reasoningTokens: Optional[int] = None
+
+
+@dataclass
+class ITextInferenceUsageModality:
+    modality: Optional[str] = None
+    tokens: Optional[int] = None
+    cost: Optional[float] = None
+    costDisplay: Optional[str] = None
+
+
+@dataclass
+class ITextInferenceUsageTokenPromptCache:
+    modalities: Optional[List[ITextInferenceUsageModality]] = None
+    billableTokens: Optional[int] = None
+    cost: Optional[float] = None
+    costDisplay: Optional[str] = None
+
+
+@dataclass
+class ITextInferenceUsageTokenCompletion:
+    billableTokens: Optional[int] = None
+    textTokens: Optional[int] = None
+    reasoningTokens: Optional[int] = None
+    cost: Optional[float] = None
+    costDisplay: Optional[str] = None
+
+
+@dataclass
+class ITextInferenceUsageTokensBreakdown:
+    prompt: Optional[ITextInferenceUsageTokenPromptCache] = None
+    cache: Optional[ITextInferenceUsageTokenPromptCache] = None
+    completion: Optional[ITextInferenceUsageTokenCompletion] = None
+
+
+@dataclass
+class ITextInferenceUsageCostBreakdown:
+    tokens: Optional[ITextInferenceUsageTokensBreakdown] = None
+    total: Optional[float] = None
+    totalDisplay: Optional[str] = None
+
+
+@dataclass
 class ITextInferenceUsage:
     promptTokens: Optional[int] = None
     completionTokens: Optional[int] = None
     totalTokens: Optional[int] = None
     thinkingTokens: Optional[int] = None
+    completionTokensDetails: Optional[ITextInferenceCompletionTokensDetails] = None
+    costBreakdown: Optional[ITextInferenceUsageCostBreakdown] = None
 
 
 TextProviderSettings = IGoogleProviderSettings
@@ -1756,6 +1804,7 @@ class ITextInference:
     numberResults: Optional[int] = 1
     seed: Optional[int] = None
     includeCost: Optional[bool] = None
+    includeUsage: Optional[bool] = None
     settings: Optional[Union[ISettings, Dict[str, Any]]] = None
     inputs: Optional[Union[ITextInputs, Dict[str, Any]]] = None
     providerSettings: Optional[TextProviderSettings] = None
@@ -1777,6 +1826,9 @@ class IText:
     usage: Optional[ITextInferenceUsage] = None
     cost: Optional[float] = None
     status: Optional[str] = None
+    reasoningContent: Optional[List[str]] = None
+    seed: Optional[int] = None
+    thoughtSignature: Optional[str] = None
 
 
 @dataclass

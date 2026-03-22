@@ -61,7 +61,6 @@ from .types import (
     IUploadMediaRequest,
     ITextInference,
     IText,
-    ITextInferenceUsage,
     ITextInputs,
 )
 from .types import IImage, IError, SdkType, ListenerType
@@ -2229,6 +2228,8 @@ class RunwareBase:
             request_object["seed"] = requestText.seed
         if requestText.includeCost is not None:
             request_object["includeCost"] = requestText.includeCost
+        if requestText.includeUsage is not None:
+            request_object["includeUsage"] = requestText.includeUsage
         self._addOptionalField(request_object, requestText.settings)
         self._addOptionalField(request_object, requestText.inputs)
         self._addProviderSettings(request_object, requestText)
@@ -2267,15 +2268,8 @@ class RunwareBase:
                         delta = choice.get("delta") or {}
                         if delta.get("content"):
                             yield delta.get("content")
-                        if choice.get("finish_reason") is not None:
-                            usage = instantiateDataclass(ITextInferenceUsage, data.get("usage"))
-                            yield IText(
-                                taskType=ETaskType.TEXT_INFERENCE.value,
-                                taskUUID=data.get("taskUUID") or "",
-                                finishReason=choice.get("finish_reason"),
-                                usage=usage,
-                                cost=data.get("cost"),
-                            )
+                        if data.get("finishReason") is not None:
+                            yield instantiateDataclass(IText, data)
                             return
         except Exception as e:
             raise RunwareAPIError({"message": str(e)})
