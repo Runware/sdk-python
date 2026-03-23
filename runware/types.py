@@ -851,6 +851,7 @@ class ISettings(SerializableMixin):
     maxTokens: Optional[int] = None
     topK: Optional[int] = None
     stopSequences: Optional[List[str]] = None
+    thinkingLevel: Optional[str] = None
 
     def __post_init__(self):
         if self.sparseStructure is not None and isinstance(self.sparseStructure, dict):
@@ -1353,7 +1354,6 @@ class IGoogleProviderSettings(BaseProviderSettings):
     search: Optional[bool] = None
     searchLatitude: Optional[float] = None
     searchLongitude: Optional[float] = None
-    thinkingLevel: Optional[str] = None
 
     @property
     def provider_key(self) -> str:
