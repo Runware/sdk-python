@@ -2827,8 +2827,7 @@ class RunwareBase:
         await self.ensureConnection()
         requestAudio.taskUUID = requestAudio.taskUUID or getUUID()
         request_object = self._buildAudioRequest(requestAudio)
-
-
+        
         return await self._handleInitialAudioResponse(
             request_object=request_object,
             task_uuid=requestAudio.taskUUID,
