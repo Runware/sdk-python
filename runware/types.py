@@ -817,6 +817,23 @@ class ITexSlat(SerializableMixin):
 
 
 @dataclass
+class ITextInferenceTool(SerializableMixin):
+    """Tool definition for text inference (e.g. function-calling / JSON-schema tools)."""
+
+    name: str
+    description: str
+    input_schema: Dict[str, Any]
+
+
+@dataclass
+class ITextInferenceToolChoice(SerializableMixin):
+    """Selects how tools are used (provider-specific shape, e.g. type + name)."""
+
+    type: str
+    name: Optional[str] = None
+
+
+@dataclass
 class ISettings(SerializableMixin):
     # Image / Text
     temperature: Optional[float] = None
@@ -852,6 +869,8 @@ class ISettings(SerializableMixin):
     topK: Optional[int] = None
     stopSequences: Optional[List[str]] = None
     thinkingLevel: Optional[str] = None
+    tools: Optional[List[Union[ITextInferenceTool, Dict[str, Any]]]] = None
+    toolChoice: Optional[Union[ITextInferenceToolChoice, Dict[str, Any]]] = None
 
     def __post_init__(self):
         if self.sparseStructure is not None and isinstance(self.sparseStructure, dict):
@@ -860,6 +879,13 @@ class ISettings(SerializableMixin):
             self.shapeSlat = IShapeSlat(**self.shapeSlat)
         if self.texSlat is not None and isinstance(self.texSlat, dict):
             self.texSlat = ITexSlat(**self.texSlat)
+        if self.tools is not None:
+            self.tools = [
+                ITextInferenceTool(**t) if isinstance(t, dict) else t
+                for t in self.tools
+            ]
+        if self.toolChoice is not None and isinstance(self.toolChoice, dict):
+            self.toolChoice = ITextInferenceToolChoice(**self.toolChoice)
 
     @property
     def request_key(self) -> str:

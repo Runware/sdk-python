@@ -2230,10 +2230,42 @@ class RunwareBase:
             request_object["includeCost"] = requestText.includeCost
         if requestText.includeUsage is not None:
             request_object["includeUsage"] = requestText.includeUsage
+        if requestText.numberResults is not None:
+            request_object["numberResults"] = requestText.numberResults
         self._addOptionalField(request_object, requestText.settings)
         self._addOptionalField(request_object, requestText.inputs)
         self._addProviderSettings(request_object, requestText)
         return request_object
+
+    async def _message_from_http_status_error(self, exc: httpx.HTTPStatusError) -> str:
+        """
+        Build a short, user-facing message from an HTTP error response.
+        Matches WebSocket auth errors where possible (e.g. invalid API key).
+        """
+        resp = exc.response
+        try:
+            await resp.aread()
+        except Exception:
+            pass
+        status = resp.status_code
+        try:
+            data = resp.json()
+            if isinstance(data, dict):
+                msg = data.get("message")
+                if isinstance(msg, str) and msg.strip():
+                    return msg.strip()
+                err = data.get("error")
+                if isinstance(err, dict):
+                    inner = err.get("message")
+                    if isinstance(inner, str) and inner.strip():
+                        return inner.strip()
+                if isinstance(err, str) and err.strip():
+                    return err.strip()
+        except Exception:
+            pass
+        if status == 401:
+            return "Invalid API key. Get one at https://my.runware.ai/signup"
+        return f"HTTP {status} error for {resp.request.url}"
 
     async def _requestTextStream(
         self, requestText: ITextInference
@@ -2259,6 +2291,7 @@ class RunwareBase:
                     async for line in response.aiter_lines():
                         try:
                             line_obj = json.loads(line.replace("data:", "", 1))
+                            #print(line_obj)
                         except json.JSONDecodeError:
                             continue
                         data = line_obj.get("data") or line_obj
@@ -2280,8 +2313,17 @@ class RunwareBase:
                                 },
                             )
                             return
+        except httpx.HTTPStatusError as e:
+            msg = await self._message_from_http_status_error(e)
+            if e.response.status_code == 401:
+                self._invalidAPIkey = msg
+                self._reconnection_manager.on_auth_failure()
+                raise ConnectionError(msg) from e
+            raise RunwareAPIError({"message": msg, "statusCode": e.response.status_code}) from e
+        except RunwareAPIError:
+            raise
         except Exception as e:
-            raise RunwareAPIError({"message": str(e)})
+            raise RunwareAPIError({"message": str(e)}) from e
 
     async def _requestText(self, requestText: ITextInference) -> Union[List[IText], IAsyncTaskResponse]:
         await self.ensureConnection()
