@@ -1373,6 +1373,7 @@ class IGoogleProviderSettings(BaseProviderSettings):
     generateAudio: Optional[bool] = None
     enhancePrompt: Optional[bool] = None
     search: Optional[bool] = None
+    safetyTolerance: Optional[str] = None
 
     @property
     def provider_key(self) -> str:
