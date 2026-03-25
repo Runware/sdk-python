@@ -6,4 +6,4 @@ from .logging_config import *
 from .async_retry import *
 
 __all__ = ["Runware"]
-__version__ = "0.5.1"
+__version__ = "0.5.2"

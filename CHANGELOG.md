@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.2]
+
+### Added
+- Added photoMaker as a nested object in imageInference using `IPhotoMakerSettings`; `IImageInference.photoMaker: Optional[Union[IPhotoMakerSettings, Dict[str, Any]]]`. Nested settings use images/inputImages + style/strength. Standalone `taskType="photoMaker"` remains a separate operation via `IPhotoMaker`.
+- Added `IIpAdapter.guideImages`, `combineMethod`, `weightType`, `embedScaling`, `weightComposition`; `guideImage` optional; base supports `guideImages` with `process_image`.
+- Added `IEmbedding.weight: Optional[float]`.
+- Added dict coercion in `IImageInference.post_init` for `photoMaker`, `instantID`, `acePlusPlus`, `puLID`, `ultralytics`, `outpaint`, `refiner`; list coercion for embeddings (`dict` -> `IEmbedding`) and ipAdapters (`dict` -> `IIpAdapter`).
+- Added `IInputReference.type` and `IInputReference.strength` (for sketch-style refs).
+- Added image inference support so `inputs.referenceImages` can be `IInputReference` items; each image is run through `process_image` before send.
+- Added `IGoogleProviderSettings.safetyTolerance`.
+- Added `bpm`, `keyScale`, `timeSignature`, `vocalLanguage`, `coverConditioningScale`, `repaintingStart`, and `repaintingEnd` to `ISettings`.
+- Added `audio: Optional[str]` to `IAudioInputs`.
+- Added `IGoogleProviderSettings.resizeMode`.
+
+### Changed
+- `IImageInference`: `refiner`, `outpaint`, `instantID`, `acePlusPlus`, `puLID`, `ultralytics`, `photoMaker` typed as `Union[Type, Dict[str, Any]]`; embeddings as `List[Union[IEmbedding, Dict[str, Any]]]`; ipAdapters as `List[Union[IIpAdapter, Dict[str, Any]]]`.
+
 ## [0.5.1]
 
 ### Added
