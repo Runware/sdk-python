@@ -834,6 +834,13 @@ class ISettings(SerializableMixin):
     lyrics: Optional[str] = None
     guidanceType: Optional[str] = None
     textNormalization: Optional[bool] = None
+    bpm: Optional[int] = None
+    keyScale: Optional[str] = None
+    timeSignature: Optional[Union[int, str]] = None
+    vocalLanguage: Optional[str] = None
+    coverConditioningScale: Optional[float] = None
+    repaintingStart: Optional[float] = None
+    repaintingEnd: Optional[float] = None
     # Video
     draft: Optional[bool] = None
     audio: Optional[bool] = None
@@ -1655,6 +1662,7 @@ class I3dInference:
 
 @dataclass
 class IAudioInputs(SerializableMixin):
+    audio: Optional[str] = None
     video: Optional[str] = None
     videos: Optional[List[str]] = None
 
