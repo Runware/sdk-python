@@ -66,7 +66,6 @@ from .utils import (
     getUUID,
     fileToBase64,
     createImageFromResponse,
-    createImageToTextFromResponse,
     createEnhancedPromptsFromResponse,
     instantiateDataclassList,
     RunwareAPIError,
@@ -597,6 +596,14 @@ class RunwareBase:
     async def _photoMaker(self, requestPhotoMaker: "IPhotoMaker") -> "Union[List[IImage], IAsyncTaskResponse]":
         await self.ensureConnection()
 
+        if requestPhotoMaker.model is None or requestPhotoMaker.positivePrompt is None or requestPhotoMaker.height is None or requestPhotoMaker.width is None:
+            raise ValueError("Standalone photoMaker requires model, positivePrompt, height, and width.")
+
+        input_images = requestPhotoMaker.inputImages if requestPhotoMaker.inputImages is not None else []
+        if not input_images:
+            raise ValueError("Standalone photoMaker requires at least one image in inputImages.")
+        requestPhotoMaker.inputImages = input_images
+
         task_uuid = requestPhotoMaker.taskUUID or getUUID()
         requestPhotoMaker.taskUUID = task_uuid
 
@@ -633,6 +640,16 @@ class RunwareBase:
             request_object["includeCost"] = requestPhotoMaker.includeCost
         if requestPhotoMaker.outputType:
             request_object["outputType"] = requestPhotoMaker.outputType
+        if requestPhotoMaker.negativePrompt is not None:
+            request_object["negativePrompt"] = requestPhotoMaker.negativePrompt
+        if requestPhotoMaker.CFGScale is not None:
+            request_object["CFGScale"] = requestPhotoMaker.CFGScale
+        if requestPhotoMaker.seed is not None:
+            request_object["seed"] = requestPhotoMaker.seed
+        if requestPhotoMaker.scheduler is not None:
+            request_object["scheduler"] = requestPhotoMaker.scheduler
+        if requestPhotoMaker.checkNsfw is not None:
+            request_object["checkNSFW"] = requestPhotoMaker.checkNsfw
         if requestPhotoMaker.webhookURL:
             request_object["webhookURL"] = requestPhotoMaker.webhookURL
             return await self._handleWebhookRequest(
@@ -643,6 +660,7 @@ class RunwareBase:
             )
 
         numberOfResults = requestPhotoMaker.numberResults
+
 
         future, should_send = await self._register_pending_operation(
             task_uuid,
@@ -724,10 +742,20 @@ class RunwareBase:
                 for k, v in vars(requestImage.instantID).items()
                 if v is not None
             }
-            if "inputImage" in instant_id_data:
-                instant_id_data["inputImage"] = await process_image(instant_id_data["inputImage"])
+
             if "poseImage" in instant_id_data:
                 instant_id_data["poseImage"] = await process_image(instant_id_data["poseImage"])
+
+            input_images = instant_id_data.get("inputImages")
+            single_input = instant_id_data.get("inputImage")
+
+            if input_images is None and single_input is not None:
+                input_images = [single_input]
+
+            if input_images is not None:
+                instant_id_data["inputImages"] = await process_image(input_images)
+
+            instant_id_data.pop("inputImage", None)
 
         ip_adapters_data = []
         if requestImage.ipAdapters:
@@ -735,7 +763,9 @@ class RunwareBase:
                 ip_adapter_data = {
                     k: v for k, v in vars(ip_adapter).items() if v is not None
                 }
-                if "guideImage" in ip_adapter_data:
+                if "guideImages" in ip_adapter_data:
+                    ip_adapter_data["guideImages"] = await process_image(ip_adapter_data["guideImages"])
+                elif "guideImage" in ip_adapter_data:
                     ip_adapter_data["guideImage"] = await process_image(ip_adapter_data["guideImage"])
                 ip_adapters_data.append(ip_adapter_data)
 
@@ -763,9 +793,20 @@ class RunwareBase:
             if requestImage.puLID.inputImages:
                 pulid_data["inputImages"] = await process_image(requestImage.puLID.inputImages)
 
+        photo_maker_data: Dict[str, Any] = {}
+        if requestImage.photoMaker:
+            if requestImage.photoMaker.style is not None:
+                photo_maker_data["style"] = requestImage.photoMaker.style
+            if requestImage.photoMaker.strength is not None:
+                photo_maker_data["strength"] = requestImage.photoMaker.strength
+
+            image_list = requestImage.photoMaker.images or requestImage.photoMaker.inputImages
+            if image_list:
+                photo_maker_data["images"] = await process_image(image_list)
+
         request_object = self._buildImageRequest(
             requestImage, prompt, control_net_data_dicts,
-            instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data
+            instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data, photo_maker_data
         )
 
         delivery_method_enum = EDeliveryMethod(requestImage.deliveryMethod) if isinstance(requestImage.deliveryMethod,
@@ -905,9 +946,8 @@ class RunwareBase:
         # Add template parameter if specified
         if requestImageToText.template is not None:
             task_params["template"] = requestImageToText.template
-            # When using template, do NOT include prompt parameter
-        else:
-            # Use the provided prompt when no template
+        # Add prompt only when explicitly provided (API does not support prompt in all cases)
+        elif requestImageToText.prompt is not None:
             task_params["prompt"] = requestImageToText.prompt
 
         # Add optional parameters if they are provided
@@ -935,7 +975,7 @@ class RunwareBase:
             results = await asyncio.wait_for(future, timeout=IMAGE_OPERATION_TIMEOUT / 1000)
             response = results[0]
             self._handle_error_response(response)
-            return createImageToTextFromResponse(response)
+            return instantiateDataclass(IImageToText, response)
         except asyncio.TimeoutError:
             raise Exception(
                 f"Timeout waiting for image caption | TaskUUID: {taskUUID} | "
@@ -2326,7 +2366,7 @@ class RunwareBase:
         finally:
             await self._unregister_pending_operation(task_uuid)
 
-    def _buildImageRequest(self, requestImage: IImageInference, prompt: Optional[str], control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> Dict[str, Any]:
+    def _buildImageRequest(self, requestImage: IImageInference, prompt: Optional[str], control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict], photo_maker_data: Optional[Dict]) -> Dict[str, Any]:
         request_object = {
             "taskType": ETaskType.IMAGE_INFERENCE.value,
             "taskUUID": requestImage.taskUUID,
@@ -2338,7 +2378,16 @@ class RunwareBase:
             request_object["positivePrompt"] = prompt
 
         self._addOptionalBuiltInDataTypesFields(request_object, requestImage)
-        self._addImageSpecialFields(request_object, requestImage, control_net_data_dicts, instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data)
+        self._addImageSpecialFields(
+            request_object,
+            requestImage,
+            control_net_data_dicts,
+            instant_id_data,
+            ip_adapters_data,
+            ace_plus_plus_data,
+            pulid_data,
+            photo_maker_data,
+        )
         self._addOptionalField(request_object, requestImage.inputs)
         self._addProviderSettings(request_object, requestImage)
         self._addOptionalField(request_object, requestImage.ultralytics)
@@ -2348,7 +2397,17 @@ class RunwareBase:
 
         return request_object
 
-    def _addImageSpecialFields(self, request_object: Dict[str, Any], requestImage: IImageInference, control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict]) -> None:
+    def _addImageSpecialFields(
+        self,
+        request_object: Dict[str, Any],
+        requestImage: IImageInference,
+        control_net_data_dicts: List[Dict],
+        instant_id_data: Optional[Dict],
+        ip_adapters_data: Optional[List[Dict]],
+        ace_plus_plus_data: Optional[Dict],
+        pulid_data: Optional[Dict],
+        photo_maker_data: Optional[Dict],
+    ) -> None:
         # Add controlNet if present
         if control_net_data_dicts:
             request_object["controlNet"] = control_net_data_dicts
@@ -2369,10 +2428,13 @@ class RunwareBase:
 
         # Add embeddings if present
         if requestImage.embeddings:
-            request_object["embeddings"] = [
-                {"model": embedding.model}
-                for embedding in requestImage.embeddings
-            ]
+            embeddings_payload = []
+            for embedding in requestImage.embeddings:
+                d: Dict[str, Any] = {"model": embedding.model}
+                if embedding.weight is not None:
+                    d["weight"] = embedding.weight
+                embeddings_payload.append(d)
+            request_object["embeddings"] = embeddings_payload
 
         # Add refiner if present
         if requestImage.refiner:
@@ -2407,6 +2469,10 @@ class RunwareBase:
         # Add puLID if present
         if pulid_data:
             request_object["puLID"] = pulid_data
+
+        # Add photoMaker if present 
+        if photo_maker_data:
+            request_object["photoMaker"] = photo_maker_data
 
         # Add referenceImages if present
         if requestImage.referenceImages:
