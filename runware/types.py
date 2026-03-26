@@ -921,6 +921,17 @@ class ISpeechInput(SerializableMixin):
 
 
 @dataclass
+class IElements(SerializableMixin):
+    id: Optional[str] = None
+    description: Optional[str] = None
+    frontalImage: Optional[Union[str, File]] = None
+    images: Optional[List[Union[str, File]]] = None
+    videos: Optional[List[str]] = None
+    voice: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+
+
+@dataclass
 class IVideoInputs(SerializableMixin):
     references: Optional[List[Union[str, File, Dict[str, Any]]]] = None
     image: Optional[Union[str, File]] = None
@@ -939,6 +950,7 @@ class IVideoInputs(SerializableMixin):
     videoId: Optional[str] = None
     avatar: Optional[str] = None
     background: Optional[str] = None
+    elements: Optional[List[Union[IElements, Dict[str, Any]]]] = None
 
     def __post_init__(self):
         if self.frames is not None:
@@ -968,6 +980,11 @@ class IVideoInputs(SerializableMixin):
                     stacklevel=3
                 )
                 self.referenceImages = [ref.image if isinstance(ref, IInputReference) else ref for ref in self.referenceImages]
+        if self.elements:
+            self.elements = [
+                IElements(**item) if isinstance(item, dict) else item
+                for item in self.elements
+            ]
 
     @property
     def request_key(self) -> str:
