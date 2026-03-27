@@ -117,7 +117,7 @@ class OperationState(Enum):
 # Define the types using Literal
 IOutputType = Literal["base64Data", "dataURI", "URL"]
 IOutputFormat = Literal["JPG", "PNG", "WEBP", "SVG"]
-IAudioOutputFormat = Literal["MP3"]
+IAudioOutputFormat = Literal["wav", "mp3", "pcm", "opus", "aac", "flac", "MP3"]
 
 
 @dataclass
@@ -834,6 +834,9 @@ class ISettings(SerializableMixin):
     lyrics: Optional[str] = None
     guidanceType: Optional[str] = None
     textNormalization: Optional[bool] = None
+    maxNewTokens: Optional[int] = None
+    transcript: Optional[str] = None
+    xVectorOnly: Optional[bool] = None
     bpm: Optional[int] = None
     keyScale: Optional[str] = None
     timeSignature: Optional[Union[int, str]] = None
@@ -1683,6 +1686,7 @@ class IAudioInputs(SerializableMixin):
     audio: Optional[str] = None
     video: Optional[str] = None
     videos: Optional[List[str]] = None
+    audio: Optional[str] = None  
 
     @property
     def request_key(self) -> str:
@@ -1692,7 +1696,8 @@ class IAudioInputs(SerializableMixin):
 @dataclass
 class IAudioSpeech(SerializableMixin):
     text: Optional[str] = None  
-    voice: Optional[str] = None  
+    voice: Optional[str] = None
+    language: Optional[str] = None
     speed: Optional[float] = None
     volume: Optional[int] = None
     pitch: Optional[int] = None
