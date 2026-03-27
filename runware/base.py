@@ -1146,6 +1146,12 @@ class RunwareBase:
         # Add optional parameters
         if requestVideoUpscale.upscaleFactor is not None:
             task_params["upscaleFactor"] = requestVideoUpscale.upscaleFactor
+        if requestVideoUpscale.width is not None:
+            task_params["width"] = requestVideoUpscale.width
+        if requestVideoUpscale.height is not None:
+            task_params["height"] = requestVideoUpscale.height
+        if requestVideoUpscale.fps is not None:
+            task_params["fps"] = requestVideoUpscale.fps
         if requestVideoUpscale.outputFormat:
             task_params["outputFormat"] = requestVideoUpscale.outputFormat
         if requestVideoUpscale.outputType:
