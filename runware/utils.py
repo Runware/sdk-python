@@ -11,8 +11,9 @@ import uuid
 import json
 import mimetypes
 import inspect
-from typing import Any, Dict, List, Union, Optional, TypeVar, Type, Coroutine
-from dataclasses import fields
+from typing import Any, Dict, List, Union, Optional, TypeVar, Type, Coroutine, get_type_hints, get_origin, get_args
+from dataclasses import fields, is_dataclass
+from enum import Enum
 from .types import (
     Environment,
     EPreProcessor,
@@ -51,7 +52,7 @@ RETRY_SDK_COUNTS = {
 # WebSocket connection health check timeout (milliseconds)
 # Maximum time to wait for pong response after sending ping
 # Used in: server.heartBeat() to detect connection loss
-PING_TIMEOUT_DURATION = 10000
+PING_TIMEOUT_DURATION = 30000
 
 # WebSocket ping interval (milliseconds)
 # How often to send ping messages to keep connection alive
@@ -82,6 +83,17 @@ IMAGE_UPLOAD_TIMEOUT = int(os.environ.get(
     60000
 ))
 
+# Model upload timeout (milliseconds)
+# Maximum time to wait for model upload to complete
+# Used in: _modelUpload() for uploading models (LoRA, checkpoints, etc.)
+MODEL_UPLOAD_TIMEOUT = int(os.environ.get(
+    "RUNWARE_MODEL_UPLOAD_TIMEOUT",
+    900000  # 15 minutes default - models can be large
+))
+
+# Maximum number of times to retry after authentication failures (used in _retry_with_reconnect())
+MAX_RETRY_ATTEMPTS = 10
+
 # Video initial response timeout (milliseconds)
 # Maximum time to wait for initial video generation response or polling response
 # Used in: _handleInitialVideoResponse(), _sendPollRequest()
@@ -106,6 +118,14 @@ AUDIO_INITIAL_TIMEOUT = int(os.environ.get(
     30000
 ))
 
+# Text initial response timeout (milliseconds)
+# Maximum time to wait for the initial text response before falling back to async handling
+# Used in: _handleInitialTextResponse() for async delivery method
+TEXT_INITIAL_TIMEOUT = int(os.environ.get(
+    "RUNWARE_TEXT_INITIAL_TIMEOUT",
+    30000
+))
+
 # Audio generation timeout (milliseconds)
 # Maximum time to wait for audio generation completion
 # Used in: _waitForAudioCompletion() for single audio generation
@@ -127,7 +147,7 @@ AUDIO_POLLING_DELAY = int(os.environ.get(
 # Used in: _handleInitialImageResponse() for async delivery method
 IMAGE_INITIAL_TIMEOUT = int(os.environ.get(
     "RUNWARE_IMAGE_INITIAL_TIMEOUT",
-    30000
+    60000
 ))
 
 # Image polling delay (milliseconds)
@@ -135,6 +155,14 @@ IMAGE_INITIAL_TIMEOUT = int(os.environ.get(
 # Used in: _pollResults() for checking image generation progress
 IMAGE_POLLING_DELAY = int(os.environ.get(
     "RUNWARE_IMAGE_POLLING_DELAY",
+    1000
+))
+
+# Text polling delay (milliseconds)
+# Delay between consecutive polling requests for text generation status
+# Used in: _pollResults() for checking textInference task progress
+TEXT_POLLING_DELAY = int(os.environ.get(
+    "RUNWARE_TEXT_POLLING_DELAY",
     1000
 ))
 
@@ -162,17 +190,24 @@ TIMEOUT_DURATION = int(os.environ.get(
     480000
 ))
 # Maximum polling attempts for video generation
-# Number of polling iterations before timing out video generation
-# Used in: _pollVideoResults() for video generation status checks
+# Used in: _pollResults() for video inference / video caption / video background removal / video upscale
 MAX_POLLS_VIDEO_GENERATION = int(os.environ.get("RUNWARE_MAX_POLLS_VIDEO_GENERATION", 480))
 
 # Maximum polling attempts for audio generation
-# Number of polling iterations before timing out audio generation
-# Used in: _pollAudioResults() for audio generation status checks
+# Used in: _pollResults() for audio inference task type
 MAX_POLLS_AUDIO_GENERATION = int(os.environ.get("RUNWARE_MAX_POLLS_AUDIO_GENERATION", 240))
 
+# Maximum polling attempts for 3D generation
+# Used in: _pollResults() for 3d inference task type
+MAX_POLLS_3D_GENERATION = int(os.environ.get("RUNWARE_MAX_POLLS_3D_GENERATION", 480))
 
+# Maximum polling attempts for image generation
+# Used in: _pollResults() for image inference task type
+MAX_POLLS_IMAGE_GENERATION = int(os.environ.get("RUNWARE_MAX_POLLS_IMAGE_GENERATION", 480))
+
+# Default / fallback max polls (e.g. when task type unknown)
 MAX_POLLS = int(os.environ.get("RUNWARE_MAX_POLLS", 480))
+MAX_CONCURRENT_REQUESTS = int(os.environ.get("RUNWARE_MAX_CONCURRENT_REQUESTS", 15))
 
 class LISTEN_TO_IMAGES_KEY:
     REQUEST_IMAGES = "REQUEST_IMAGES"
@@ -418,11 +453,14 @@ async def fileToBase64(file_path: str) -> str:
         async with aiofiles.open(file_path, "rb") as file:
             file_contents = await file.read()
             mime_type, _ = mimetypes.guess_type(file_path)
-
             if mime_type is None:
-                raise ValueError(
-                    f"Unable to determine the MIME type for file: {file_path}"
-                )
+                ext = os.path.splitext(file_path)[1].lower()
+                if ext in (".glb", ".ply"):
+                    mime_type = "application/octet-stream"
+                else:
+                    raise ValueError(
+                        f"Unable to determine the MIME type for file: {file_path}"
+                    )
 
             base64_content = base64.b64encode(file_contents).decode("utf-8")
             return f"data:{mime_type};base64,{base64_content}"
@@ -730,22 +768,6 @@ def createImageFromResponse(response: dict) -> IImage:
     return instantiateDataclass(IImage, processed_fields)
 
 
-def createImageToTextFromResponse(response: dict) -> IImageToText:
-    processed_fields = {}
-
-    for field in fields(IImageToText):
-        if field.name in response:
-            if field.name == "taskType":
-                # Convert string to ETaskType enum
-                processed_fields[field.name] = ETaskType(response[field.name])
-            elif field.type == float or field.type == Optional[float]:
-                processed_fields[field.name] = float(response[field.name])
-            else:
-                processed_fields[field.name] = response[field.name]
-
-    return instantiateDataclass(IImageToText, processed_fields)
-
-
 def createVideoToTextFromResponse(response: dict) -> IVideoToText:
     processed_fields = {}
 
@@ -853,15 +875,53 @@ async def getIntervalWithPromise(
 def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
     """
     Instantiates a dataclass object from a dictionary, filtering out any unknown attributes.
+    Handles nested dataclasses by recursively instantiating them.
 
     :param dataclass_type: The dataclass type to instantiate.
     :param data: A dictionary with data.
     :return: An instantiated dataclass object.
     """
-    # Get the set of valid field names for the dataclass
+    hints = get_type_hints(dataclass_type)
     valid_fields = {f.name for f in fields(dataclass_type)}
-    # Filter the data to include only valid fields
-    filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+    filtered_data = {}
+    
+    for k, v in data.items():
+        if k not in valid_fields:
+            continue
+        
+        if v is None:
+            filtered_data[k] = None
+            continue
+        
+        field_type = hints.get(k)
+        
+        # Unwrap Optional[X] -> X
+        if get_origin(field_type) is Union:
+            args = [a for a in get_args(field_type) if a is not type(None)]
+            field_type = args[0] if args else field_type
+        
+        # Nested dataclass
+        if is_dataclass(field_type) and isinstance(v, dict):
+            filtered_data[k] = instantiateDataclass(field_type, v)
+        # List[Dataclass]
+        elif get_origin(field_type) is list and isinstance(v, list):
+            inner = get_args(field_type)[0] if get_args(field_type) else None
+            if inner and is_dataclass(inner):
+                filtered_data[k] = [
+                    instantiateDataclass(inner, i) if isinstance(i, dict) else i
+                    for i in v
+                ]
+            else:
+                filtered_data[k] = v
+
+        elif (
+            (isinstance(field_type, type) and issubclass(field_type, Enum))
+            or (field_type in (int, float) and isinstance(v, str))
+        ):
+            filtered_data[k] = field_type(v)
+        else:
+            filtered_data[k] = v
+    
     return dataclass_type(**filtered_data)
 
 
@@ -876,6 +936,11 @@ def instantiateDataclassList(
     :param data_list: A list of dictionaries with data.
     :return: A list of instantiated dataclass objects.
     """
+    if data_list is None or len(data_list) == 0:
+        raise ValueError(
+            f"Cannot instantiate dataclass list: data_list is None or empty for type {getattr(dataclass_type, '__name__', str(dataclass_type))}"
+        )
+    
     # Get the set of valid field names for the dataclass
     instances = []
     for data in data_list:

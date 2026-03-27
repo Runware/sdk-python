@@ -1,6 +1,6 @@
 from abc import abstractmethod, ABC
 from enum import Enum
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, InitVar
 from typing import List, Union, Optional, Callable, Any, Dict, TypeVar, Literal
 import warnings
 
@@ -42,6 +42,8 @@ class ETaskType(Enum):
     MODEL_UPLOAD = "modelUpload"
     MODEL_SEARCH = "modelSearch"
     VIDEO_INFERENCE = "videoInference"
+    INFERENCE_3D = "3dInference"
+    TEXT_INFERENCE = "textInference"
     AUDIO_INFERENCE = "audioInference"
     VIDEO_CAPTION = "caption"
     MEDIA_STORAGE = "mediaStorage"
@@ -105,11 +107,17 @@ class EDeliveryMethod(Enum):
     SYNC = "sync"
     ASYNC = "async"
 
+class OperationState(Enum):
+    """State machine for pending operations."""
+    REGISTERED = "registered"      # Future created, request NOT sent
+    SENT = "sent"                  # send() completed successfully
+    DISCONNECTED = "disconnected"  # Connection lost after SENT
+
 
 # Define the types using Literal
 IOutputType = Literal["base64Data", "dataURI", "URL"]
 IOutputFormat = Literal["JPG", "PNG", "WEBP", "SVG"]
-IAudioOutputFormat = Literal["MP3"]
+IAudioOutputFormat = Literal["wav", "mp3", "pcm", "opus", "aac", "flac", "MP3"]
 
 
 @dataclass
@@ -120,6 +128,24 @@ class File:
 @dataclass
 class IAsyncTaskResponse:
     taskType: str
+    taskUUID: str
+
+
+@dataclass
+class IGetResponseRequest:
+    taskUUID: str
+    numberResults: int = 1
+
+
+@dataclass
+class IUploadImageRequest:
+    file: Union[File, str]
+    taskUUID: str
+
+
+@dataclass
+class IUploadMediaRequest:
+    media_url: str
     taskUUID: str
 
 
@@ -158,6 +184,7 @@ class ILycoris:
 @dataclass
 class IEmbedding:
     model: str
+    weight: Optional[float] = None
 
 
 @dataclass
@@ -313,50 +340,42 @@ class IPhotoMaker:
     numberResults: int = 1
     steps: Optional[int] = None
     outputType: Optional[IOutputType] = None
-    inputImages: List[Union[str, File]] = field(default_factory=list)
+    inputImages: Optional[List[Union[str, File]]] = None
     style: Optional[str] = None
     strength: Optional[float] = None
     outputFormat: Optional[IOutputFormat] = None
     includeCost: Optional[bool] = None
     taskUUID: Optional[str] = None
     webhookURL: Optional[str] = None
+    negativePrompt: Optional[str] = None
+    CFGScale: Optional[float] = None
+    seed: Optional[int] = None
+    scheduler: Optional[str] = None
+    checkNsfw: Optional[bool] = None
 
-    def __post_init__(self):
-        # Validate `inputImages` to ensure it has a maximum of 4 elements
-        if len(self.inputImages) > 4:
-            raise ValueError("inputImages can contain a maximum of 4 elements.")
 
-        # Validate `style` to ensure it matches one of the allowed case-sensitive options
-        valid_styles = {
-            "No style",
-            "Cinematic",
-            "Disney Character",
-            "Digital Art",
-            "Photographic",
-            "Fantasy art",
-            "Neonpunk",
-            "Enhance",
-            "Comic book",
-            "Lowpoly",
-            "Line art",
-        }
-        if self.style and self.style not in valid_styles:
-            raise ValueError(
-                f"style must be one of the following: {', '.join(valid_styles)}."
-            )
-
+@dataclass
+class IPhotoMakerSettings:
+    images: Optional[List[Union[str, File]]] = None
+    inputImages: Optional[List[Union[str, File]]] = None
+    style: Optional[str] = None
+    strength: Optional[float] = None
 
 class SerializableMixin:
     def serialize(self) -> Dict[str, Any]:
-        return {k: v for k, v in asdict(self).items()
-                if v is not None and not k.startswith('_')}
-
-@dataclass
-class BaseRequestField(SerializableMixin, ABC):
-    @property
-    @abstractmethod
-    def request_key(self) -> str:
-        pass
+        result: Dict[str, Any] = {}
+        for k, v in vars(self).items():
+            if v is None or k.startswith("_"):
+                continue
+            if isinstance(v, SerializableMixin):
+                nested = v.serialize()
+                if nested:
+                    result[k] = nested
+            elif isinstance(v, (list, tuple)) and v and all(isinstance(x, SerializableMixin) for x in v):
+                result[k] = [x.serialize() for x in v]
+            else:
+                result[k] = v
+        return result
 
     def to_request_dict(self) -> Dict[str, Any]:
         data = self.serialize()
@@ -375,8 +394,9 @@ class IOutpaint:
 
 @dataclass
 class IInstantID:
-    inputImage: Union[File, str]
+    inputImage: Optional[Union[File, str]] = None
     poseImage: Optional[Union[File, str]] = None
+    inputImages: Optional[List[Union[str, File]]] = None
     identityNetStrength: Optional[float] = None
     adapterStrength: Optional[float] = None
     controlNetCannyWeight: Optional[float] = None
@@ -387,8 +407,13 @@ class IInstantID:
 @dataclass
 class IIpAdapter:
     model: Union[int, str]
-    guideImage: Union[File, str]
+    guideImage: Optional[Union[File, str]] = None
+    guideImages: Optional[List[Union[str, File]]] = None
     weight: Optional[float] = None
+    combineMethod: Optional[str] = None
+    weightType: Optional[str] = None
+    embedScaling: Optional[str] = None
+    weightComposition: Optional[float] = None
 
 
 @dataclass
@@ -421,7 +446,7 @@ class IPuLID:
 
 
 @dataclass
-class IAcceleratorOptions(BaseRequestField):
+class IAcceleratorOptions(SerializableMixin):
     fbcache: Optional[bool] = None
     cacheDistance: Optional[float] = None
     teaCache: Optional[bool] = None
@@ -442,28 +467,113 @@ class IAcceleratorOptions(BaseRequestField):
 
 
 @dataclass
-class IFluxKontext:
+class IFluxKontext(SerializableMixin):
     guidanceEndStep: Optional[int] = None
     guidanceEndStepPercentage: Optional[float] = None
 
+    @property
+    def request_key(self) -> str:
+        return "fluxKontext"
+
 
 @dataclass
-class IAdvancedFeatures:
+class IRegion(SerializableMixin):
+    prompt: str
+    mask: Union[List[int], str]  
+
+    @property
+    def request_key(self) -> str:
+        return "regions"
+
+    def __post_init__(self) -> None:
+        if isinstance(self.mask, list):
+            if len(self.mask) != 4:
+                raise ValueError("IRegion.mask must be a list of exactly 4 integers [x0, y0, x1, y1]")
+            if not all(isinstance(v, int) for v in self.mask):
+                raise TypeError("IRegion.mask list elements must all be ints")
+
+
+@dataclass
+class IRegionalPrompting(SerializableMixin):
+    injectSteps: int
+    backgroundPrompt: Optional[str] = None
+    baseRatio: Optional[float] = None
+    regions: Optional[List[IRegion]] = None
+
+    @property
+    def request_key(self) -> str:
+        return "regionalPrompting"
+
+
+@dataclass
+class IWatermark(SerializableMixin):
+    text: Optional[str] = None  
+    image: Optional[str] = None  
+    displayPosition: Optional[str] = None
+    tiled: Optional[bool] = None  
+    opacity: Optional[float] = None  
+    fontColor: Optional[str] = None  
+    bgColor: Optional[str] = None  
+
+    @property
+    def request_key(self) -> str:
+        return "watermark"
+
+
+@dataclass
+class IAdvancedFeatures(SerializableMixin):
     fluxKontext: Optional[IFluxKontext] = None
+    layerDiffuse: Optional[bool] = None  
+    hiresFix: Optional[bool] = None  
+    regionalPrompting: Optional[IRegionalPrompting] = None
+    watermark: Optional[IWatermark] = None  
+
+    @property
+    def request_key(self) -> str:
+        return "advancedFeatures"  
 
 
 @dataclass
-class IVideoAdvancedFeatures(BaseRequestField):
+class IWanAnimate(SerializableMixin):
+    mode: Optional[str] = None
+    retargetPose: Optional[bool] = None
+    prevSegCondFrames: Optional[int] = None
+
+    @property
+    def request_key(self) -> str:
+        return "wanAnimate"
+
+
+VideoAdvancedFeatureTypes = IWanAnimate
+
+
+@dataclass
+class IVideoAdvancedFeatures(SerializableMixin):
     videoCFGScale: Optional[float] = None  
     audioCFGScale: Optional[float] = None  
     fps: Optional[int] = None  
     videoNegativePrompt: Optional[str] = None  
     audioNegativePrompt: Optional[str] = None  
     slgLayer: Optional[int] = None
+    advancedFeature: Optional[VideoAdvancedFeatureTypes] = None
+    watermark: Optional[IWatermark] = None
 
     @property
     def request_key(self) -> str:
         return "advancedFeatures"
+
+    def serialize(self) -> Dict[str, Any]:
+        result: Dict[str, Any] = {}
+        for k, v in vars(self).items():
+            if v is None or k.startswith("_"):
+                continue
+            if isinstance(v, SerializableMixin):
+                result.update(v.to_request_dict())
+            elif isinstance(v, (list, tuple)) and v and all(isinstance(x, SerializableMixin) for x in v):
+                result[k] = [x.serialize() for x in v]
+            else:
+                result[k] = v
+        return result
 
 
 @dataclass
@@ -491,6 +601,16 @@ class IOpenAIProviderSettings(BaseProviderSettings):
 
 
 @dataclass
+class IBriaMaskSettings(SerializableMixin):
+    foreground: Optional[bool] = None
+    prompt: Optional[str] = None
+    frameIndex: Optional[int] = None
+    # An array of coordinate dictionaries defining the mask hints.
+    # Each dictionary must have: x (int), y (int), type (str: "positive" or "negative")
+    keyPoints: Optional[List[Dict[str, Any]]] = None
+
+
+@dataclass
 class IBriaProviderSettings(BaseProviderSettings):
     medium: Optional[Literal["photography", "art"]] = None
     promptEnhancement: Optional[bool] = None
@@ -504,6 +624,14 @@ class IBriaProviderSettings(BaseProviderSettings):
     refinePrompt: Optional[bool] = None
     originalQuality: Optional[bool] = None
     forceBackgroundDetection: Optional[bool] = None
+    preserveAudio: Optional[bool] = None
+    autoTrim: Optional[bool] = None
+    mask: Optional[IBriaMaskSettings] = None
+    edit: Optional[str] = None
+    color: Optional[str] = None
+    lightDirection: Optional[str] = None
+    lightType: Optional[str] = None
+    season: Optional[str] = None
 
     @property
     def provider_key(self) -> str:
@@ -535,15 +663,107 @@ class IMidjourneyProviderSettings(BaseProviderSettings):
         return "midjourney"
 
 
+@dataclass
+class IAlibabaProviderSettings(BaseProviderSettings):
+    promptEnhancer: Optional[bool] = None
+    promptExtend: Optional[bool] = None
+    audio: Optional[bool] = None
+    shotType: Optional[str] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "alibaba"
+
+
+@dataclass
+class IBlackForestLabsProviderSettings(BaseProviderSettings):
+    safetyTolerance: Optional[int] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "bfl"
+
+
+@dataclass
+class IMireloProviderSettings(BaseProviderSettings):
+    startOffset: Optional[int] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "mirelo"
+
+
+@dataclass
+class ISourcefulFontInput(SerializableMixin):
+    fontUrl: Optional[str] = None
+    text: Optional[str] = None
+
+
+@dataclass
+class ISourcefulProviderSettings(BaseProviderSettings):
+    transparency: Optional[bool] = None
+    enhancePrompt: Optional[bool] = None
+    fontInputs: Optional[List[ISourcefulFontInput]] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "sourceful"
+
+
+@dataclass
+class IRGB(SerializableMixin):
+    rgb: List[int]
+
+    def __post_init__(self) -> None:
+        if len(self.rgb) != 3:
+            raise ValueError("IRGB.rgb must have exactly 3 elements")
+        for i, v in enumerate(self.rgb):
+            if not isinstance(v, int) or v < 0 or v > 255:
+                raise ValueError(f"IRGB.rgb[{i}] must be an int in 0-255, got {v!r}")
+
+
+@dataclass
+class IRecraftProviderSettings(BaseProviderSettings):
+    styleId: Optional[str] = None
+    colors: Optional[List[IRGB]] = None
+    backgroundColor: Optional[IRGB] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "recraft"
+
+
+@dataclass
+class IUltralytics(SerializableMixin):
+
+    maskBlur: Optional[int] = None
+    maskPadding: Optional[int] = None
+    confidence: Optional[float] = None
+    positivePrompt: Optional[str] = None
+    negativePrompt: Optional[str] = None
+    steps: Optional[int] = None
+    CFGScale: Optional[float] = None
+    strength: Optional[float] = None
+    @property
+    def request_key(self) -> str:
+        return "ultralytics"
+
+
 ImageProviderSettings = (
     IOpenAIProviderSettings
     | IBriaProviderSettings
     | ILightricksProviderSettings
     | IMidjourneyProviderSettings
+    | IAlibabaProviderSettings
+    | IBlackForestLabsProviderSettings
+    | ISourcefulProviderSettings
+    | IRecraftProviderSettings
 )
 
+VectorizeProviderSettings = IRecraftProviderSettings
+
 @dataclass
-class ISafety(BaseRequestField):
+class ISafety(SerializableMixin):
     tolerance: Optional[bool] = None
     checkInputs: Optional[bool] = None
     checkContent: Optional[bool] = None
@@ -551,31 +771,133 @@ class ISafety(BaseRequestField):
 
     @property
     def request_key(self) -> str:
-        return "safety"  
+        return "safety"
 
 
 @dataclass
-class IInputFrame:
+class ISparseStructure(SerializableMixin):
+    guidanceStrength: Optional[float] = None
+    guidanceRescale: Optional[float] = None
+    steps: Optional[int] = None
+    rescaleT: Optional[float] = None
+
+    @property
+    def request_key(self) -> str:
+        return "sparseStructure"
+
+
+@dataclass
+class IShapeSlat(SerializableMixin):
+    guidanceStrength: Optional[float] = None
+    guidanceRescale: Optional[float] = None
+    steps: Optional[int] = None
+    rescaleT: Optional[float] = None
+
+    @property
+    def request_key(self) -> str:
+        return "shapeSlat"
+
+
+@dataclass
+class ITexSlat(SerializableMixin):
+    guidanceStrength: Optional[float] = None
+    guidanceRescale: Optional[float] = None
+    steps: Optional[int] = None
+    rescaleT: Optional[float] = None
+
+    @property
+    def request_key(self) -> str:
+        return "texSlat"
+
+
+@dataclass
+class ISettings(SerializableMixin):
+    # Image
+    temperature: Optional[float] = None
+    systemPrompt: Optional[str] = None
+    topP: Optional[float] = None
+    layers: Optional[int] = None
+    trueCFGScale: Optional[float] = None
+    quality: Optional[str] = None
+    promptExtend: Optional[bool] = None
+    # 3D inference
+    textureSize: Optional[int] = None
+    decimationTarget: Optional[int] = None
+    remesh: Optional[bool] = None
+    resolution: Optional[int] = None
+    sparseStructure: Optional[Union[ISparseStructure, Dict[str, Any]]] = None
+    shapeSlat: Optional[Union[IShapeSlat, Dict[str, Any]]] = None
+    texSlat: Optional[Union[ITexSlat, Dict[str, Any]]] = None
+    # Audio
+    languageBoost: Optional[str] = None
+    turbo: Optional[bool] = None
+    lyrics: Optional[str] = None
+    guidanceType: Optional[str] = None
+    textNormalization: Optional[bool] = None
+    maxNewTokens: Optional[int] = None
+    transcript: Optional[str] = None
+    xVectorOnly: Optional[bool] = None
+    bpm: Optional[int] = None
+    keyScale: Optional[str] = None
+    timeSignature: Optional[Union[int, str]] = None
+    vocalLanguage: Optional[str] = None
+    coverConditioningScale: Optional[float] = None
+    repaintingStart: Optional[float] = None
+    repaintingEnd: Optional[float] = None
+    # Video
+    draft: Optional[bool] = None
+    audio: Optional[bool] = None
+    promptUpsampling: Optional[bool] = None
+    expressiveness: Optional[str] = None
+    removeBackground: Optional[bool] = None
+    backgroundColor: Optional[str] = None
+
+    def __post_init__(self):
+        if self.sparseStructure is not None and isinstance(self.sparseStructure, dict):
+            self.sparseStructure = ISparseStructure(**self.sparseStructure)
+        if self.shapeSlat is not None and isinstance(self.shapeSlat, dict):
+            self.shapeSlat = IShapeSlat(**self.shapeSlat)
+        if self.texSlat is not None and isinstance(self.texSlat, dict):
+            self.texSlat = ITexSlat(**self.texSlat)
+
+    @property
+    def request_key(self) -> str:
+        return "settings"
+
+
+@dataclass
+class IInputFrame(SerializableMixin):
     image: Union[str, File]
     frame: Optional[Union[Literal["first", "last"], int]] = None
 
 
 @dataclass
-class IInputReference:
+class IInputReference(SerializableMixin):
     image: Union[str, File]
     tag: Optional[str] = None
+    refType: Optional[str] = None
+    strength: Optional[float] = None
+
+    def serialize(self) -> Dict[str, Any]:
+        data = super().serialize()
+        if self.refType is not None:
+            data["type"] = self.refType
+            data.pop("refType", None)
+        return data
 
 
 @dataclass
-class IInputs(BaseRequestField):
-    references: Optional[List[Union[str, File]]] = field(default_factory=list)
-    referenceImages: Optional[List[IInputReference]] = None
+class IInputs(SerializableMixin):
+    references: Optional[List[Union[str, File]]] = None
+    referenceImages: Optional[List[Union[str, File, IInputReference]]] = None
     image: Optional[Union[str, File]] = None
-    
+    mask: Optional[Union[str, File]] = None
+    superResolutionReferences: Optional[List[Union[str, File]]] = None
+
     @property
     def request_key(self) -> str:
         return "inputs"
-    
+
     def __post_init__(self):
         if self.references:
             warnings.warn(
@@ -584,22 +906,55 @@ class IInputs(BaseRequestField):
                 stacklevel=3
             )
             if self.referenceImages is None:
-                self.referenceImages = [IInputReference(image=ref) if isinstance(ref, (str, File)) else IInputReference(**ref) for ref in self.references]
+                self.referenceImages = self.references
 
 
 @dataclass
-class IVideoInputs(BaseRequestField):
-    references: Optional[List[Union[str, File, Dict[str, Any]]]] = field(default_factory=list)
+class IAudioInput(SerializableMixin):
+    id: Optional[str] = None
+    source: Optional[str] = None
+
+
+@dataclass
+class ISpeechInput(SerializableMixin):
+    id: Optional[str] = None
+    provider: Optional[str] = None
+    voiceId: Optional[str] = None
+    text: Optional[str] = None
+
+
+@dataclass
+class IElements(SerializableMixin):
+    id: Optional[str] = None
+    description: Optional[str] = None
+    frontalImage: Optional[Union[str, File]] = None
+    images: Optional[List[Union[str, File]]] = None
+    videos: Optional[List[str]] = None
+    voice: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+
+
+@dataclass
+class IVideoInputs(SerializableMixin):
+    references: Optional[List[Union[str, File, Dict[str, Any]]]] = None
     image: Optional[Union[str, File]] = None
     images: Optional[List[Union[str, File]]] = None
     frames: Optional[List[IInputFrame]] = None
     frameImages: Optional[List[IInputFrame]] = None
-    referenceImages: Optional[List[IInputReference]] = None
+    referenceImages: Optional[List[Union[str, File]]] = None
+    referenceVideos: Optional[List[str]] = None
+    referenceVoices: Optional[List[str]] = None
     video: Optional[str] = None
-    audio: Optional[str] = None
+    audio: Optional[Union[str, List[IAudioInput]]] = None
+    speech: Optional[List[ISpeechInput]] = None
     mask: Optional[Union[str, File]] = None
     frame: Optional[str] = None
-    
+    draftId: Optional[str] = None
+    videoId: Optional[str] = None
+    avatar: Optional[str] = None
+    background: Optional[str] = None
+    elements: Optional[List[Union[IElements, Dict[str, Any]]]] = None
+
     def __post_init__(self):
         if self.frames is not None:
             warnings.warn(
@@ -617,7 +972,33 @@ class IVideoInputs(BaseRequestField):
                 stacklevel=3
             )
             if self.referenceImages is None:
-                self.referenceImages = [IInputReference(image=ref) if isinstance(ref, (str, File)) else IInputReference(**ref) for ref in self.references]
+                self.referenceImages = [ref for ref in self.references]
+        
+        if self.referenceImages:
+            # Check if IInputReference objects are used and convert them to strings
+            if any(isinstance(ref, IInputReference) for ref in self.referenceImages):
+                warnings.warn(
+                    "Using 'IInputReference' objects in 'IVideoInputs.referenceImages' is deprecated. Use strings or File objects directly instead.",
+                    DeprecationWarning,
+                    stacklevel=3
+                )
+                self.referenceImages = [ref.image if isinstance(ref, IInputReference) else ref for ref in self.referenceImages]
+        if self.elements:
+            self.elements = [
+                IElements(**item) if isinstance(item, dict) else item
+                for item in self.elements
+            ]
+
+    @property
+    def request_key(self) -> str:
+        return "inputs"
+
+
+@dataclass
+class I3dInputs(SerializableMixin):
+    image: Optional[Union[str, File]] = None
+    mask: Optional[Union[str, File]] = None
+    meshFile: Optional[Union[str, File]] = None
 
     @property
     def request_key(self) -> str:
@@ -633,7 +1014,7 @@ class IImageInference:
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IOutputFormat] = None
     uploadEndpoint: Optional[str] = None
-    checkNsfw: Optional[bool] = None
+    checkNsfw: InitVar[Optional[bool]] = None
     negativePrompt: Optional[str] = None
     seedImage: Optional[Union[File, str]] = None
     maskImage: Optional[Union[File, str]] = None
@@ -655,30 +1036,80 @@ class IImageInference:
     lycoris: Optional[List[ILycoris]] = field(default_factory=list)
     includeCost: Optional[bool] = None
     onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]] = None
-    refiner: Optional[IRefiner] = None
+    refiner: Optional[Union[IRefiner, Dict[str, Any]]] = None
     vae: Optional[str] = None
     maskMargin: Optional[int] = None
     outputQuality: Optional[int] = None
-    embeddings: Optional[List[IEmbedding]] = field(default_factory=list)
-    outpaint: Optional[IOutpaint] = None
-    instantID: Optional[IInstantID] = None
-    ipAdapters: Optional[List[IIpAdapter]] = field(default_factory=list)
+    embeddings: Optional[List[Union[IEmbedding, Dict[str, Any]]]] = field(default_factory=list)
+    outpaint: Optional[Union[IOutpaint, Dict[str, Any]]] = None
+    instantID: Optional[Union[IInstantID, Dict[str, Any]]] = None
+    ipAdapters: Optional[List[Union[IIpAdapter, Dict[str, Any]]]] = field(default_factory=list)
     referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
-    acePlusPlus: Optional[IAcePlusPlus] = None
-    puLID: Optional[IPuLID] = None
+    acePlusPlus: Optional[Union[IAcePlusPlus, Dict[str, Any]]] = None
+    puLID: Optional[Union[IPuLID, Dict[str, Any]]] = None
+    photoMaker: Optional[Union[IPhotoMakerSettings, Dict[str, Any]]] = None
     providerSettings: Optional[ImageProviderSettings] = None
-    safety: Optional[ISafety] = None
-    inputs: Optional[IInputs] = None
+    safety: Optional[Union[ISafety, Dict[str, Any]]] = None
+    settings: Optional[Union[ISettings, Dict[str, Any]]] = None
+    inputs: Optional[Union[IInputs, Dict[str, Any]]] = None
+    ultralytics: Optional[Union[IUltralytics, Dict[str, Any]]] = None
     useCache: Optional[bool] = None
+    resolution: Optional[str] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
     webhookURL: Optional[str] = None
+    ttl: Optional[int] = None  # time-to-live (TTL) in seconds, only applies when outputType is "URL"
+
+    def __post_init__(self, checkNsfw: Optional[bool] = None):
+        if checkNsfw is not None:
+            warnings.warn(
+                "checkNsfw has been deprecated and will be removed in a future version; please use safety.checkContent instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if checkNsfw:
+                if self.safety is None:
+                    self.safety = ISafety(checkContent=True)
+                elif isinstance(self.safety, dict):
+                    self.safety.setdefault("checkContent", True)
+                elif hasattr(self.safety, "checkContent") and getattr(self.safety, "checkContent") is None:
+                    self.safety.checkContent = True
+        if self.safety is not None and isinstance(self.safety, dict):
+            self.safety = ISafety(**self.safety)
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = ISettings(**self.settings)
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = IInputs(**self.inputs)
+        if self.outpaint is not None and isinstance(self.outpaint, dict):
+            self.outpaint = IOutpaint(**self.outpaint)
+        if self.refiner is not None and isinstance(self.refiner, dict):
+            self.refiner = IRefiner(**self.refiner)
+        if self.embeddings:
+            self.embeddings = [
+                IEmbedding(**item) if isinstance(item, dict) else item
+                for item in self.embeddings
+            ]
+        if self.photoMaker is not None and isinstance(self.photoMaker, dict):
+            self.photoMaker = IPhotoMakerSettings(**self.photoMaker)
+        if self.instantID is not None and isinstance(self.instantID, dict):
+            self.instantID = IInstantID(**self.instantID)
+        if self.acePlusPlus is not None and isinstance(self.acePlusPlus, dict):
+            self.acePlusPlus = IAcePlusPlus(**self.acePlusPlus)
+        if self.puLID is not None and isinstance(self.puLID, dict):
+            self.puLID = IPuLID(**self.puLID)
+        if self.ultralytics is not None and isinstance(self.ultralytics, dict):
+            self.ultralytics = IUltralytics(**self.ultralytics)
+        if self.ipAdapters:
+            self.ipAdapters = [
+                IIpAdapter(**item) if isinstance(item, dict) else item
+                for item in self.ipAdapters
+            ]
 
 
 @dataclass
 class IImageCaption:
     inputImages: Optional[List[Union[File, str]]] = None  # Primary: array of images (UUIDs, URLs, base64, dataURI)
     inputImage: Optional[Union[File, str]] = None  # Convenience: single image, defaults to inputImages[0] if not provided
-    prompt: List[str] = field(default_factory=lambda: ["Describe this image in detail"])  # Array of prompts with default
+    prompt: Optional[List[str]] = None  
     model: Optional[str] = None  # Optional: AIR ID (runware:150@1, runware:150@2) - backend handles default
     includeCost: bool = False
     template: Optional[str] = None
@@ -686,9 +1117,10 @@ class IImageCaption:
 
 
 @dataclass
-class IAudioSettings(BaseRequestField):
+class IAudioSettings(SerializableMixin):
     sampleRate: Optional[int] = None  # Min: 8000, Max: 48000, Default: 44100
     bitrate: Optional[int] = None  # Min: 32, Max: 320, Default: 128
+    channels: Optional[int] = None  
 
     @property
     def request_key(self) -> str:
@@ -696,7 +1128,7 @@ class IAudioSettings(BaseRequestField):
 
 
 @dataclass
-class IElevenLabsCompositionSection:
+class IElevenLabsCompositionSection(SerializableMixin):
     sectionName: str  # 1-100 characters
     positiveLocalStyles: List[str]  # Styles that should be present in this section
     negativeLocalStyles: List[str]  # Styles that should not be present in this section
@@ -705,22 +1137,29 @@ class IElevenLabsCompositionSection:
 
 
 @dataclass
-class IElevenLabsCompositionPlan:
+class IElevenLabsCompositionPlan(SerializableMixin):
     positiveGlobalStyles: List[str]  # Styles that should be present in the entire song
     negativeGlobalStyles: List[str]  # Styles that should not be present in the entire song
     sections: List[IElevenLabsCompositionSection]  # Sections of the song
 
 
 @dataclass
-class IElevenLabsMusicSettings:
+class IElevenLabsMusicSettings(SerializableMixin):
     compositionPlan: IElevenLabsCompositionPlan  # Music composition structure
+
+
+@dataclass
+class IImageToTextStructuredData:
+    ageGroup: Optional[str] = None
+    confidence: Optional[float] = None
 
 
 @dataclass
 class IImageToText:
     taskType: ETaskType
     taskUUID: str
-    text: str
+    text: Optional[str] = None  
+    structuredData: Optional[IImageToTextStructuredData] = None
     cost: Optional[float] = None
 
 
@@ -742,21 +1181,30 @@ class IImageBackgroundRemoval(IImageCaption):
     outputQuality: Optional[int] = None
     model: Optional[Union[int, str]] = None
     taskUUID: Optional[str] = None
-    settings: Optional[IBackgroundRemovalSettings] = None
+    settings: Optional[Union[IBackgroundRemovalSettings, Dict[str, Any]]] = None
     providerSettings: Optional[ImageProviderSettings] = None
-    safety: Optional[ISafety] = None
+    safety: Optional[Union[ISafety, Dict[str, Any]]] = None
+
+    def __post_init__(self):
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = IBackgroundRemovalSettings(**self.settings)
+        if self.safety is not None and isinstance(self.safety, dict):
+            self.safety = ISafety(**self.safety)
 
 
 @dataclass
 class IVectorize:
-    
-    inputs: IInputs  = None
+    inputs: Optional[IInputs] = None
     includeCost: bool = False
     taskUUID: Optional[str] = None
-    model: Optional[str] = None  
-    outputType: Optional[IOutputType] = "URL"  
-    outputFormat: Optional[IOutputFormat] = "SVG"  
+    model: Optional[str] = None
+    outputType: Optional[IOutputType] = "URL"
+    outputFormat: Optional[IOutputFormat] = "SVG"
     webhookURL: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    positivePrompt: Optional[str] = None
+    providerSettings: Optional[VectorizeProviderSettings] = None
 
 
 @dataclass
@@ -803,14 +1251,22 @@ class IImageUpscale:
     upscaleFactor: float  # Changed to float to support decimal values like 1.5
     inputImage: Optional[Union[str, File]] = None
     model: Optional[str] = None  # Model AIR ID (runware:500@1, runware:501@1, runware:502@1, runware:503@1)
-    settings: Optional[IUpscaleSettings] = None  # Advanced upscaling settings
+    settings: Optional[Union[IUpscaleSettings, Dict[str, Any]]] = None  # Advanced upscaling settings
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IOutputFormat] = None
     includeCost: bool = False
     webhookURL: Optional[str] = None
     providerSettings: Optional[ImageProviderSettings] = None
-    safety: Optional[ISafety] = None
-    inputs: Optional[IInputs] = None
+    safety: Optional[Union[ISafety, Dict[str, Any]]] = None
+    inputs: Optional[Union[IInputs, Dict[str, Any]]] = None
+
+    def __post_init__(self):
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = IUpscaleSettings(**self.settings)
+        if self.safety is not None and isinstance(self.safety, dict):
+            self.safety = ISafety(**self.safety)
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = IInputs(**self.inputs)
 
 
 class ReconnectingWebsocketProps:
@@ -851,6 +1307,7 @@ class IUploadModelBaseType:
     format: str
     private: bool
     category: str
+    taskUUID: Optional[str] = None
     heroImageURL: Optional[str] = None
     tags: Optional[List[str]] = field(default_factory=list)
     shortDescription: Optional[str] = None
@@ -942,6 +1399,9 @@ class IKlingCameraControl(SerializableMixin):
 class IGoogleProviderSettings(BaseProviderSettings):
     generateAudio: Optional[bool] = None
     enhancePrompt: Optional[bool] = None
+    search: Optional[bool] = None
+    resizeMode: Optional[str] = None
+    safetyTolerance: Optional[str] = None
 
     @property
     def provider_key(self) -> str:
@@ -962,6 +1422,9 @@ class IBytedanceProviderSettings(BaseProviderSettings):
     cameraFixed: Optional[bool] = None
     maxSequentialImages: Optional[int] = None  # Min: 1, Max: 15 - Maximum number of sequential images to generate
     fastMode: Optional[bool] = None  # When enabled, speeds up generation by sacrificing some effects. Default: false. RTF: 25-28 (fast) vs 35 (normal)
+    audio: Optional[bool] = None
+    draft: Optional[bool] = None
+    optimizePromptMode: Optional[str] = None  
 
     @property
     def provider_key(self) -> str:
@@ -971,35 +1434,27 @@ class IBytedanceProviderSettings(BaseProviderSettings):
 
 
 @dataclass
+class IKlingMultiPrompt(SerializableMixin):
+    prompt: str
+    duration: float
+
+
+@dataclass
 class IKlingAIProviderSettings(BaseProviderSettings):
+    sound: Optional[bool] = None
     cameraControl: Optional[IKlingCameraControl] = None
-    soundVolume: Optional[float] = None  
+    soundVolume: Optional[float] = None
     originalAudioVolume: Optional[float] = None
-    soundEffectPrompt: Optional[str] = None  
-    bgmPrompt: Optional[str] = None  
-    asmrMode: Optional[bool] = None  
+    soundEffectPrompt: Optional[str] = None
+    bgmPrompt: Optional[str] = None
+    asmrMode: Optional[bool] = None
+    keepOriginalSound: Optional[bool] = None
+    characterOrientation: Optional[str] = None
+    multiPrompt: Optional[List[IKlingMultiPrompt]] = None
 
     @property
     def provider_key(self) -> str:
         return "klingai"
-
-    def serialize(self) -> Dict[str, Any]:
-        result = {}
-        if self.cameraControl:
-            camera_control_data = self.cameraControl.serialize()
-            if camera_control_data:
-                result["cameraControl"] = camera_control_data
-        if self.soundVolume is not None:
-            result["soundVolume"] = self.soundVolume
-        if self.originalAudioVolume is not None:
-            result["originalAudioVolume"] = self.originalAudioVolume
-        if self.soundEffectPrompt is not None:
-            result["soundEffectPrompt"] = self.soundEffectPrompt
-        if self.bgmPrompt is not None:
-            result["bgmPrompt"] = self.bgmPrompt
-        if self.asmrMode is not None:
-            result["asmrMode"] = self.asmrMode
-        return result
 
 
 @dataclass
@@ -1018,13 +1473,27 @@ class ILumaProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class IPixverseSpeechSettings(BaseRequestField):
+class IVideoSpeechSettings(SerializableMixin):
     voice: Optional[str] = None  # Speaker voice from the available TTS speaker list
     text: Optional[str] = None  # Text script to be converted to speech (~200 characters, not UTF-8 Encoding)
+    speed: Optional[float] = None
+    pitch: Optional[float] = None
+    language: Optional[str] = None
 
     @property
     def request_key(self) -> str:
         return "speech"
+
+
+@dataclass
+class IPixverseSpeechSettings(IVideoSpeechSettings):
+    
+    def __post_init__(self):
+        warnings.warn(
+            "IPixverseSpeechSettings is deprecated and will be removed in a future release. Use IVideoSpeechSettings instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
 
 
 @dataclass
@@ -1035,6 +1504,9 @@ class IPixverseProviderSettings(BaseProviderSettings):
     motionMode: Optional[str] = None
     soundEffectSwitch: Optional[bool] = None
     soundEffectContent: Optional[str] = None
+    audio: Optional[bool] = None  
+    multiClip: Optional[bool] = None  
+    thinking: Optional[str] = None  
 
     @property
     def provider_key(self) -> str:
@@ -1042,7 +1514,7 @@ class IPixverseProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class IViduTemplate:
+class IViduTemplate(SerializableMixin):
     name: Optional[str] = None
     area: Optional[str] = None
     beast: Optional[str] = None
@@ -1053,6 +1525,7 @@ class IViduProviderSettings(BaseProviderSettings):
     style: Optional[str] = None
     movementAmplitude: Optional[str] = None
     template: Optional[IViduTemplate] = None
+    audio: Optional[bool] = None
 
     @property
     def provider_key(self) -> str:
@@ -1090,7 +1563,31 @@ class IRunwayProviderSettings(BaseProviderSettings):
         return result
 
 
-AudioProviderSettings = IElevenLabsProviderSettings | IKlingAIProviderSettings
+@dataclass
+class ISyncSegment(SerializableMixin):
+    startTime: float
+    endTime: float
+    ref: str
+    audioStartTime: Optional[float] = None
+    audioEndTime: Optional[float] = None
+
+
+@dataclass
+class ISyncProviderSettings(BaseProviderSettings):
+    syncMode: Optional[str] = None
+    editRegion: Optional[str] = None
+    emotionPrompt: Optional[str] = None
+    temperature: Optional[float] = None
+    activeSpeakerDetection: Optional[bool] = None
+    occlusionDetectionEnabled: Optional[bool] = None
+    segments: Optional[List[ISyncSegment]] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "sync"
+
+
+AudioProviderSettings = IElevenLabsProviderSettings | IKlingAIProviderSettings | IMireloProviderSettings
 VideoProviderSettings = (
     IKlingAIProviderSettings
     | IGoogleProviderSettings
@@ -1101,15 +1598,16 @@ VideoProviderSettings = (
     | IRunwayProviderSettings
     | ILightricksProviderSettings
     | ILumaProviderSettings
+    | ISyncProviderSettings
 )
 
 @dataclass
 class IVideoInference:
     model: str
     positivePrompt: Optional[str] = None
-    duration: float | None = None
-    width: int | None = None
-    height: int | None = None
+    duration: Optional[float] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
     deliveryMethod: str = "async"
     taskUUID: Optional[str] = None
     outputType: Optional[IOutputType] = None
@@ -1125,19 +1623,39 @@ class IVideoInference:
     inputAudios: Optional[List[str]] = None
     fps: Optional[int] = None
     steps: Optional[int] = None
+    scheduler: Optional[str] = None
     seed: Optional[int] = None
     CFGScale: Optional[float] = None
     acceleration: Optional[str] = None
-    numberResults: Optional[int] = 1
+    numberResults: Optional[int] = None
     providerSettings: Optional[VideoProviderSettings] = None
-    speech: Optional[IPixverseSpeechSettings] = None
+    speech: Optional[IVideoSpeechSettings] = None
     webhookURL: Optional[str] = None
     nsfw_check: Optional[Literal["none", "fast", "full"]] = None
-    safety: Optional[ISafety] = None
+    safety: Optional[Union[ISafety, Dict[str, Any]]] = None
     advancedFeatures: Optional[IVideoAdvancedFeatures] = None
     acceleratorOptions: Optional[IAcceleratorOptions] = None
-    inputs: Optional[IVideoInputs] = None
-    skipResponse: Optional[bool] = False
+    inputs: Optional[Union[IVideoInputs, Dict[str, Any]]] = None
+    resolution: Optional[str] = None
+    settings: Optional[Union[ISettings, Dict[str, Any]]] = None
+    skipResponse: InitVar[Optional[bool]] = None
+
+    def __post_init__(self, skipResponse: Optional[bool] = None) -> None:
+        if skipResponse is not None:
+            warnings.warn(
+                "skipResponse has been deprecated; use deliveryMethod='async' instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = ISettings(**self.settings)
+        if self.safety is not None and isinstance(self.safety, dict):
+            self.safety = ISafety(**self.safety)
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = IVideoInputs(**self.inputs)
+
+
+I3dOutputFormat = Literal["GLB", "PLY"]
 
     def __post_init__(self):
         if self.skipResponse:
@@ -1150,8 +1668,34 @@ class IVideoInference:
 
 
 @dataclass
-class IAudioInputs(BaseRequestField):
+class I3dInference:
+    model: str
+    positivePrompt: Optional[str] = None
+    seed: Optional[int] = None
+    taskUUID: Optional[str] = None
+    numberResults: Optional[int] = 1
+    outputType: Optional[IOutputType] = None
+    outputFormat: Optional[I3dOutputFormat] = None  # "GLB" | "PLY"
+    outputQuality: Optional[int] = None
+    includeCost: Optional[bool] = None
+    deliveryMethod: str = "async"
+    webhookURL: Optional[str] = None
+    inputs: Optional[Union[I3dInputs, Dict[str, Any]]] = None
+    settings: Optional[Union[ISettings, Dict[str, Any]]] = None
+
+    def __post_init__(self):
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = ISettings(**self.settings)
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = I3dInputs(**self.inputs)
+
+
+@dataclass
+class IAudioInputs(SerializableMixin):
+    audio: Optional[str] = None
     video: Optional[str] = None
+    videos: Optional[List[str]] = None
+    audio: Optional[str] = None  
 
     @property
     def request_key(self) -> str:
@@ -1159,10 +1703,31 @@ class IAudioInputs(BaseRequestField):
 
 
 @dataclass
+class IAudioSpeech(SerializableMixin):
+    text: Optional[str] = None  
+    voice: Optional[str] = None
+    language: Optional[str] = None
+    speed: Optional[float] = None
+    volume: Optional[int] = None
+    pitch: Optional[int] = None
+    emotion: Optional[str] = None
+    tone: Optional[List[str]] = None  
+
+    @property
+    def request_key(self) -> str:
+        return "speech"
+
+
+@dataclass
 class IAudioInference:
     model: str
     positivePrompt: Optional[str] = None  # Optional when using composition plan
+    negativePrompt: Optional[str] = None
     duration: Optional[float] = None  # Min: 10, Max: 300 - Optional when using composition plan
+    seed: Optional[int] = None
+    steps: Optional[int] = None
+    strength: Optional[float] = None
+    CFGScale: Optional[float] = None
     taskUUID: Optional[str] = None
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IAudioOutputFormat] = None
@@ -1173,7 +1738,34 @@ class IAudioInference:
     uploadEndpoint: Optional[str] = None
     webhookURL: Optional[str] = None
     providerSettings: Optional[AudioProviderSettings] = None  
-    inputs: Optional[IAudioInputs] = None
+    inputs: Optional[Union[IAudioInputs, Dict[str, Any]]] = None
+    speech: Optional[Union[IAudioSpeech, Dict[str, Any]]] = None
+    settings: Optional[Union[ISettings, Dict[str, Any]]] = None
+
+    def __post_init__(self):
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = ISettings(**self.settings)
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = IAudioInputs(**self.inputs)
+        if self.speech is not None and isinstance(self.speech, dict):
+            self.speech = IAudioSpeech(**self.speech)
+
+
+@dataclass
+class IObject:
+    uuid: str
+    url: str
+
+
+@dataclass
+class I3dOutput:
+    files: Optional[List[IObject]] = None
+
+
+@dataclass
+class IOutput:
+    draftId: Optional[str] = None
+    videoId: Optional[str] = None
 
 
 @dataclass
@@ -1187,6 +1779,72 @@ class IVideo:
     mediaURL: Optional[str] = None
     cost: Optional[float] = None
     seed: Optional[int] = None
+    outputs: Optional[IOutput] = None
+
+
+@dataclass
+class I3d:
+    taskType: str
+    taskUUID: str
+    cost: Optional[float] = None
+    status: Optional[str] = None
+    seed: Optional[int] = None
+    outputs: Optional[I3dOutput] = None
+
+
+@dataclass
+class ITextInferenceMessage:
+    role: str
+    content: str
+
+
+@dataclass
+class ITextInferenceUsage:
+    promptTokens: Optional[int] = None
+    completionTokens: Optional[int] = None
+    totalTokens: Optional[int] = None
+    thinkingTokens: Optional[int] = None
+
+
+@dataclass
+class IGoogleTextProviderSettings(BaseProviderSettings):
+    thinkingLevel: Optional[str] = None
+
+    @property
+    def provider_key(self) -> str:
+        return "google"
+
+
+TextProviderSettings = IGoogleTextProviderSettings
+
+
+@dataclass
+class ITextInference:
+    model: str
+    messages: List[ITextInferenceMessage]
+    taskUUID: Optional[str] = None
+    deliveryMethod: str = "sync"
+    numberResults: Optional[int] = 1
+    maxTokens: Optional[int] = None
+    temperature: Optional[float] = None
+    topP: Optional[float] = None  
+    topK: Optional[int] = None  
+    seed: Optional[int] = None  
+    stopSequences: Optional[List[str]] = None  
+    includeCost: Optional[bool] = None
+    providerSettings: Optional[TextProviderSettings] = None
+    webhookURL: Optional[str] = None
+
+
+@dataclass
+class IText:
+    taskType: str
+    taskUUID: str
+    text: Optional[str] = None
+    finishReason: Optional[str] = None
+    usage: Optional[ITextInferenceUsage] = None
+    cost: Optional[float] = None
+    status: Optional[str] = None
 
 
 @dataclass
@@ -1198,6 +1856,9 @@ class IAudio:
     audioURL: Optional[str] = None
     audioBase64Data: Optional[str] = None
     audioDataURI: Optional[str] = None
+    videoUUID: Optional[str] = None
+    videoURL: Optional[str] = None
+    seed: Optional[int] = None
     cost: Optional[float] = None
 
 
@@ -1236,7 +1897,11 @@ class IVideoBackgroundRemoval:
     includeCost: Optional[bool] = None
     webhookURL: Optional[str] = None
     outputFormat: Optional[str] = None  # MP4, WEBM
-    settings: Optional[IVideoBackgroundRemovalSettings] = None
+    settings: Optional[Union[IVideoBackgroundRemovalSettings, Dict[str, Any]]] = None
+
+    def __post_init__(self):
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = IVideoBackgroundRemovalSettings(**self.settings)
 
 
 @dataclass
@@ -1249,12 +1914,18 @@ class IVideoUpscale:
     model: str
     inputs: IVideoUpscaleInputs
     upscaleFactor: Optional[int] = None  # 2 or 4 (optional, not supported by all models)
+    width: Optional[int] = None
+    height: Optional[int] = None
+    fps: Optional[int] = None
     deliveryMethod: str = "async"
     taskUUID: Optional[str] = None
     includeCost: Optional[bool] = None
     webhookURL: Optional[str] = None
     outputType: Optional[IOutputType] = None
-    outputFormat: Optional[str] = None  # MP4, WEBM 
+    outputFormat: Optional[str] = None  # MP4, WEBM
+    width: Optional[int] = None
+    height: Optional[int] = None
+    fps: Optional[int] = None
 
 
 @dataclass

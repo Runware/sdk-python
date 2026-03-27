@@ -9,7 +9,7 @@ import websockets
 from websockets.protocol import State
 from typing import Any, Dict, Optional
 
-from .types import SdkType
+from .types import SdkType, OperationState
 from .utils import (
     BASE_RUNWARE_URLS,
     PING_INTERVAL,
@@ -58,9 +58,12 @@ class RunwareServer(RunwareBase):
         self._last_pong_time = time.perf_counter()
 
         try:
-            self._ws = await websockets.connect(self._url, additional_headers=self._additional_headers)
+            self._ws = await websockets.connect(
+                self._url,
+                max_size=None,
+                additional_headers=self._additional_headers,
+            )
             self._ws.close_timeout = 1
-            self._ws.max_size = None
             self.logger.info(f"Connected to WebSocket URL: {self._url}")
 
             async def on_open(ws):
@@ -95,6 +98,7 @@ class RunwareServer(RunwareBase):
                         self._connectionSessionUUID = m["data"][0].get("connectionSessionUUID")
                         self._invalidAPIkey = None
                         self._reconnection_manager.on_connection_success()
+                        self.logger.info(f"Authentication successful. connectionSessionUUID: {self._connectionSessionUUID}")
                         self._connection_session_uuid_event.set()
 
                 if not self._loginListener:
@@ -116,9 +120,6 @@ class RunwareServer(RunwareBase):
                         check=pong_check, lis=pong_lis
                     )
 
-                if self._reconnecting_task:
-                    self._reconnecting_task.cancel()
-                    self._tasks.pop("Task_Reconnecting", None)
 
                 if self._connectionSessionUUID and self.isWebsocketReadyState():
                     self.logger.info(
@@ -145,6 +146,16 @@ class RunwareServer(RunwareBase):
                     )
 
                 if self.isWebsocketReadyState():
+                    # Cancel existing heartbeat task to prevent duplicates
+                    if self._heartbeat_task and not self._heartbeat_task.done():
+                        self.logger.info("Cancelling existing heartbeat task")
+                        self._heartbeat_task.cancel()
+                        try:
+                            await self._heartbeat_task
+                        except asyncio.CancelledError:
+                            # Expected when cancelling the previous heartbeat task; safe to ignore.
+                            pass
+                    
                     self.logger.info("Starting heartbeat task")
                     self._heartbeat_task = asyncio.create_task(
                         self.heartBeat(), name="Task_Heartbeat"
@@ -168,6 +179,8 @@ class RunwareServer(RunwareBase):
     async def disconnect(self):
         self.logger.info("Disconnecting from Runware server")
         self._is_shutting_down = True
+
+        await self._cancel_pending_operations("Disconnected by user")
 
         for task_name, task in list(self._tasks.items()):
             if task and not task.done():
@@ -210,6 +223,44 @@ class RunwareServer(RunwareBase):
         except json.JSONDecodeError as e:
             self.logger.error(f"Failed to parse JSON message:", exc_info=e)
             return
+
+        handled_task_uuids = set()
+
+        if self._pending_operations:
+            if "data" in m and isinstance(m["data"], list):
+                for item in m["data"]:
+                    task_uuid = item.get("taskUUID")
+                    if task_uuid and await self._handle_pending_operation_message(item):
+                        handled_task_uuids.add(task_uuid)
+
+            if "errors" in m and isinstance(m["errors"], list):
+                for error in m["errors"]:
+                    task_uuid = error.get("taskUUID")
+                    if task_uuid and await self._handle_pending_operation_error(error):
+                        handled_task_uuids.add(task_uuid)
+
+            if handled_task_uuids:
+                remaining_data = [
+                    item for item in m.get("data", [])
+                    if item.get("taskUUID") not in handled_task_uuids
+                ]
+                remaining_errors = [
+                    err for err in m.get("errors", [])
+                    if err.get("taskUUID") not in handled_task_uuids
+                ]
+
+                if not remaining_data and not remaining_errors:
+                    return
+
+                m = dict(m)
+                if remaining_data:
+                    m["data"] = remaining_data
+                elif "data" in m:
+                    del m["data"]
+                if remaining_errors:
+                    m["errors"] = remaining_errors
+                elif "errors" in m:
+                    del m["errors"]
 
         listeners_snapshot = list(self._listeners)
 
@@ -308,6 +359,8 @@ class RunwareServer(RunwareBase):
     async def handleClose(self):
         self.logger.debug("Handling close")
 
+        await self._cancel_pending_operations("Connection lost during operation")
+
         reconnecting_task = self._tasks.get("Task_Reconnecting")
         if reconnecting_task is not None:
             if not reconnecting_task.done() and not reconnecting_task.cancelled():
@@ -356,6 +409,10 @@ class RunwareServer(RunwareBase):
                     break
 
                 try:
+                    
+                    self._connectionSessionUUID = None
+                    self._invalidAPIkey = None
+                    
                     await self.connect()
                     if self.isWebsocketReadyState():
                         self.logger.info("Reconnected successfully")
@@ -372,6 +429,31 @@ class RunwareServer(RunwareBase):
                 reconnect(), name="Task_Reconnecting"
             )
             self._tasks["Task_Reconnecting"] = self._reconnecting_task
+
+    async def _cancel_pending_operations(self, reason: str = "Connection closed"):
+        async with self._operations_lock:
+            operations_to_remove = []
+
+            for task_uuid, op in self._pending_operations.items():
+                future = op.get("future")
+                state = op.get("state", OperationState.REGISTERED)
+
+                if state == OperationState.REGISTERED:
+                    if future and not future.done():
+                        future.set_exception(ConnectionError(
+                            f"{reason} | TaskUUID: {task_uuid} | Request was not sent"
+                        ))
+                    operations_to_remove.append(task_uuid)
+
+                elif state == OperationState.SENT:
+                    op["state"] = OperationState.DISCONNECTED
+                    if future and not future.done():
+                        future.set_exception(ConnectionError(
+                            f"{reason} | TaskUUID: {task_uuid}"
+                        ))
+
+            for task_uuid in operations_to_remove:
+                del self._pending_operations[task_uuid]
 
     async def heartBeat(self):
         if self._last_pong_time == 0.0:
