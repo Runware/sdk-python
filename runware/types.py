@@ -1888,10 +1888,7 @@ class IVideoUpscale:
     includeCost: Optional[bool] = None
     webhookURL: Optional[str] = None
     outputType: Optional[IOutputType] = None
-    outputFormat: Optional[str] = None  # MP4, WEBM
-    width: Optional[int] = None
-    height: Optional[int] = None
-    fps: Optional[int] = None
+    outputFormat: Optional[str] = None  # MP4, WEBM 
 
 
 @dataclass
