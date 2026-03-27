@@ -49,7 +49,7 @@ class RunwareServer(RunwareBase):
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._tasks: Dict[str, asyncio.Task] = {}
         self._additional_headers: Dict[str, str] = {
-            "X-SDK-Type": "python",
+            "X-SDK-Name": "python",
             "X-SDK-Version": __version__
         }
 

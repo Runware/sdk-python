@@ -1657,15 +1657,6 @@ class IVideoInference:
 
 I3dOutputFormat = Literal["GLB", "PLY"]
 
-    def __post_init__(self):
-        if self.skipResponse:
-            warnings.warn(
-                "The 'skipResponse' parameter is deprecated and will be removed in a future release. "
-                "Use 'getResponse(taskUUID=taskUUID)' instead to retrieve results asynchronously.",
-                DeprecationWarning,
-                stacklevel=3
-            )
-
 
 @dataclass
 class I3dInference:
@@ -1695,7 +1686,6 @@ class IAudioInputs(SerializableMixin):
     audio: Optional[str] = None
     video: Optional[str] = None
     videos: Optional[List[str]] = None
-    audio: Optional[str] = None  
 
     @property
     def request_key(self) -> str:
