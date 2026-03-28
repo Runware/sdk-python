@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.3]
+
+### Added
+- Added `width: Optional[int]`, `height: Optional[int]`, and `fps: Optional[int]` to `IVideoUpscale`.
+- Added `IElements` dataclass for video inference `inputs.elements[]` with:
+  - `id: Optional[str]`
+  - `description: Optional[str]`
+  - `frontalImage: Optional[Union[str, File]]`
+  - `images: Optional[List[Union[str, File]]]`
+  - `videos: Optional[List[str]]`
+  - `voice: Optional[List[str]]`
+  - `tags: Optional[List[str]]`
+- Added `elements: Optional[List[Union[IElements, Dict[str, Any]]]]` to `IVideoInputs`.
+- `IAudioOutputFormat` extended with `wav`, `mp3`, `pcm`, `opus`, `aac`, `flac` (existing `MP3` retained).
+- `ISettings`: `maxNewTokens`, `transcript`, `xVectorOnly` for reference-audio / ICL TTS flows.
+- `IAudioInputs`: `audio` (reference audio URL or data URI).
+- `IAudioSpeech`: `language` (e.g. input language for TTS).
+
+### Changed
+- Updated `_requestVideoUpscale()` to forward `width`, `height`, and `fps` when provided.
+- Updated `IVideoInputs.__post_init__` to coerce `inputs.elements` dictionary items into `IElements` instances.
+
 ## [0.5.2]
 
 ### Added
