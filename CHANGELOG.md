@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.4]
+
+### Added
+- Added `runware/version.py` as the canonical `__version__` string; `runware/__init__.py` imports it so `from runware import __version__` matches the package version.
+- WebSocket connections send additional headers on connect: `X-SDK-Name: python` and `X-SDK-Version: <__version__>` (see `runware/server.py`).
+
+## [0.5.3]
+
+### Added
+- Added `width: Optional[int]`, `height: Optional[int]`, and `fps: Optional[int]` to `IVideoUpscale`.
+- Added `IElements` dataclass for video inference `inputs.elements[]` with:
+  - `id: Optional[str]`
+  - `description: Optional[str]`
+  - `frontalImage: Optional[Union[str, File]]`
+  - `images: Optional[List[Union[str, File]]]`
+  - `videos: Optional[List[str]]`
+  - `voice: Optional[List[str]]`
+  - `tags: Optional[List[str]]`
+- Added `elements: Optional[List[Union[IElements, Dict[str, Any]]]]` to `IVideoInputs`.
+- `IAudioOutputFormat` extended with `wav`, `mp3`, `pcm`, `opus`, `aac`, `flac` (existing `MP3` retained).
+- `ISettings`: `maxNewTokens`, `transcript`, `xVectorOnly` for reference-audio / ICL TTS flows.
+- `IAudioInputs`: `audio` (reference audio URL or data URI).
+- `IAudioSpeech`: `language` (e.g. input language for TTS).
+
+### Changed
+- Updated `_requestVideoUpscale()` to forward `width`, `height`, and `fps` when provided.
+- Updated `IVideoInputs.__post_init__` to coerce `inputs.elements` dictionary items into `IElements` instances.
+
+## [0.5.2]
+
+### Added
+- Added photoMaker as a nested object in imageInference using `IPhotoMakerSettings`; `IImageInference.photoMaker: Optional[Union[IPhotoMakerSettings, Dict[str, Any]]]`. Nested settings use images/inputImages + style/strength. Standalone `taskType="photoMaker"` remains a separate operation via `IPhotoMaker`.
+- Added `IIpAdapter.guideImages`, `combineMethod`, `weightType`, `embedScaling`, `weightComposition`; `guideImage` optional; base supports `guideImages` with `process_image`.
+- Added `IEmbedding.weight: Optional[float]`.
+- Added dict coercion in `IImageInference.post_init` for `photoMaker`, `instantID`, `acePlusPlus`, `puLID`, `ultralytics`, `outpaint`, `refiner`; list coercion for embeddings (`dict` -> `IEmbedding`) and ipAdapters (`dict` -> `IIpAdapter`).
+- Added `IInputReference.type` and `IInputReference.strength` (for sketch-style refs).
+- Added image inference support so `inputs.referenceImages` can be `IInputReference` items; each image is run through `process_image` before send.
+- Added `IGoogleProviderSettings.safetyTolerance`.
+- Added `bpm`, `keyScale`, `timeSignature`, `vocalLanguage`, `coverConditioningScale`, `repaintingStart`, and `repaintingEnd` to `ISettings`.
+- Added `audio: Optional[str]` to `IAudioInputs`.
+- Added `IGoogleProviderSettings.resizeMode`.
+
+### Changed
+- `IImageInference`: `refiner`, `outpaint`, `instantID`, `acePlusPlus`, `puLID`, `ultralytics`, `photoMaker` typed as `Union[Type, Dict[str, Any]]`; embeddings as `List[Union[IEmbedding, Dict[str, Any]]]`; ipAdapters as `List[Union[IIpAdapter, Dict[str, Any]]]`.
+
 ## [0.5.1]
 
 ### Added

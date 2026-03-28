@@ -118,7 +118,7 @@ class OperationState(Enum):
 # Define the types using Literal
 IOutputType = Literal["base64Data", "dataURI", "URL"]
 IOutputFormat = Literal["JPG", "PNG", "WEBP", "SVG"]
-IAudioOutputFormat = Literal["MP3"]
+IAudioOutputFormat = Literal["wav", "mp3", "pcm", "opus", "aac", "flac", "MP3"]
 
 
 @dataclass
@@ -185,6 +185,7 @@ class ILycoris:
 @dataclass
 class IEmbedding:
     model: str
+    weight: Optional[float] = None
 
 
 @dataclass
@@ -340,38 +341,26 @@ class IPhotoMaker:
     numberResults: int = 1
     steps: Optional[int] = None
     outputType: Optional[IOutputType] = None
-    inputImages: List[Union[str, File]] = field(default_factory=list)
+    inputImages: Optional[List[Union[str, File]]] = None
     style: Optional[str] = None
     strength: Optional[float] = None
     outputFormat: Optional[IOutputFormat] = None
     includeCost: Optional[bool] = None
     taskUUID: Optional[str] = None
     webhookURL: Optional[str] = None
+    negativePrompt: Optional[str] = None
+    CFGScale: Optional[float] = None
+    seed: Optional[int] = None
+    scheduler: Optional[str] = None
+    checkNsfw: Optional[bool] = None
 
-    def __post_init__(self):
-        # Validate `inputImages` to ensure it has a maximum of 4 elements
-        if len(self.inputImages) > 4:
-            raise ValueError("inputImages can contain a maximum of 4 elements.")
 
-        # Validate `style` to ensure it matches one of the allowed case-sensitive options
-        valid_styles = {
-            "No style",
-            "Cinematic",
-            "Disney Character",
-            "Digital Art",
-            "Photographic",
-            "Fantasy art",
-            "Neonpunk",
-            "Enhance",
-            "Comic book",
-            "Lowpoly",
-            "Line art",
-        }
-        if self.style and self.style not in valid_styles:
-            raise ValueError(
-                f"style must be one of the following: {', '.join(valid_styles)}."
-            )
-
+@dataclass
+class IPhotoMakerSettings:
+    images: Optional[List[Union[str, File]]] = None
+    inputImages: Optional[List[Union[str, File]]] = None
+    style: Optional[str] = None
+    strength: Optional[float] = None
 
 class SerializableMixin:
     def serialize(self) -> Dict[str, Any]:
@@ -406,8 +395,9 @@ class IOutpaint:
 
 @dataclass
 class IInstantID:
-    inputImage: Union[File, str]
+    inputImage: Optional[Union[File, str]] = None
     poseImage: Optional[Union[File, str]] = None
+    inputImages: Optional[List[Union[str, File]]] = None
     identityNetStrength: Optional[float] = None
     adapterStrength: Optional[float] = None
     controlNetCannyWeight: Optional[float] = None
@@ -418,8 +408,13 @@ class IInstantID:
 @dataclass
 class IIpAdapter:
     model: Union[int, str]
-    guideImage: Union[File, str]
+    guideImage: Optional[Union[File, str]] = None
+    guideImages: Optional[List[Union[str, File]]] = None
     weight: Optional[float] = None
+    combineMethod: Optional[str] = None
+    weightType: Optional[str] = None
+    embedScaling: Optional[str] = None
+    weightComposition: Optional[float] = None
 
 
 @dataclass
@@ -857,6 +852,16 @@ class ISettings(SerializableMixin):
     lyrics: Optional[str] = None
     guidanceType: Optional[str] = None
     textNormalization: Optional[bool] = None
+    maxNewTokens: Optional[int] = None
+    transcript: Optional[str] = None
+    xVectorOnly: Optional[bool] = None
+    bpm: Optional[int] = None
+    keyScale: Optional[str] = None
+    timeSignature: Optional[Union[int, str]] = None
+    vocalLanguage: Optional[str] = None
+    coverConditioningScale: Optional[float] = None
+    repaintingStart: Optional[float] = None
+    repaintingEnd: Optional[float] = None
     # Video
     draft: Optional[bool] = None
     audio: Optional[bool] = None
@@ -902,6 +907,15 @@ class IInputFrame(SerializableMixin):
 class IInputReference(SerializableMixin):
     image: Union[str, File]
     tag: Optional[str] = None
+    refType: Optional[str] = None
+    strength: Optional[float] = None
+
+    def serialize(self) -> Dict[str, Any]:
+        data = super().serialize()
+        if self.refType is not None:
+            data["type"] = self.refType
+            data.pop("refType", None)
+        return data
 
 
 @dataclass
@@ -911,11 +925,11 @@ class IInputs(SerializableMixin):
     image: Optional[Union[str, File]] = None
     mask: Optional[Union[str, File]] = None
     superResolutionReferences: Optional[List[Union[str, File]]] = None
-    
+
     @property
     def request_key(self) -> str:
         return "inputs"
-    
+
     def __post_init__(self):
         if self.references:
             warnings.warn(
@@ -951,6 +965,17 @@ class ISpeechInput(SerializableMixin):
 
 
 @dataclass
+class IElements(SerializableMixin):
+    id: Optional[str] = None
+    description: Optional[str] = None
+    frontalImage: Optional[Union[str, File]] = None
+    images: Optional[List[Union[str, File]]] = None
+    videos: Optional[List[str]] = None
+    voice: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+
+
+@dataclass
 class IVideoInputs(SerializableMixin):
     references: Optional[List[Union[str, File, Dict[str, Any]]]] = None
     image: Optional[Union[str, File]] = None
@@ -969,6 +994,7 @@ class IVideoInputs(SerializableMixin):
     videoId: Optional[str] = None
     avatar: Optional[str] = None
     background: Optional[str] = None
+    elements: Optional[List[Union[IElements, Dict[str, Any]]]] = None
 
     def __post_init__(self):
         if self.frames is not None:
@@ -998,6 +1024,11 @@ class IVideoInputs(SerializableMixin):
                     stacklevel=3
                 )
                 self.referenceImages = [ref.image if isinstance(ref, IInputReference) else ref for ref in self.referenceImages]
+        if self.elements:
+            self.elements = [
+                IElements(**item) if isinstance(item, dict) else item
+                for item in self.elements
+            ]
 
     @property
     def request_key(self) -> str:
@@ -1046,22 +1077,23 @@ class IImageInference:
     lycoris: Optional[List[ILycoris]] = field(default_factory=list)
     includeCost: Optional[bool] = None
     onPartialImages: Optional[Callable[[List[IImage], Optional[IError]], None]] = None
-    refiner: Optional[IRefiner] = None
+    refiner: Optional[Union[IRefiner, Dict[str, Any]]] = None
     vae: Optional[str] = None
     maskMargin: Optional[int] = None
     outputQuality: Optional[int] = None
-    embeddings: Optional[List[IEmbedding]] = field(default_factory=list)
-    outpaint: Optional[IOutpaint] = None
-    instantID: Optional[IInstantID] = None
-    ipAdapters: Optional[List[IIpAdapter]] = field(default_factory=list)
+    embeddings: Optional[List[Union[IEmbedding, Dict[str, Any]]]] = field(default_factory=list)
+    outpaint: Optional[Union[IOutpaint, Dict[str, Any]]] = None
+    instantID: Optional[Union[IInstantID, Dict[str, Any]]] = None
+    ipAdapters: Optional[List[Union[IIpAdapter, Dict[str, Any]]]] = field(default_factory=list)
     referenceImages: Optional[List[Union[str, File]]] = field(default_factory=list)
-    acePlusPlus: Optional[IAcePlusPlus] = None
-    puLID: Optional[IPuLID] = None
+    acePlusPlus: Optional[Union[IAcePlusPlus, Dict[str, Any]]] = None
+    puLID: Optional[Union[IPuLID, Dict[str, Any]]] = None
+    photoMaker: Optional[Union[IPhotoMakerSettings, Dict[str, Any]]] = None
     providerSettings: Optional[ImageProviderSettings] = None
     safety: Optional[Union[ISafety, Dict[str, Any]]] = None
     settings: Optional[Union[ISettings, Dict[str, Any]]] = None
     inputs: Optional[Union[IInputs, Dict[str, Any]]] = None
-    ultralytics: Optional[IUltralytics] = None
+    ultralytics: Optional[Union[IUltralytics, Dict[str, Any]]] = None
     useCache: Optional[bool] = None
     resolution: Optional[str] = None
     extraArgs: Optional[Dict[str, Any]] = field(default_factory=dict)
@@ -1088,13 +1120,37 @@ class IImageInference:
             self.settings = ISettings(**self.settings)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = IInputs(**self.inputs)
+        if self.outpaint is not None and isinstance(self.outpaint, dict):
+            self.outpaint = IOutpaint(**self.outpaint)
+        if self.refiner is not None and isinstance(self.refiner, dict):
+            self.refiner = IRefiner(**self.refiner)
+        if self.embeddings:
+            self.embeddings = [
+                IEmbedding(**item) if isinstance(item, dict) else item
+                for item in self.embeddings
+            ]
+        if self.photoMaker is not None and isinstance(self.photoMaker, dict):
+            self.photoMaker = IPhotoMakerSettings(**self.photoMaker)
+        if self.instantID is not None and isinstance(self.instantID, dict):
+            self.instantID = IInstantID(**self.instantID)
+        if self.acePlusPlus is not None and isinstance(self.acePlusPlus, dict):
+            self.acePlusPlus = IAcePlusPlus(**self.acePlusPlus)
+        if self.puLID is not None and isinstance(self.puLID, dict):
+            self.puLID = IPuLID(**self.puLID)
+        if self.ultralytics is not None and isinstance(self.ultralytics, dict):
+            self.ultralytics = IUltralytics(**self.ultralytics)
+        if self.ipAdapters:
+            self.ipAdapters = [
+                IIpAdapter(**item) if isinstance(item, dict) else item
+                for item in self.ipAdapters
+            ]
 
 
 @dataclass
 class IImageCaption:
     inputImages: Optional[List[Union[File, str]]] = None  # Primary: array of images (UUIDs, URLs, base64, dataURI)
     inputImage: Optional[Union[File, str]] = None  # Convenience: single image, defaults to inputImages[0] if not provided
-    prompt: List[str] = field(default_factory=lambda: ["Describe this image in detail"])  # Array of prompts with default
+    prompt: Optional[List[str]] = None  
     model: Optional[str] = None  # Optional: AIR ID (runware:150@1, runware:150@2) - backend handles default
     includeCost: bool = False
     template: Optional[str] = None
@@ -1134,10 +1190,17 @@ class IElevenLabsMusicSettings(SerializableMixin):
 
 
 @dataclass
+class IImageToTextStructuredData:
+    ageGroup: Optional[str] = None
+    confidence: Optional[float] = None
+
+
+@dataclass
 class IImageToText:
     taskType: ETaskType
     taskUUID: str
-    text: str
+    text: Optional[str] = None  
+    structuredData: Optional[IImageToTextStructuredData] = None
     cost: Optional[float] = None
 
 
@@ -1380,6 +1443,8 @@ class IGoogleProviderSettings(BaseProviderSettings):
     search: Optional[bool] = None
     searchLatitude: Optional[float] = None
     searchLongitude: Optional[float] = None
+    resizeMode: Optional[str] = None
+    safetyTolerance: Optional[str] = None
 
     @property
     def provider_key(self) -> str:
@@ -1661,6 +1726,7 @@ class I3dInference:
 
 @dataclass
 class IAudioInputs(SerializableMixin):
+    audio: Optional[str] = None
     video: Optional[str] = None
     videos: Optional[List[str]] = None
 
@@ -1672,7 +1738,8 @@ class IAudioInputs(SerializableMixin):
 @dataclass
 class IAudioSpeech(SerializableMixin):
     text: Optional[str] = None  
-    voice: Optional[str] = None  
+    voice: Optional[str] = None
+    language: Optional[str] = None
     speed: Optional[float] = None
     volume: Optional[int] = None
     pitch: Optional[int] = None
@@ -1929,7 +1996,10 @@ class IVideoUpscale:
     includeCost: Optional[bool] = None
     webhookURL: Optional[str] = None
     outputType: Optional[IOutputType] = None
-    outputFormat: Optional[str] = None  # MP4, WEBM 
+    outputFormat: Optional[str] = None  # MP4, WEBM
+    width: Optional[int] = None
+    height: Optional[int] = None
+    fps: Optional[int] = None
 
 
 @dataclass
