@@ -1687,7 +1687,6 @@ class IAudioInputs(SerializableMixin):
     audio: Optional[str] = None
     video: Optional[str] = None
     videos: Optional[List[str]] = None
-    audio: Optional[str] = None  
 
     @property
     def request_key(self) -> str:
