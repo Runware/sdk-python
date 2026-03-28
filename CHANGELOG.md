@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.4]
+
+### Added
+- Added `runware/version.py` as the canonical `__version__` string; `runware/__init__.py` imports it so `from runware import __version__` matches the package version.
+- WebSocket connections send additional headers on connect: `X-SDK-Name: python` and `X-SDK-Version: <__version__>` (see `runware/server.py`).
+
 ## [0.5.3]
 
 ### Added
