@@ -946,6 +946,7 @@ class IVideoInputs(SerializableMixin):
     referenceVoices: Optional[List[str]] = None
     video: Optional[str] = None
     audio: Optional[Union[str, List[IAudioInput]]] = None
+    audios: Optional[List[str]] = None
     speech: Optional[List[ISpeechInput]] = None
     mask: Optional[Union[str, File]] = None
     frame: Optional[str] = None
