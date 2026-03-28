@@ -106,6 +106,7 @@ class EOpenPosePreProcessor(Enum):
 class EDeliveryMethod(Enum):
     SYNC = "sync"
     ASYNC = "async"
+    STREAM = "stream"
 
 class OperationState(Enum):
     """State machine for pending operations."""
@@ -811,8 +812,25 @@ class ITexSlat(SerializableMixin):
 
 
 @dataclass
+class ITextInferenceTool(SerializableMixin):
+    """Tool definition for text inference (e.g. function-calling / JSON-schema tools)."""
+
+    name: str
+    description: str
+    input_schema: Dict[str, Any]
+
+
+@dataclass
+class ITextInferenceToolChoice(SerializableMixin):
+    """Selects how tools are used (provider-specific shape, e.g. type + name)."""
+
+    type: str
+    name: Optional[str] = None
+
+
+@dataclass
 class ISettings(SerializableMixin):
-    # Image
+    # Image / Text
     temperature: Optional[float] = None
     systemPrompt: Optional[str] = None
     topP: Optional[float] = None
@@ -851,6 +869,13 @@ class ISettings(SerializableMixin):
     expressiveness: Optional[str] = None
     removeBackground: Optional[bool] = None
     backgroundColor: Optional[str] = None
+    # Text
+    maxTokens: Optional[int] = None
+    topK: Optional[int] = None
+    stopSequences: Optional[List[str]] = None
+    thinkingLevel: Optional[str] = None
+    tools: Optional[List[Union[ITextInferenceTool, Dict[str, Any]]]] = None
+    toolChoice: Optional[Union[ITextInferenceToolChoice, Dict[str, Any]]] = None
 
     def __post_init__(self):
         if self.sparseStructure is not None and isinstance(self.sparseStructure, dict):
@@ -859,6 +884,13 @@ class ISettings(SerializableMixin):
             self.shapeSlat = IShapeSlat(**self.shapeSlat)
         if self.texSlat is not None and isinstance(self.texSlat, dict):
             self.texSlat = ITexSlat(**self.texSlat)
+        if self.tools is not None:
+            self.tools = [
+                ITextInferenceTool(**t) if isinstance(t, dict) else t
+                for t in self.tools
+            ]
+        if self.toolChoice is not None and isinstance(self.toolChoice, dict):
+            self.toolChoice = ITextInferenceToolChoice(**self.toolChoice)
 
     @property
     def request_key(self) -> str:
@@ -907,6 +939,15 @@ class IInputs(SerializableMixin):
             )
             if self.referenceImages is None:
                 self.referenceImages = self.references
+
+
+@dataclass
+class ITextInputs(SerializableMixin):
+    images: Optional[List[Union[str, File]]] = None
+
+    @property
+    def request_key(self) -> str:
+        return "inputs"
 
 
 @dataclass
@@ -1400,6 +1441,8 @@ class IGoogleProviderSettings(BaseProviderSettings):
     generateAudio: Optional[bool] = None
     enhancePrompt: Optional[bool] = None
     search: Optional[bool] = None
+    searchLatitude: Optional[float] = None
+    searchLongitude: Optional[float] = None
     resizeMode: Optional[str] = None
     safetyTolerance: Optional[str] = None
 
@@ -1789,23 +1832,60 @@ class ITextInferenceMessage:
 
 
 @dataclass
+class ITextInferenceCompletionTokensDetails:
+    reasoningTokens: Optional[int] = None
+
+
+@dataclass
+class ITextInferenceUsageModality:
+    modality: Optional[str] = None
+    tokens: Optional[int] = None
+    cost: Optional[float] = None
+    costDisplay: Optional[str] = None
+
+
+@dataclass
+class ITextInferenceUsageTokenPromptCache:
+    modalities: Optional[List[ITextInferenceUsageModality]] = None
+    billableTokens: Optional[int] = None
+    cost: Optional[float] = None
+    costDisplay: Optional[str] = None
+
+
+@dataclass
+class ITextInferenceUsageTokenCompletion:
+    billableTokens: Optional[int] = None
+    textTokens: Optional[int] = None
+    reasoningTokens: Optional[int] = None
+    cost: Optional[float] = None
+    costDisplay: Optional[str] = None
+
+
+@dataclass
+class ITextInferenceUsageTokensBreakdown:
+    prompt: Optional[ITextInferenceUsageTokenPromptCache] = None
+    cache: Optional[ITextInferenceUsageTokenPromptCache] = None
+    completion: Optional[ITextInferenceUsageTokenCompletion] = None
+
+
+@dataclass
+class ITextInferenceUsageCostBreakdown:
+    tokens: Optional[ITextInferenceUsageTokensBreakdown] = None
+    total: Optional[float] = None
+    totalDisplay: Optional[str] = None
+
+
+@dataclass
 class ITextInferenceUsage:
     promptTokens: Optional[int] = None
     completionTokens: Optional[int] = None
     totalTokens: Optional[int] = None
     thinkingTokens: Optional[int] = None
+    completionTokensDetails: Optional[ITextInferenceCompletionTokensDetails] = None
+    costBreakdown: Optional[ITextInferenceUsageCostBreakdown] = None
 
 
-@dataclass
-class IGoogleTextProviderSettings(BaseProviderSettings):
-    thinkingLevel: Optional[str] = None
-
-    @property
-    def provider_key(self) -> str:
-        return "google"
-
-
-TextProviderSettings = IGoogleTextProviderSettings
+TextProviderSettings = IGoogleProviderSettings
 
 
 @dataclass
@@ -1815,15 +1895,19 @@ class ITextInference:
     taskUUID: Optional[str] = None
     deliveryMethod: str = "sync"
     numberResults: Optional[int] = 1
-    maxTokens: Optional[int] = None
-    temperature: Optional[float] = None
-    topP: Optional[float] = None  
-    topK: Optional[int] = None  
-    seed: Optional[int] = None  
-    stopSequences: Optional[List[str]] = None  
+    seed: Optional[int] = None
     includeCost: Optional[bool] = None
+    includeUsage: Optional[bool] = None
+    settings: Optional[Union[ISettings, Dict[str, Any]]] = None
+    inputs: Optional[Union[ITextInputs, Dict[str, Any]]] = None
     providerSettings: Optional[TextProviderSettings] = None
     webhookURL: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.settings is not None and isinstance(self.settings, dict):
+            self.settings = ISettings(**self.settings)
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = ITextInputs(**self.inputs)
 
 
 @dataclass
@@ -1835,6 +1919,9 @@ class IText:
     usage: Optional[ITextInferenceUsage] = None
     cost: Optional[float] = None
     status: Optional[str] = None
+    reasoningContent: Optional[List[str]] = None
+    seed: Optional[int] = None
+    thoughtSignature: Optional[str] = None
 
 
 @dataclass

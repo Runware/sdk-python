@@ -43,6 +43,25 @@ BASE_RUNWARE_URLS = {
     Environment.TEST: "ws://localhost:8080",
 }
 
+# HTTP REST base URL for streaming (e.g. textInference with deliveryMethod=stream)
+BASE_RUNWARE_HTTP_URLS = {
+    Environment.PRODUCTION: "https://api.runware.ai/v1",
+    Environment.TEST: "http://localhost:8080",
+}
+
+# Map each WebSocket base URL to its HTTP counterpart (for streaming requests).
+_WS_TO_HTTP = {
+    BASE_RUNWARE_URLS[Environment.PRODUCTION]: BASE_RUNWARE_HTTP_URLS[Environment.PRODUCTION],
+    BASE_RUNWARE_URLS[Environment.TEST]: BASE_RUNWARE_HTTP_URLS[Environment.TEST],
+}
+
+
+def get_http_url_from_ws_url(ws_url: str) -> str:
+    """Return the HTTP URL for this ws_url from _WS_TO_HTTP."""
+    if not ws_url:
+        return BASE_RUNWARE_HTTP_URLS[Environment.PRODUCTION]
+    return _WS_TO_HTTP.get(ws_url, BASE_RUNWARE_HTTP_URLS[Environment.PRODUCTION])
+
 
 RETRY_SDK_COUNTS = {
     "GLOBAL": 2,
@@ -124,6 +143,14 @@ AUDIO_INITIAL_TIMEOUT = int(os.environ.get(
 TEXT_INITIAL_TIMEOUT = int(os.environ.get(
     "RUNWARE_TEXT_INITIAL_TIMEOUT",
     30000
+))
+
+# Text streaming read timeout (milliseconds)
+# Maximum time to wait for data on the SSE stream; long to avoid ReadTimeout mid-stream
+# Used in: _requestTextStream() for deliveryMethod=stream
+TEXT_STREAM_READ_TIMEOUT = int(os.environ.get(
+    "RUNWARE_TEXT_STREAM_TIMEOUT",
+    600000
 ))
 
 # Audio generation timeout (milliseconds)
