@@ -2366,25 +2366,27 @@ class RunwareBase:
                     async for line in response.aiter_lines():
                         try:
                             line_obj = json.loads(line.replace("data:", "", 1))
-                            #print(line_obj)
                         except json.JSONDecodeError:
                             continue
                         data = line_obj.get("data") or line_obj
                         if data.get("error") is not None:
                             raise RunwareAPIError(data["error"])
-                        choice = (data.get("choices") or [{}])[0]
-                        delta = choice.get("delta") or {}
+
+                        delta = data.get("delta") or {}
+                        finishReason = data.get("finishReason")
+
                         if delta.get("content"):
                             yield delta.get("content")
-                        
-                        if choice.get("finishReason") is not None:
+                        if delta.get("reasoningContent"):
+                            yield delta.get("reasoningContent")
+
+                        if finishReason is not None:
                             yield instantiateDataclass(
                                 IText,
                                 {
                                     **data,
                                     "taskType": data.get("taskType")
                                     or ETaskType.TEXT_INFERENCE.value,
-                                    "finishReason": choice.get("finishReason"),
                                 },
                             )
                             return
