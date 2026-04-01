@@ -1012,6 +1012,7 @@ class IVideoInputs(SerializableMixin):
 @dataclass
 class I3dInputs(SerializableMixin):
     image: Optional[Union[str, File]] = None
+    images: Optional[List[Union[str, File]]] = None
     mask: Optional[Union[str, File]] = None
     meshFile: Optional[Union[str, File]] = None
 
