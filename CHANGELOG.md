@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.5]
+
+### Changed
+- Relax `aiofiles` and `python-dotenv` pins to `>=` minimums in `setup.py` and `requirements.txt` so the package installs cleanly alongside environments that pin newer compatible releases.
+
 ## [0.5.4]
 
 ### Added
