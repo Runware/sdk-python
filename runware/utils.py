@@ -948,7 +948,11 @@ def instantiateDataclassList(
     return instances
 
 
-def isLocalFile(file):
+def isLocalFile(file: Union[str, File]) -> bool:
+    if isinstance(file, File):
+        return True
+    if not isinstance(file, str):
+        raise TypeError(f"Expected str or File, got {type(file).__name__}")
     if os.path.isfile(file):
         return True
 
@@ -985,7 +989,7 @@ def isLocalFile(file):
 
 
 async def process_image(
-    image: Optional[Union[str, list, UploadImageType | None | File]],
+    image: Optional[Union[str, File, list, UploadImageType]],
 ) -> None | list[Any] | str:
     if image is None:
         return None
@@ -996,6 +1000,8 @@ async def process_image(
         return images
     elif isinstance(image, UploadImageType):
         return image.imageUUID
+    if isinstance(image, File):
+        return await fileToBase64(image)
     if isLocalFile(image) and not image.startswith("http"):
         return await fileToBase64(image)
     return image
