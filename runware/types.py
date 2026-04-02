@@ -118,11 +118,6 @@ class OperationState(Enum):
 IOutputType = Literal["base64Data", "dataURI", "URL"]
 IOutputFormat = Literal["JPG", "PNG", "WEBP", "SVG"]
 IAudioOutputFormat = Literal["wav", "mp3", "pcm", "opus", "aac", "flac", "MP3"]
-# Image edit region types:
-# IEditRegionBox: [x1, y1, x2, y2] absolute pixel rectangle
-# IEditRegions: list of images -> list of boxes per image
-IEditRegionBox = List[int]
-IEditRegions = List[List[IEditRegionBox]]
 
 
 @dataclass
@@ -822,6 +817,14 @@ class IColorPaletteEntry(SerializableMixin):
 
 
 @dataclass
+class IEditRegion(SerializableMixin):
+    x1: int
+    y1: int
+    x2: int
+    y2: int
+
+
+@dataclass
 class ISettings(SerializableMixin):
     # Image
     temperature: Optional[float] = None
@@ -831,7 +834,7 @@ class ISettings(SerializableMixin):
     trueCFGScale: Optional[float] = None
     quality: Optional[str] = None
     promptExtend: Optional[bool] = None
-    editRegions: Optional[IEditRegions] = None
+    editRegions: Optional[List[List[Union[IEditRegion, Dict[str, Any]]]]] = None
     sequential: Optional[bool] = None
     thinking: Optional[bool] = None
     colorPalette: Optional[List[Union[IColorPaletteEntry, Dict[str, Any]]]] = None
@@ -874,6 +877,14 @@ class ISettings(SerializableMixin):
             self.shapeSlat = IShapeSlat(**self.shapeSlat)
         if self.texSlat is not None and isinstance(self.texSlat, dict):
             self.texSlat = ITexSlat(**self.texSlat)
+        if self.editRegions is not None:
+            self.editRegions = [
+                [
+                    IEditRegion(**item) if isinstance(item, dict) else item
+                    for item in image_regions
+                ]
+                for image_regions in self.editRegions
+            ]
         if self.colorPalette is not None:
             self.colorPalette = [
                 IColorPaletteEntry(**item) if isinstance(item, dict) else item
