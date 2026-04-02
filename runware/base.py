@@ -2354,6 +2354,7 @@ class RunwareBase:
             "Authorization": f"Bearer {self._apiKey}",
             "Content-Type": "application/json",
         }
+        accumulated_text = ""
         try:
             async with httpx.AsyncClient(timeout=TEXT_STREAM_READ_TIMEOUT / 1000) as client:
                 async with client.stream(
@@ -2364,8 +2365,13 @@ class RunwareBase:
                 ) as response:
                     response.raise_for_status()
                     async for line in response.aiter_lines():
+                        if not line:
+                            continue
+                        payload = line.replace("data:", "", 1).strip()
+                        if payload == "[DONE]":
+                            return
                         try:
-                            line_obj = json.loads(line.replace("data:", "", 1))
+                            line_obj = json.loads(payload)
                         except json.JSONDecodeError:
                             continue
                         data = line_obj.get("data") or line_obj
@@ -2375,18 +2381,18 @@ class RunwareBase:
                         delta = data.get("delta") or {}
                         finishReason = data.get("finishReason")
 
-                        if delta.get("content"):
-                            yield delta.get("content")
-                        if delta.get("reasoningContent"):
-                            yield delta.get("reasoningContent")
-
+                        content_chunk = delta.get("text")
+                        if content_chunk:
+                            accumulated_text += content_chunk
+                            yield content_chunk
                         if finishReason is not None:
                             yield instantiateDataclass(
                                 IText,
                                 {
                                     **data,
-                                    "taskType": data.get("taskType")
-                                    or ETaskType.TEXT_INFERENCE.value,
+                                    "taskType": data.get("taskType"),
+                                    "text": data.get("text") or accumulated_text,
+                                    "finishReason": finishReason,
                                 },
                             )
                             return
