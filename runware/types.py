@@ -118,6 +118,11 @@ class OperationState(Enum):
 IOutputType = Literal["base64Data", "dataURI", "URL"]
 IOutputFormat = Literal["JPG", "PNG", "WEBP", "SVG"]
 IAudioOutputFormat = Literal["wav", "mp3", "pcm", "opus", "aac", "flac", "MP3"]
+# Image edit region types:
+# IEditRegionBox: [x1, y1, x2, y2] absolute pixel rectangle
+# IEditRegions: list of images -> list of boxes per image
+IEditRegionBox = List[int]
+IEditRegions = List[List[IEditRegionBox]]
 
 
 @dataclass
@@ -826,7 +831,7 @@ class ISettings(SerializableMixin):
     trueCFGScale: Optional[float] = None
     quality: Optional[str] = None
     promptExtend: Optional[bool] = None
-    editRegions: Optional[List[List[List[int]]]] = None
+    editRegions: Optional[IEditRegions] = None
     sequential: Optional[bool] = None
     thinking: Optional[bool] = None
     colorPalette: Optional[List[Union[IColorPaletteEntry, Dict[str, Any]]]] = None
