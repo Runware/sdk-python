@@ -847,6 +847,7 @@ class ISettings(SerializableMixin):
     # Video
     draft: Optional[bool] = None
     audio: Optional[bool] = None
+    voiceDescription: Optional[str] = None
     promptUpsampling: Optional[bool] = None
     expressiveness: Optional[str] = None
     removeBackground: Optional[bool] = None
