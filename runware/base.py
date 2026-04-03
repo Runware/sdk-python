@@ -744,6 +744,14 @@ class RunwareBase:
             if isinstance(requestImage.inputs, dict):
                 requestImage.inputs = IInputs(**requestImage.inputs)
 
+            if requestImage.inputs.image:
+                requestImage.inputs.image = await process_image(requestImage.inputs.image)
+
+            if requestImage.inputs.images:
+                requestImage.inputs.images = await self._process_media_list(
+                    requestImage.inputs.images
+                )
+
             if requestImage.inputs.referenceImages:
                 requestImage.inputs.referenceImages = await self._process_media_list(
                     requestImage.inputs.referenceImages,

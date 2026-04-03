@@ -811,6 +811,20 @@ class ITexSlat(SerializableMixin):
 
 
 @dataclass
+class IColorPaletteEntry(SerializableMixin):
+    hex: str
+    ratio: Optional[Union[str, float]] = None
+
+
+@dataclass
+class IEditRegion(SerializableMixin):
+    x1: int
+    y1: int
+    x2: int
+    y2: int
+
+
+@dataclass
 class ISettings(SerializableMixin):
     # Image
     temperature: Optional[float] = None
@@ -820,6 +834,10 @@ class ISettings(SerializableMixin):
     trueCFGScale: Optional[float] = None
     quality: Optional[str] = None
     promptExtend: Optional[bool] = None
+    editRegions: Optional[List[List[Union[IEditRegion, Dict[str, Any]]]]] = None
+    sequential: Optional[bool] = None
+    thinking: Optional[bool] = None
+    colorPalette: Optional[List[Union[IColorPaletteEntry, Dict[str, Any]]]] = None
     # 3D inference
     textureSize: Optional[int] = None
     decimationTarget: Optional[int] = None
@@ -888,6 +906,19 @@ class ISettings(SerializableMixin):
             self.shapeSlat = IShapeSlat(**self.shapeSlat)
         if self.texSlat is not None and isinstance(self.texSlat, dict):
             self.texSlat = ITexSlat(**self.texSlat)
+        if self.editRegions is not None:
+            self.editRegions = [
+                [
+                    IEditRegion(**item) if isinstance(item, dict) else item
+                    for item in image_regions
+                ]
+                for image_regions in self.editRegions
+            ]
+        if self.colorPalette is not None:
+            self.colorPalette = [
+                IColorPaletteEntry(**item) if isinstance(item, dict) else item
+                for item in self.colorPalette
+            ]
 
     @property
     def request_key(self) -> str:
@@ -932,6 +963,7 @@ class IInputs(SerializableMixin):
     references: Optional[List[Union[str, File]]] = None
     referenceImages: Optional[List[Union[str, File, IInputReference]]] = None
     image: Optional[Union[str, File]] = None
+    images: Optional[List[Union[str, File]]] = None
     mask: Optional[Union[str, File]] = None
     superResolutionReferences: Optional[List[Union[str, File]]] = None
 
