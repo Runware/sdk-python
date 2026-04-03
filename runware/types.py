@@ -828,6 +828,21 @@ class ISettings(SerializableMixin):
     sparseStructure: Optional[Union[ISparseStructure, Dict[str, Any]]] = None
     shapeSlat: Optional[Union[IShapeSlat, Dict[str, Any]]] = None
     texSlat: Optional[Union[ITexSlat, Dict[str, Any]]] = None
+    imageAutoFix: Optional[bool] = None
+    faceLimit: Optional[int] = None
+    texture: Optional[bool] = None
+    pbr: Optional[bool] = None
+    textureSeed: Optional[int] = None
+    textureAlignment: Optional[str] = None
+    textureQuality: Optional[str] = None
+    autoSize: Optional[bool] = None
+    orientation: Optional[str] = None
+    quad: Optional[bool] = None
+    compress: Optional[str] = None
+    smartLowPoly: Optional[bool] = None
+    generateParts: Optional[bool] = None
+    exportUv: Optional[bool] = None
+    geometryQuality: Optional[str] = None
     # Audio
     languageBoost: Optional[str] = None
     turbo: Optional[bool] = None
@@ -997,6 +1012,7 @@ class IVideoInputs(SerializableMixin):
 @dataclass
 class I3dInputs(SerializableMixin):
     image: Optional[Union[str, File]] = None
+    images: Optional[List[Union[str, File]]] = None
     mask: Optional[Union[str, File]] = None
     meshFile: Optional[Union[str, File]] = None
 

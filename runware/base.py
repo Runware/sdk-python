@@ -2223,6 +2223,8 @@ class RunwareBase:
     async def _process3dInputs(self, request3d: I3dInference) -> None:
         if not request3d.inputs:
             return
+        if request3d.inputs.images:
+            request3d.inputs.images = await process_image(request3d.inputs.images)
         if request3d.inputs.image:
             request3d.inputs.image = await process_image(request3d.inputs.image)
         if request3d.inputs.mask:
