@@ -1274,7 +1274,11 @@ class RunwareBase:
 
     async def imageUpscale(self, upscaleGanPayload: "IImageUpscale") -> "Union[List[IImage], IAsyncTaskResponse]":
         async with self._request_semaphore:
-            return await self._retry_with_reconnect(self._imageUpscale, upscaleGanPayload)
+            return await self._retry_async_with_reconnect(
+                self._imageUpscale,
+                upscaleGanPayload,
+                task_type=ETaskType.IMAGE_UPSCALE.value,
+            )
 
     async def _imageUpscale(self, upscaleGanPayload: IImageUpscale) -> Union[List[IImage], IAsyncTaskResponse]:
         await self.ensureConnection()
@@ -1297,12 +1301,15 @@ class RunwareBase:
         taskUUID = getUUID()
         upscaleGanPayload.taskUUID = taskUUID
 
-        # Create a dictionary with mandatory parameters
         task_params = {
             "taskType": ETaskType.IMAGE_UPSCALE.value,
             "taskUUID": taskUUID,
-            "upscaleFactor": upscaleGanPayload.upscaleFactor,
+            "deliveryMethod": upscaleGanPayload.deliveryMethod,
         }
+        if upscaleGanPayload.upscaleFactor is not None:
+            task_params["upscaleFactor"] = upscaleGanPayload.upscaleFactor
+        if upscaleGanPayload.targetMegapixels is not None:
+            task_params["targetMegapixels"] = upscaleGanPayload.targetMegapixels
 
         # Use inputs.image format if inputs is provided, otherwise use inputImage (legacy)
         if upscaleGanPayload.inputs and upscaleGanPayload.inputs.image:
@@ -1346,6 +1353,39 @@ class RunwareBase:
                 task_type="imageUpscale",
                 debug_key="image-upscale-webhook"
             )
+
+        delivery_method_enum = (
+            EDeliveryMethod(upscaleGanPayload.deliveryMethod)
+            if isinstance(upscaleGanPayload.deliveryMethod, str)
+            else upscaleGanPayload.deliveryMethod
+        )
+
+        if delivery_method_enum is EDeliveryMethod.ASYNC:
+            future, should_send = await self._register_pending_operation(
+                taskUUID,
+                expected_results=1,
+                complete_predicate=lambda r: True,
+            )
+            try:
+                if should_send:
+                    await self.send([task_params])
+                    await self._mark_operation_sent(taskUUID)
+                results = await asyncio.wait_for(future, timeout=IMAGE_INITIAL_TIMEOUT / 1000)
+                response = results[0]
+                self._handle_error_response(response)
+                if response.get("status") == "success" or response.get("imageUUID") is not None:
+                    image = createImageFromResponse(response)
+                    return [image]
+                return createAsyncTaskResponse(response)
+            except asyncio.TimeoutError:
+                raise ConnectionError(
+                    f"Timeout waiting for async image upscale acknowledgment | TaskUUID: {taskUUID} | "
+                    f"Timeout: {IMAGE_INITIAL_TIMEOUT}ms"
+                )
+            except RunwareAPIError:
+                raise
+            finally:
+                await self._unregister_pending_operation(taskUUID)
 
         future, should_send = await self._register_pending_operation(
             taskUUID,
@@ -3101,6 +3141,17 @@ class RunwareBase:
                         MAX_POLLS_IMAGE_GENERATION,
                         IMAGE_POLLING_DELAY,
                         f"Image generation timeout after {MAX_POLLS_IMAGE_GENERATION} polls"
+                    )
+                case (
+                    ETaskType.IMAGE_UPSCALE.value
+                    | ETaskType.IMAGE_VECTORIZE.value
+                    | ETaskType.IMAGE_BACKGROUND_REMOVAL.value
+                ):
+                    return (
+                        IImage,
+                        MAX_POLLS_IMAGE_GENERATION,
+                        IMAGE_POLLING_DELAY,
+                        f"Image task timeout after {MAX_POLLS_IMAGE_GENERATION} polls"
                     )
                 case (
                     ETaskType.VIDEO_INFERENCE.value
