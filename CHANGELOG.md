@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.6]
+
+### Added
+
+- **`ISettings`** now includes:
+  - `imageAutoFix: Optional[bool]`
+  - `faceLimit: Optional[int]`
+  - `texture: Optional[bool]`
+  - `pbr: Optional[bool]`
+  - `textureSeed: Optional[int]`
+  - `textureAlignment: Optional[str]`
+  - `textureQuality: Optional[str]`
+  - `autoSize: Optional[bool]`
+  - `orientation: Optional[str]`
+  - `quad: Optional[bool]`
+  - `compress: Optional[str]`
+  - `smartLowPoly: Optional[bool]`
+  - `generateParts: Optional[bool]`
+  - `exportUv: Optional[bool]`
+  - `geometryQuality: Optional[str]`
+  - `editRegions: Optional[List[List[List[int]]]]`
+  - `sequential: Optional[bool]`
+  - `thinking: Optional[bool]`
+  - `colorPalette: Optional[List[Union[IColorPaletteEntry, Dict[str, Any]]]]`
+  - `style: Optional[str]`
+  - `thinking: Optional[str]`
+  - `multiClip: Optional[bool]`
+  - `voiceDescription: Optional[str]`
+  - Image upscale: `enhanceDetails`, `realism`, and existing upscale tuning fields on **`ISettings`** (`steps`, `seed`, `CFGScale`, prompts, scheduler, etc.)
+- **`I3dInputs`** now includes `images: Optional[List[Union[str, File]]]`.
+- **`IVideoInputs.audios`** for video inference.
+- **`IImageUpscale`**: `targetMegapixels`, optional `upscaleFactor`, `deliveryMethod` (default `"sync"`); **`IImageUpscale.settings`** typed as **`ISettings`**.
+- **`IUpscaleSettings`**: deprecated subclass of **`ISettings`** (deprecation warning on use).
+- **`_upscaleGan`**: async `deliveryMethod` handling for **`IAsyncTaskResponse`** + polling.
+- New dataclass **`IColorPaletteEntry`**: `hex: str`, `ratio: Optional[Union[str, float]]`.
+- **`IInputs`** now includes `images: Optional[List[Union[str, File]]]`.
+
+### Changed
+
+- **`_pollResults`**: `imageUpscale`, `vectorize`, and `imageBackgroundRemoval` resolve to **`IImage`** (fixes **`getResponse`** returning **`IVideo`** without image URLs).
+- **`_upscaleGan`**: conditional `upscaleFactor` / `targetMegapixels`; forward `deliveryMethod`.
+
 ## [0.5.5]
 
 ### Changed
