@@ -811,6 +811,20 @@ class ITexSlat(SerializableMixin):
 
 
 @dataclass
+class IColorPaletteEntry(SerializableMixin):
+    hex: str
+    ratio: Optional[Union[str, float]] = None
+
+
+@dataclass
+class IEditRegion(SerializableMixin):
+    x1: int
+    y1: int
+    x2: int
+    y2: int
+
+
+@dataclass
 class ISettings(SerializableMixin):
     # Image
     temperature: Optional[float] = None
@@ -820,6 +834,10 @@ class ISettings(SerializableMixin):
     trueCFGScale: Optional[float] = None
     quality: Optional[str] = None
     promptExtend: Optional[bool] = None
+    editRegions: Optional[List[List[Union[IEditRegion, Dict[str, Any]]]]] = None
+    sequential: Optional[bool] = None
+    thinking: Optional[bool] = None
+    colorPalette: Optional[List[Union[IColorPaletteEntry, Dict[str, Any]]]] = None
     # 3D inference
     textureSize: Optional[int] = None
     decimationTarget: Optional[int] = None
@@ -828,6 +846,21 @@ class ISettings(SerializableMixin):
     sparseStructure: Optional[Union[ISparseStructure, Dict[str, Any]]] = None
     shapeSlat: Optional[Union[IShapeSlat, Dict[str, Any]]] = None
     texSlat: Optional[Union[ITexSlat, Dict[str, Any]]] = None
+    imageAutoFix: Optional[bool] = None
+    faceLimit: Optional[int] = None
+    texture: Optional[bool] = None
+    pbr: Optional[bool] = None
+    textureSeed: Optional[int] = None
+    textureAlignment: Optional[str] = None
+    textureQuality: Optional[str] = None
+    autoSize: Optional[bool] = None
+    orientation: Optional[str] = None
+    quad: Optional[bool] = None
+    compress: Optional[str] = None
+    smartLowPoly: Optional[bool] = None
+    generateParts: Optional[bool] = None
+    exportUv: Optional[bool] = None
+    geometryQuality: Optional[str] = None
     # Audio
     languageBoost: Optional[str] = None
     turbo: Optional[bool] = None
@@ -848,10 +881,27 @@ class ISettings(SerializableMixin):
     draft: Optional[bool] = None
     audio: Optional[bool] = None
     voiceDescription: Optional[str] = None
+    style: Optional[str] = None
+    thinking: Optional[str] = None
+    multiClip: Optional[bool] = None
     promptUpsampling: Optional[bool] = None
     expressiveness: Optional[str] = None
     removeBackground: Optional[bool] = None
     backgroundColor: Optional[str] = None
+    # Image upscale 
+    steps: Optional[int] = None
+    seed: Optional[int] = None
+    CFGScale: Optional[float] = None
+    positivePrompt: Optional[str] = None
+    negativePrompt: Optional[str] = None
+    controlNetWeight: Optional[float] = None
+    strength: Optional[float] = None
+    scheduler: Optional[str] = None
+    colorFix: Optional[bool] = None
+    tileDiffusion: Optional[bool] = None
+    clipSkip: Optional[int] = None
+    enhanceDetails: Optional[bool] = None
+    realism: Optional[bool] = None
 
     def __post_init__(self):
         if self.sparseStructure is not None and isinstance(self.sparseStructure, dict):
@@ -860,10 +910,35 @@ class ISettings(SerializableMixin):
             self.shapeSlat = IShapeSlat(**self.shapeSlat)
         if self.texSlat is not None and isinstance(self.texSlat, dict):
             self.texSlat = ITexSlat(**self.texSlat)
+        if self.editRegions is not None:
+            self.editRegions = [
+                [
+                    IEditRegion(**item) if isinstance(item, dict) else item
+                    for item in image_regions
+                ]
+                for image_regions in self.editRegions
+            ]
+        if self.colorPalette is not None:
+            self.colorPalette = [
+                IColorPaletteEntry(**item) if isinstance(item, dict) else item
+                for item in self.colorPalette
+            ]
 
     @property
     def request_key(self) -> str:
         return "settings"
+
+
+@dataclass
+class IUpscaleSettings(ISettings):
+
+    def __post_init__(self):
+        super().__post_init__()
+        warnings.warn(
+            "IUpscaleSettings is deprecated and will be removed in a future release; use ISettings for image upscale settings instead.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
 
 
 @dataclass
@@ -892,6 +967,7 @@ class IInputs(SerializableMixin):
     references: Optional[List[Union[str, File]]] = None
     referenceImages: Optional[List[Union[str, File, IInputReference]]] = None
     image: Optional[Union[str, File]] = None
+    images: Optional[List[Union[str, File]]] = None
     mask: Optional[Union[str, File]] = None
     superResolutionReferences: Optional[List[Union[str, File]]] = None
 
@@ -947,6 +1023,7 @@ class IVideoInputs(SerializableMixin):
     referenceVoices: Optional[List[str]] = None
     video: Optional[str] = None
     audio: Optional[Union[str, List[IAudioInput]]] = None
+    audios: Optional[List[str]] = None
     speech: Optional[List[ISpeechInput]] = None
     mask: Optional[Union[str, File]] = None
     frame: Optional[str] = None
@@ -998,6 +1075,7 @@ class IVideoInputs(SerializableMixin):
 @dataclass
 class I3dInputs(SerializableMixin):
     image: Optional[Union[str, File]] = None
+    images: Optional[List[Union[str, File]]] = None
     mask: Optional[Union[str, File]] = None
     meshFile: Optional[Union[str, File]] = None
 
@@ -1226,33 +1304,12 @@ class IEnhancedPrompt(IImageToText):
 
 
 @dataclass
-class IUpscaleSettings:
-    # Common parameters across all upscaler models
-    steps: Optional[int] = None  # Quality steps (4-60 depending on model)
-    seed: Optional[int] = None  # Reproducibility toggle
-    CFGScale: Optional[float] = None  # Guidance CFG (3-20 depending on model)
-    positivePrompt: Optional[str] = None  
-    negativePrompt: Optional[str] = None  
-    
-    # Clarity upscaler specific
-    controlNetWeight: Optional[float] = None  # Style preservation/Resemblance (0-1)
-    strength: Optional[float] = None  # Creativity (0-1)
-    scheduler: Optional[str] = None  # Controls noise addition/removal
-    
-    # CCSR and Latent upscaler specific
-    colorFix: Optional[bool] = None  # Color correction (ADAIN/NOFIX)
-    tileDiffusion: Optional[bool] = None  # Tile diffusion for large images
-    
-    # Latent upscaler specific
-    clipSkip: Optional[int] = None  # Skip CLIP layers during guidance (0-2)
-
-
-@dataclass
 class IImageUpscale:
-    upscaleFactor: float  # Changed to float to support decimal values like 1.5
+    upscaleFactor: Optional[float] = None  
+    targetMegapixels: Optional[int] = None
     inputImage: Optional[Union[str, File]] = None
     model: Optional[str] = None  # Model AIR ID (runware:500@1, runware:501@1, runware:502@1, runware:503@1)
-    settings: Optional[Union[IUpscaleSettings, Dict[str, Any]]] = None  # Advanced upscaling settings
+    settings: Optional[Union[ISettings, Dict[str, Any]]] = None
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IOutputFormat] = None
     includeCost: bool = False
@@ -1260,10 +1317,11 @@ class IImageUpscale:
     providerSettings: Optional[ImageProviderSettings] = None
     safety: Optional[Union[ISafety, Dict[str, Any]]] = None
     inputs: Optional[Union[IInputs, Dict[str, Any]]] = None
+    deliveryMethod: str = "sync"
 
     def __post_init__(self):
         if self.settings is not None and isinstance(self.settings, dict):
-            self.settings = IUpscaleSettings(**self.settings)
+            self.settings = ISettings(**self.settings)
         if self.safety is not None and isinstance(self.safety, dict):
             self.safety = ISafety(**self.safety)
         if self.inputs is not None and isinstance(self.inputs, dict):
