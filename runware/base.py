@@ -1274,7 +1274,11 @@ class RunwareBase:
 
     async def imageUpscale(self, upscaleGanPayload: "IImageUpscale") -> "Union[List[IImage], IAsyncTaskResponse]":
         async with self._request_semaphore:
-            return await self._retry_with_reconnect(self._imageUpscale, upscaleGanPayload)
+            return await self._retry_async_with_reconnect(
+                self._imageUpscale,
+                upscaleGanPayload,
+                task_type=ETaskType.IMAGE_UPSCALE.value,
+            )
 
     async def _imageUpscale(self, upscaleGanPayload: IImageUpscale) -> Union[List[IImage], IAsyncTaskResponse]:
         await self.ensureConnection()
