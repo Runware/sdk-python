@@ -880,6 +880,9 @@ class ISettings(SerializableMixin):
     # Video
     draft: Optional[bool] = None
     audio: Optional[bool] = None
+    style: Optional[str] = None
+    thinking: Optional[str] = None
+    multiClip: Optional[bool] = None
     promptUpsampling: Optional[bool] = None
     expressiveness: Optional[str] = None
     removeBackground: Optional[bool] = None
