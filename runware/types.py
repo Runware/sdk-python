@@ -877,6 +877,8 @@ class ISettings(SerializableMixin):
     coverConditioningScale: Optional[float] = None
     repaintingStart: Optional[float] = None
     repaintingEnd: Optional[float] = None
+    includePrefix: Optional[bool] = None
+    audioTemperature: Optional[float] = None
     # Video
     draft: Optional[bool] = None
     audio: Optional[bool] = None
