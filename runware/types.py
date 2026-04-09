@@ -890,6 +890,7 @@ class ISettings(SerializableMixin):
     lyrics: Optional[str] = None
     guidanceType: Optional[str] = None
     textNormalization: Optional[bool] = None
+    topK: Optional[int] = None
     maxNewTokens: Optional[int] = None
     transcript: Optional[str] = None
     xVectorOnly: Optional[bool] = None
@@ -1792,6 +1793,7 @@ class I3dInference:
 @dataclass
 class IAudioInputs(SerializableMixin):
     audio: Optional[str] = None
+    audios: Optional[List[str]] = None
     video: Optional[str] = None
     videos: Optional[List[str]] = None
 
