@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.7]
+
+### Added
+
+- Streaming support for LLMs.
+- **`ISettings`** now includes:
+  - `includePrefix: Optional[bool]`
+  - `audioTemperature: Optional[float]`
+  - `topK: Optional[int]`
+- **`IAudioInputs`** now includes:
+  - `audios: Optional[List[str]]`
+
 ## [0.5.6]
 
 ### Added
