@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import json
 import logging
 import os
 import re
@@ -7,8 +8,9 @@ from asyncio import gather
 from dataclasses import asdict, is_dataclass, fields
 from enum import Enum
 from random import uniform
-from typing import List, Optional, Union, Callable, Any, Dict, Tuple
+from typing import List, Optional, Union, Callable, Any, Dict, Tuple, AsyncIterator
 
+import httpx
 from websockets.protocol import State
 
 from .logging_config import configure_logging
@@ -62,11 +64,13 @@ from .types import (
     IUploadMediaRequest,
     ITextInference,
     IText,
+    ITextInputs,
 )
 from .types import IImage, IError, SdkType, ListenerType
 from .utils import (
     BASE_RUNWARE_URLS,
     getUUID,
+    get_http_url_from_ws_url,
     fileToBase64,
     createImageFromResponse,
     createEnhancedPromptsFromResponse,
@@ -84,6 +88,7 @@ from .utils import (
     createAsyncTaskResponse,
     VIDEO_INITIAL_TIMEOUT,
     TEXT_INITIAL_TIMEOUT,
+    TEXT_STREAM_READ_TIMEOUT,
     VIDEO_POLLING_DELAY,
     WEBHOOK_TIMEOUT,
     IMAGE_INFERENCE_TIMEOUT,
@@ -2140,7 +2145,20 @@ class RunwareBase:
         await self.ensureConnection()
         return await self._request3d(request3d)
 
-    async def textInference(self, requestText: ITextInference) -> Union[List[IText], IAsyncTaskResponse]:
+    async def textInference(
+        self, requestText: ITextInference
+    ) -> Union[List[IText], IAsyncTaskResponse, AsyncIterator[Union[str, IText]]]:
+        delivery_method_enum = (
+            requestText.deliveryMethod
+            if isinstance(requestText.deliveryMethod, EDeliveryMethod)
+            else EDeliveryMethod(requestText.deliveryMethod)
+        )
+        if delivery_method_enum == EDeliveryMethod.STREAM:
+            async def stream_with_semaphore() -> AsyncIterator[Union[str, IText]]:
+                async with self._request_semaphore:
+                    async for chunk in self._requestTextStream(requestText):
+                        yield chunk
+            return stream_with_semaphore()
         async with self._request_semaphore:
             return await self._retry_async_with_reconnect(
                 self._requestText,
@@ -2331,26 +2349,129 @@ class RunwareBase:
             "deliveryMethod": requestText.deliveryMethod,
             "messages": [asdict(m) for m in requestText.messages],
         }
-        if requestText.maxTokens is not None:
-            request_object["maxTokens"] = requestText.maxTokens
-        if requestText.temperature is not None:
-            request_object["temperature"] = requestText.temperature
-        if requestText.topP is not None:
-            request_object["topP"] = requestText.topP
-        if requestText.topK is not None:
-            request_object["topK"] = requestText.topK
         if requestText.seed is not None:
             request_object["seed"] = requestText.seed
-        if requestText.stopSequences is not None:
-            request_object["stopSequences"] = requestText.stopSequences
         if requestText.includeCost is not None:
             request_object["includeCost"] = requestText.includeCost
+        if requestText.includeUsage is not None:
+            request_object["includeUsage"] = requestText.includeUsage
+        if requestText.numberResults is not None:
+            request_object["numberResults"] = requestText.numberResults
+        self._addOptionalField(request_object, requestText.settings)
+        self._addOptionalField(request_object, requestText.inputs)
         self._addProviderSettings(request_object, requestText)
         return request_object
+
+    async def _message_from_http_status_error(self, exc: httpx.HTTPStatusError) -> str:
+        """
+        Build a short, user-facing message from an HTTP error response.
+        Matches WebSocket auth errors where possible (e.g. invalid API key).
+        """
+        resp = exc.response
+        try:
+            await resp.aread()
+        except Exception:
+            pass
+        status = resp.status_code
+        try:
+            data = resp.json()
+            if isinstance(data, dict):
+                msg = data.get("message")
+                if isinstance(msg, str) and msg.strip():
+                    return msg.strip()
+                err = data.get("error")
+                if isinstance(err, dict):
+                    inner = err.get("message")
+                    if isinstance(inner, str) and inner.strip():
+                        return inner.strip()
+                if isinstance(err, str) and err.strip():
+                    return err.strip()
+        except Exception:
+            pass
+        if status == 401:
+            return "Invalid API key. Get one at https://my.runware.ai/signup"
+        return f"HTTP {status} error for {resp.request.url}"
+
+    async def _requestTextStream(
+        self, requestText: ITextInference
+    ) -> AsyncIterator[Union[str, IText]]:
+        requestText.taskUUID = requestText.taskUUID or getUUID()
+        request_object = self._buildTextRequest(requestText)
+        body = [request_object]
+        http_url = get_http_url_from_ws_url(self._url or "")
+        headers = {
+            "Accept": "text/event-stream",
+            "Authorization": f"Bearer {self._apiKey}",
+            "Content-Type": "application/json",
+        }
+        accumulated_text = ""
+        try:
+            async with httpx.AsyncClient(timeout=TEXT_STREAM_READ_TIMEOUT / 1000) as client:
+                async with client.stream(
+                    "POST",
+                    http_url,
+                    json=body,
+                    headers=headers,
+                ) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line:
+                            continue
+                        payload = line.replace("data:", "", 1).strip()
+                        if payload == "[DONE]":
+                            return
+                        try:
+                            line_obj = json.loads(payload)
+                        except json.JSONDecodeError:
+                            continue
+                        data = line_obj.get("data") or line_obj
+                        if data.get("error") is not None:
+                            raise RunwareAPIError(data["error"])
+
+                        delta = data.get("delta") or {}
+                        finishReason = data.get("finishReason")
+
+                        content_chunk = delta.get("text")
+                        if content_chunk:
+                            accumulated_text += content_chunk
+                            yield content_chunk
+                        if finishReason is not None:
+                            yield instantiateDataclass(
+                                IText,
+                                {
+                                    **data,
+                                    "taskType": data.get("taskType"),
+                                    "text": data.get("text") or accumulated_text,
+                                    "finishReason": finishReason,
+                                },
+                            )
+                            return
+        except httpx.HTTPStatusError as e:
+            msg = await self._message_from_http_status_error(e)
+            if e.response.status_code == 401:
+                self._invalidAPIkey = msg
+                self._reconnection_manager.on_auth_failure()
+                raise ConnectionError(msg) from e
+            raise RunwareAPIError({"message": msg, "statusCode": e.response.status_code}) from e
+        except RunwareAPIError:
+            raise
+        except Exception as e:
+            raise RunwareAPIError({"message": str(e)}) from e
 
     async def _requestText(self, requestText: ITextInference) -> Union[List[IText], IAsyncTaskResponse]:
         await self.ensureConnection()
         requestText.taskUUID = requestText.taskUUID or getUUID()
+
+        
+        if requestText.inputs:
+            inputs = requestText.inputs
+            if isinstance(inputs, dict):
+                inputs = ITextInputs(**inputs)
+                requestText.inputs = inputs
+
+            if inputs.images:
+                inputs.images = await process_image(inputs.images)
+
         request_object = self._buildTextRequest(requestText)
 
         if requestText.webhookURL:
