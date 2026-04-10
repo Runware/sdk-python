@@ -45,7 +45,7 @@ BASE_RUNWARE_URLS = {
 
 # HTTP REST base URL for streaming (e.g. textInference with deliveryMethod=stream)
 BASE_RUNWARE_HTTP_URLS = {
-    Environment.PRODUCTION: "https://api.runware.ai/v1",
+    Environment.PRODUCTION: "https://api.runware.dev/v1",
     Environment.TEST: "http://localhost:8080",
 }
 

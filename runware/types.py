@@ -876,6 +876,14 @@ class ISettings(SerializableMixin):
     textureSeed: Optional[int] = None
     textureAlignment: Optional[str] = None
     textureQuality: Optional[str] = None
+    useOriginalAlpha: Optional[bool] = None
+    material: Optional[str] = None
+    polyCount: Optional[float] = None
+    taPose: Optional[bool] = None
+    boundingBox: Optional[List[int]] = None
+    meshMode: Optional[str] = None
+    addons: Optional[List[str]] = None
+    hdTexture: Optional[bool] = None
     autoSize: Optional[bool] = None
     orientation: Optional[str] = None
     quad: Optional[bool] = None
