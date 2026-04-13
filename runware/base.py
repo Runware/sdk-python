@@ -2475,8 +2475,6 @@ class RunwareBase:
                 inputs.videos = await self._process_media_list(inputs.videos)
 
         request_object = self._buildTextRequest(requestText)
-        import json
-        print(json.dumps(request_object, indent=4))
 
         if requestText.webhookURL:
             request_object["webhookURL"] = requestText.webhookURL
