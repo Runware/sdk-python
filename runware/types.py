@@ -1028,6 +1028,7 @@ class IInputs(SerializableMixin):
 @dataclass
 class ITextInputs(SerializableMixin):
     images: Optional[List[Union[str, File]]] = None
+    videos: Optional[List[Union[str, File]]] = None
 
     @property
     def request_key(self) -> str:
