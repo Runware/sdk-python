@@ -1710,10 +1710,15 @@ class IActiveSpeakerDetection(SerializableMixin):
         for idx, boundingBoxes in enumerate(self.boundingBoxes):
             if boundingBoxes is None:
                 continue
-            if len(boundingBoxes) != 4 or not all(type(ele) == float for ele in boundingBoxes):
+            if not isinstance(boundingBoxes, (list, tuple)) or len(boundingBoxes) != 4:
                 raise ValueError(
                     f"boundingBoxes[{idx}] must be null or [x1, y1, x2, y2] with float values."
                 )
+            if not all(isinstance(ele, (int, float)) for ele in boundingBoxes):
+                raise ValueError(
+                    f"boundingBoxes[{idx}] must be null or [x1, y1, x2, y2] with float values."
+                )
+            self.boundingBoxes[idx] = [float(ele) for ele in boundingBoxes]
 
 
 @dataclass
@@ -1738,6 +1743,8 @@ class ISyncProviderSettings(BaseProviderSettings):
             self.activeSpeakerDetection = IActiveSpeakerDetection(**self.activeSpeakerDetection)
 
         if self.segments:
+            if isinstance(self.segments, dict):
+                self.segments = [self.segments]
             self.segments = [
                 ISegment(**segment) if isinstance(segment, dict) else segment
                 for segment in self.segments
