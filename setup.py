@@ -35,6 +35,7 @@ setup(
     python_requires=">=3.10",
     install_requires=[
         "aiofiles>=23.2.1",
+        "httpx>=0.27.0",
         "python-dotenv>=1.0.1",
         "websockets>=12.0",
     ],
