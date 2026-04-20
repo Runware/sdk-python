@@ -896,9 +896,10 @@ class ISettings(SerializableMixin):
     languageBoost: Optional[str] = None
     turbo: Optional[bool] = None
     lyrics: Optional[str] = None
+    instrumental: Optional[bool] = None
+    lyricsOptimizer: Optional[bool] = None
     guidanceType: Optional[str] = None
     textNormalization: Optional[bool] = None
-    topK: Optional[int] = None
     maxNewTokens: Optional[int] = None
     transcript: Optional[str] = None
     xVectorOnly: Optional[bool] = None
@@ -1839,6 +1840,7 @@ class IAudioInference:
     taskUUID: Optional[str] = None
     outputType: Optional[IOutputType] = None
     outputFormat: Optional[IAudioOutputFormat] = None
+    outputQuality: Optional[int] = None
     audioSettings: Optional[IAudioSettings] = None
     includeCost: Optional[bool] = None
     numberResults: Optional[int] = 1
