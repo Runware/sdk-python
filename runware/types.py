@@ -1833,10 +1833,14 @@ class IAudioSpeech(SerializableMixin):
 
     def __post_init__(self):
         if self.voices is not None:
-            self.voices = [
-                IAudioVoice(**v) if isinstance(v, dict) else v
-                for v in self.voices
-            ]
+            normalized_voices = []
+            for v in self.voices:
+                if isinstance(v, dict):
+                    normalized_voices.append(IAudioVoice(**v))
+                else:
+                    normalized_voices.append(v)
+
+            self.voices = normalized_voices
 
     @property
     def request_key(self) -> str:
