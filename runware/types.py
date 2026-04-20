@@ -892,7 +892,6 @@ class ISettings(SerializableMixin):
     lyricsOptimizer: Optional[bool] = None
     guidanceType: Optional[str] = None
     textNormalization: Optional[bool] = None
-    topK: Optional[int] = None
     maxNewTokens: Optional[int] = None
     transcript: Optional[str] = None
     xVectorOnly: Optional[bool] = None
