@@ -1832,7 +1832,7 @@ class IAudioSpeech(SerializableMixin):
     tone: Optional[List[str]] = None  
 
     def __post_init__(self):
-        if self.voices is not None:
+        if self.voices is not None and isinstance(self.voices, (list, tuple)):
             normalized_voices = []
             for v in self.voices:
                 if isinstance(v, dict):
