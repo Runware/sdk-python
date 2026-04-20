@@ -2470,7 +2470,9 @@ class RunwareBase:
                 requestText.inputs = inputs
 
             if inputs.images:
-                inputs.images = await process_image(inputs.images)
+                inputs.images = await self._process_media_list(inputs.images)
+            if inputs.videos:
+                inputs.videos = await self._process_media_list(inputs.videos)
 
         request_object = self._buildTextRequest(requestText)
 
