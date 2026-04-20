@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.8]
+
+### Added
+
+- **`ISettings`** now includes:
+  - `useOriginalAlpha: Optional[bool]`
+  - `material: Optional[str]`
+  - `polyCount: Optional[float]`
+  - `taPose: Optional[bool]`
+  - `boundingBox: Optional[List[int]]`
+  - `meshMode: Optional[str]`
+  - `addons: Optional[List[str]]`
+  - `hdTexture: Optional[bool]`
+  - `instrumental: Optional[bool]`
+  - `lyricsOptimizer: Optional[bool]`
+- **`IAudioInference`** now includes:
+  - `outputQuality: Optional[int]`
+- **`ITextInputs`** now includes:
+  - `videos: Optional[List[Union[str, File]]]`
+- **`IVideoInputs`** now includes:
+  - `referenceAudios: Optional[List[str]]`
+
+### Changed
+
+- Fixed `httpx` version dependency during installation in `setup.py`.
+- `setup.py`: `find_packages` excludes the top-level `tests` package and its subpackages.
+
 ## [0.5.7]
 
 ### Added
