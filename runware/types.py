@@ -48,6 +48,7 @@ class ETaskType(Enum):
     VIDEO_CAPTION = "caption"
     MEDIA_STORAGE = "mediaStorage"
     GET_RESPONSE = "getResponse"
+    GET_TASK_DETAILS = "getTaskDetails"
     IMAGE_VECTORIZE = "vectorize"
 
 
@@ -136,6 +137,11 @@ class IAsyncTaskResponse:
 class IGetResponseRequest:
     taskUUID: str
     numberResults: int = 1
+
+
+@dataclass
+class IGetTaskDetailsRequest:
+    taskUUID: str
 
 
 @dataclass
@@ -2016,6 +2022,14 @@ class IAudio:
     videoURL: Optional[str] = None
     seed: Optional[int] = None
     cost: Optional[float] = None
+
+
+@dataclass
+class ITaskDetails:
+    taskType: str
+    taskUUID: str
+    request: List[Dict[str, Any]]
+    response: Dict[str, Any]
 
 
 @dataclass

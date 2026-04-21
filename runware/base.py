@@ -60,11 +60,13 @@ from .types import (
     I3dInference,
     I3d,
     IGetResponseRequest,
+    IGetTaskDetailsRequest,
     IUploadImageRequest,
     IUploadMediaRequest,
     ITextInference,
     IText,
     ITextInputs,
+    ITaskDetails,
 )
 from .types import IImage, IError, SdkType, ListenerType
 from .utils import (
@@ -2188,6 +2190,52 @@ class RunwareBase:
             task_uuid=request_model.taskUUID,
             number_results=request_model.numberResults,
         )
+
+    async def getTaskDetails(self, taskUUID: str) -> ITaskDetails:
+        async with self._request_semaphore:
+            request = IGetTaskDetailsRequest(taskUUID=taskUUID)
+            return await self._retry_async_with_reconnect(
+                self._requestTaskDetails,
+                request,
+                task_type=ETaskType.GET_TASK_DETAILS.value,
+            )
+
+    async def _requestTaskDetails(self, request_model: IGetTaskDetailsRequest) -> ITaskDetails:
+        await self.ensureConnection()
+        request_object = {
+            "taskType": ETaskType.GET_TASK_DETAILS.value,
+            "taskUUID": request_model.taskUUID,
+        }
+        return await self._handleTaskDetailsResponse(
+            request_object=request_object,
+            task_uuid=request_model.taskUUID,
+        )
+
+    async def _handleTaskDetailsResponse(
+        self,
+        request_object: Dict[str, Any],
+        task_uuid: str,
+    ) -> ITaskDetails:
+        future, should_send = await self._register_pending_operation(
+            task_uuid,
+            expected_results=1,
+        )
+        try:
+            if should_send:
+                await self.send([request_object])
+                await self._mark_operation_sent(task_uuid)
+
+            results = await asyncio.wait_for(future, timeout=VIDEO_INITIAL_TIMEOUT / 1000)
+            if not results:
+                raise ValueError(f"No task details found for taskUUID={task_uuid}")
+            return instantiateDataclass(ITaskDetails, results[0])
+        except asyncio.TimeoutError:
+            raise Exception(
+                f"Timeout waiting for task details | TaskUUID: {task_uuid} | "
+                f"Timeout: {VIDEO_INITIAL_TIMEOUT}ms"
+            )
+        finally:
+            await self._unregister_pending_operation(task_uuid)
 
     async def _requestVideo(self, requestVideo: "IVideoInference") -> "Union[List[IVideo], IAsyncTaskResponse]":
         if requestVideo.frameImages:
