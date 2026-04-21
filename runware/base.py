@@ -2228,7 +2228,10 @@ class RunwareBase:
             results = await asyncio.wait_for(future, timeout=VIDEO_INITIAL_TIMEOUT / 1000)
             if not results:
                 raise ValueError(f"No task details found for taskUUID={task_uuid}")
-            return instantiateDataclass(ITaskDetails, results[0])
+            task_details = instantiateDataclass(ITaskDetails, results[0])
+            task_details.request = self._normalizeTaskDetailsRequest(task_details.request)
+            task_details.response = self._normalizeTaskDetailsResponse(task_details.response)
+            return task_details
         except asyncio.TimeoutError:
             raise Exception(
                 f"Timeout waiting for task details | TaskUUID: {task_uuid} | "
@@ -2236,6 +2239,90 @@ class RunwareBase:
             )
         finally:
             await self._unregister_pending_operation(task_uuid)
+
+    def _normalizeTaskDetailsRequest(self, request_items: List[Any]) -> List[Any]:
+        task_type_map = {
+            ETaskType.IMAGE_INFERENCE.value: IImageInference,
+            ETaskType.PHOTO_MAKER.value: IPhotoMaker,
+            ETaskType.IMAGE_CAPTION.value: IImageCaption,
+            ETaskType.IMAGE_BACKGROUND_REMOVAL.value: IImageBackgroundRemoval,
+            ETaskType.IMAGE_UPSCALE.value: IImageUpscale,
+            ETaskType.PROMPT_ENHANCE.value: IPromptEnhance,
+            ETaskType.MODEL_SEARCH.value: IModelSearch,
+            ETaskType.VIDEO_INFERENCE.value: IVideoInference,
+            ETaskType.VIDEO_CAPTION.value: IVideoCaption,
+            ETaskType.VIDEO_BACKGROUND_REMOVAL.value: IVideoBackgroundRemoval,
+            ETaskType.VIDEO_UPSCALE.value: IVideoUpscale,
+            ETaskType.AUDIO_INFERENCE.value: IAudioInference,
+            ETaskType.INFERENCE_3D.value: I3dInference,
+            ETaskType.TEXT_INFERENCE.value: ITextInference,
+            ETaskType.GET_RESPONSE.value: IGetResponseRequest,
+            ETaskType.GET_TASK_DETAILS.value: IGetTaskDetailsRequest,
+            ETaskType.IMAGE_VECTORIZE.value: IVectorize,
+        }
+
+        normalized: List[Any] = []
+        for item in request_items:
+            if not isinstance(item, dict):
+                normalized.append(item)
+                continue
+            task_type = item.get("taskType")
+            request_cls = task_type_map.get(task_type)
+            if request_cls is None:
+                normalized.append(item)
+                continue
+            try:
+                valid_fields = {f.name for f in fields(request_cls)}
+                filtered_item = {k: v for k, v in item.items() if k in valid_fields}
+                normalized.append(request_cls(**filtered_item))
+            except Exception:
+                normalized.append(item)
+        return normalized
+
+    def _normalizeTaskDetailsResponse(self, response_payload: Any) -> Any:
+        if not isinstance(response_payload, dict):
+            return response_payload
+
+        data_items = response_payload.get("data")
+        if not isinstance(data_items, list):
+            return response_payload
+
+        response_type_map = {
+            ETaskType.AUDIO_INFERENCE.value: IAudio,
+            ETaskType.VIDEO_CAPTION.value: IVideoToText,
+            ETaskType.IMAGE_CAPTION.value: IImageToText,
+            ETaskType.IMAGE_INFERENCE.value: IImage,
+            ETaskType.PHOTO_MAKER.value: IImage,
+            ETaskType.IMAGE_UPSCALE.value: IImage,
+            ETaskType.IMAGE_VECTORIZE.value: IImage,
+            ETaskType.IMAGE_BACKGROUND_REMOVAL.value: IImage,
+            ETaskType.VIDEO_INFERENCE.value: IVideo,
+            ETaskType.VIDEO_BACKGROUND_REMOVAL.value: IVideo,
+            ETaskType.VIDEO_UPSCALE.value: IVideo,
+            ETaskType.INFERENCE_3D.value: I3d,
+            ETaskType.TEXT_INFERENCE.value: IText,
+            ETaskType.PROMPT_ENHANCE.value: IEnhancedPrompt,
+            ETaskType.GET_TASK_DETAILS.value: ITaskDetails,
+        }
+
+        normalized_data: List[Any] = []
+        for item in data_items:
+            if not isinstance(item, dict):
+                normalized_data.append(item)
+                continue
+            task_type = item.get("taskType")
+            response_cls = response_type_map.get(task_type)
+            if response_cls is None:
+                normalized_data.append(item)
+                continue
+            try:
+                normalized_data.append(instantiateDataclass(response_cls, item))
+            except Exception:
+                normalized_data.append(item)
+
+        normalized_response = dict(response_payload)
+        normalized_response["data"] = normalized_data
+        return normalized_response
 
     async def _requestVideo(self, requestVideo: "IVideoInference") -> "Union[List[IVideo], IAsyncTaskResponse]":
         if requestVideo.frameImages:

@@ -2025,14 +2025,6 @@ class IAudio:
 
 
 @dataclass
-class ITaskDetails:
-    taskType: str
-    taskUUID: str
-    request: List[Dict[str, Any]]
-    response: Dict[str, Any]
-
-
-@dataclass
 class IVideoCaptionInputs:
     video: str  # Video URL or UUID
 
@@ -2103,6 +2095,25 @@ class IVideoToText:
     structuredData: Optional[Dict[str, Any]] = None
     status: Optional[str] = None
     cost: Optional[float] = None
+
+
+@dataclass
+class ITaskDetails:
+    taskType: str
+    taskUUID: str
+    request: List[Any]
+    response: Union[
+        Dict[str, Any],
+        List[Union[IImage, IVideo, IAudio, IVideoToText, IImageToText, I3d, IText, IEnhancedPrompt, Dict[str, Any]]],
+        IImage,
+        IVideo,
+        IAudio,
+        IVideoToText,
+        IImageToText,
+        I3d,
+        IText,
+        IEnhancedPrompt,
+    ]
 
 
 # The GetWithPromiseCallBackType is defined using the Callable type from the typing module. It represents a function that takes a dictionary
