@@ -856,6 +856,8 @@ class ISettings(SerializableMixin):
     layers: Optional[int] = None
     trueCFGScale: Optional[float] = None
     quality: Optional[str] = None
+    renderingSpeed: Optional[str] = None
+    magicPrompt: Optional[str] = None
     promptExtend: Optional[bool] = None
     editRegions: Optional[List[List[Union[IEditRegion, Dict[str, Any]]]]] = None
     sequential: Optional[bool] = None
@@ -1157,6 +1159,7 @@ class IImageInference:
     seedImage: Optional[Union[File, str]] = None
     maskImage: Optional[Union[File, str]] = None
     strength: Optional[float] = None
+    upscaleFactor: Optional[float] = None
     height: Optional[int] = None
     width: Optional[int] = None
     acceleratorOptions: Optional[IAcceleratorOptions] = None
