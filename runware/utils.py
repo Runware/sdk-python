@@ -921,11 +921,53 @@ def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
             continue
         
         field_type = hints.get(k)
-        
-        # Unwrap Optional[X] -> X
+        union_args = []
         if get_origin(field_type) is Union:
-            args = [a for a in get_args(field_type) if a is not type(None)]
-            field_type = args[0] if args else field_type
+            union_args = [a for a in get_args(field_type) if a is not type(None)]
+
+            
+            matched_union_type = False
+            for arg in union_args:
+                if isinstance(arg, type) and isinstance(v, arg):
+                    filtered_data[k] = v
+                    matched_union_type = True
+                    break
+            if matched_union_type:
+                continue
+
+            
+            if isinstance(v, dict):
+                dataclass_args = [
+                    arg for arg in union_args
+                    if isinstance(arg, type) and is_dataclass(arg)
+                ]
+                for dataclass_arg in dataclass_args:
+                    try:
+                        filtered_data[k] = instantiateDataclass(dataclass_arg, v)
+                        matched_union_type = True
+                        break
+                    except Exception:
+                        continue
+                if matched_union_type:
+                    continue
+
+                has_dict_branch = any(
+                    arg is dict or get_origin(arg) is dict
+                    for arg in union_args
+                )
+                if has_dict_branch:
+                    filtered_data[k] = v
+                    continue
+
+            
+            if isinstance(v, list):
+                list_arg = next((arg for arg in union_args if get_origin(arg) is list), None)
+                if list_arg is not None:
+                    field_type = list_arg
+                else:
+                    field_type = union_args[0] if union_args else field_type
+            else:
+                field_type = union_args[0] if union_args else field_type
         
         # Nested dataclass
         if is_dataclass(field_type) and isinstance(v, dict):

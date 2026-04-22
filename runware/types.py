@@ -48,6 +48,7 @@ class ETaskType(Enum):
     VIDEO_CAPTION = "caption"
     MEDIA_STORAGE = "mediaStorage"
     GET_RESPONSE = "getResponse"
+    GET_TASK_DETAILS = "getTaskDetails"
     IMAGE_VECTORIZE = "vectorize"
 
 
@@ -136,6 +137,11 @@ class IAsyncTaskResponse:
 class IGetResponseRequest:
     taskUUID: str
     numberResults: int = 1
+
+
+@dataclass
+class IGetTaskDetailsRequest:
+    taskUUID: str
 
 
 @dataclass
@@ -2089,6 +2095,37 @@ class IVideoToText:
     structuredData: Optional[Dict[str, Any]] = None
     status: Optional[str] = None
     cost: Optional[float] = None
+
+
+@dataclass
+class ITaskDetails:
+    taskType: str
+    taskUUID: str
+    request: List[
+        Union[
+            IImageInference,
+            IPhotoMaker,
+            IImageCaption,
+            IImageBackgroundRemoval,
+            IImageUpscale,
+            IPromptEnhance,
+            IModelSearch,
+            IVideoInference,
+            IVideoCaption,
+            IVideoBackgroundRemoval,
+            IVideoUpscale,
+            IAudioInference,
+            I3dInference,
+            ITextInference,
+            IGetResponseRequest,
+            IGetTaskDetailsRequest,
+            IVectorize,
+            Dict[str, Any],
+        ]
+    ]
+    response: List[
+        Union[IImage, IVideo, IAudio, IVideoToText, IImageToText, I3d, IText, IEnhancedPrompt, Dict[str, Any]]
+    ]
 
 
 # The GetWithPromiseCallBackType is defined using the Callable type from the typing module. It represents a function that takes a dictionary
