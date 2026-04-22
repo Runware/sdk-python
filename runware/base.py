@@ -258,10 +258,16 @@ class RunwareBase:
         task_uuid = item.get("taskUUID")
         if not task_uuid:
             return False
+        task_type = item.get("taskType")
 
         on_partial_callback = None
         async with self._operations_lock:
-            op = self._pending_operations.get(task_uuid)
+            operation_key = task_uuid
+            if task_type:
+                typed_key = f"{task_uuid}:{task_type}"
+                if typed_key in self._pending_operations:
+                    operation_key = typed_key
+            op = self._pending_operations.get(operation_key)
             if op is None:
                 return False
 
@@ -316,7 +322,11 @@ class RunwareBase:
         on_partial_callback = None
         error_obj = None
         async with self._operations_lock:
-            op = self._pending_operations.get(task_uuid)
+            operation_key = task_uuid
+            typed_key = f"{task_uuid}:{ETaskType.GET_TASK_DETAILS.value}"
+            if typed_key in self._pending_operations:
+                operation_key = typed_key
+            op = self._pending_operations.get(operation_key)
             if op is None:
                 return False
 
@@ -2216,14 +2226,21 @@ class RunwareBase:
         request_object: Dict[str, Any],
         task_uuid: str,
     ) -> ITaskDetails:
+        operation_key = f"{task_uuid}:{ETaskType.GET_TASK_DETAILS.value}"
         future, should_send = await self._register_pending_operation(
-            task_uuid,
+            operation_key,
             expected_results=1,
+            complete_predicate=lambda r: (
+                r.get("taskType") == ETaskType.GET_TASK_DETAILS.value
+                and "request" in r
+                and "response" in r
+            ),
+            result_filter=lambda r: r.get("taskType") == ETaskType.GET_TASK_DETAILS.value,
         )
         try:
             if should_send:
                 await self.send([request_object])
-                await self._mark_operation_sent(task_uuid)
+                await self._mark_operation_sent(operation_key)
 
             results = await asyncio.wait_for(future, timeout=VIDEO_INITIAL_TIMEOUT / 1000)
             if not results:
@@ -2238,7 +2255,7 @@ class RunwareBase:
                 f"Timeout: {VIDEO_INITIAL_TIMEOUT}ms"
             )
         finally:
-            await self._unregister_pending_operation(task_uuid)
+            await self._unregister_pending_operation(operation_key)
 
     def _normalizeTaskDetailsRequest(self, request_items: List[Any]) -> List[Any]:
         task_type_map = {
@@ -2263,9 +2280,7 @@ class RunwareBase:
         return self._normalizeTaskDetailsItems(
             request_items,
             task_type_map,
-            lambda cls, item: cls(
-                **{k: v for k, v in item.items() if k in {f.name for f in fields(cls)}}
-            ),
+            lambda cls, item: instantiateDataclass(cls, item),
         )
 
     def _normalizeTaskDetailsResponse(self, response_payload: Any) -> Any:

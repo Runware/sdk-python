@@ -243,9 +243,11 @@ async def main() -> None:
 
 ### Retrieving Original Task Request/Response
 
-To inspect the original request payload and response envelope for a past task, use `getTaskDetails(taskUUID)`.
+To inspect the original request payload and response for a past task, use `getTaskDetails(taskUUID)`.
 Known request task types are parsed into SDK request objects when possible; unknown task types remain raw dictionaries.
-Known `response.data[]` task types are also parsed into SDK response objects when possible.
+`details.response` is normalized to a list:
+- success: parsed items from `response.data[]` (typed when known)
+- failure: items from `response.errors[]`
 
 ```python
 from runware import Runware
