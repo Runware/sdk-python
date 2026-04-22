@@ -2101,19 +2101,29 @@ class IVideoToText:
 class ITaskDetails:
     taskType: str
     taskUUID: str
-    request: List[Any]
-    response: Union[
-        Dict[str, Any],
-        List[Union[IImage, IVideo, IAudio, IVideoToText, IImageToText, I3d, IText, IEnhancedPrompt, Dict[str, Any]]],
-        IImage,
-        IVideo,
-        IAudio,
-        IVideoToText,
-        IImageToText,
-        I3d,
-        IText,
-        IEnhancedPrompt,
+    request: List[
+        Union[
+            IImageInference,
+            IPhotoMaker,
+            IImageCaption,
+            IImageBackgroundRemoval,
+            IImageUpscale,
+            IPromptEnhance,
+            IModelSearch,
+            IVideoInference,
+            IVideoCaption,
+            IVideoBackgroundRemoval,
+            IVideoUpscale,
+            IAudioInference,
+            I3dInference,
+            ITextInference,
+            IGetResponseRequest,
+            IGetTaskDetailsRequest,
+            IVectorize,
+            Dict[str, Any],
+        ]
     ]
+    response: List[Union[IImage, IVideo, IAudio, IVideoToText, IImageToText, I3d, IText, IEnhancedPrompt, Dict[str, Any]]]
 
 
 # The GetWithPromiseCallBackType is defined using the Callable type from the typing module. It represents a function that takes a dictionary
