@@ -925,7 +925,7 @@ def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
         if get_origin(field_type) is Union:
             union_args = [a for a in get_args(field_type) if a is not type(None)]
 
-            # If value already matches one branch of the union, keep as-is.
+            
             matched_union_type = False
             for arg in union_args:
                 if isinstance(arg, type) and isinstance(v, arg):
@@ -935,7 +935,7 @@ def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
             if matched_union_type:
                 continue
 
-            # If dict is provided, prefer dataclass branch when available.
+            
             if isinstance(v, dict):
                 dataclass_args = [
                     arg for arg in union_args
@@ -951,7 +951,15 @@ def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
                 if matched_union_type:
                     continue
 
-            # If list is provided, prefer List[...] branch when available.
+                has_dict_branch = any(
+                    arg is dict or get_origin(arg) is dict
+                    for arg in union_args
+                )
+                if has_dict_branch:
+                    filtered_data[k] = v
+                    continue
+
+            
             if isinstance(v, list):
                 list_arg = next((arg for arg in union_args if get_origin(arg) is list), None)
                 if list_arg is not None:

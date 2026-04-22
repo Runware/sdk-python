@@ -323,9 +323,11 @@ class RunwareBase:
         error_obj = None
         async with self._operations_lock:
             operation_key = task_uuid
-            typed_key = f"{task_uuid}:{ETaskType.GET_TASK_DETAILS.value}"
-            if typed_key in self._pending_operations:
-                operation_key = typed_key
+            task_type = error.get("taskType")
+            if task_type:
+                typed_key = f"{task_uuid}:{task_type}"
+                if typed_key in self._pending_operations:
+                    operation_key = typed_key
             op = self._pending_operations.get(operation_key)
             if op is None:
                 return False
@@ -2242,7 +2244,7 @@ class RunwareBase:
                 await self.send([request_object])
                 await self._mark_operation_sent(operation_key)
 
-            results = await asyncio.wait_for(future, timeout=VIDEO_INITIAL_TIMEOUT / 1000)
+            results = await asyncio.wait_for(future, timeout=self._timeout / 1000)
             if not results:
                 raise ValueError(f"No task details found for taskUUID={task_uuid}")
             task_details = instantiateDataclass(ITaskDetails, results[0])
@@ -2252,7 +2254,7 @@ class RunwareBase:
         except asyncio.TimeoutError:
             raise Exception(
                 f"Timeout waiting for task details | TaskUUID: {task_uuid} | "
-                f"Timeout: {VIDEO_INITIAL_TIMEOUT}ms"
+                f"Timeout: {self._timeout}ms"
             )
         finally:
             await self._unregister_pending_operation(operation_key)
@@ -2285,7 +2287,7 @@ class RunwareBase:
 
     def _normalizeTaskDetailsResponse(self, response_payload: Any) -> Any:
         if not isinstance(response_payload, dict):
-            return response_payload
+            return response_payload if isinstance(response_payload, list) else [response_payload]
 
         data_items = response_payload.get("data")
         if isinstance(data_items, list):

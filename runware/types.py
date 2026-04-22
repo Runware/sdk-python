@@ -2123,9 +2123,8 @@ class ITaskDetails:
             Dict[str, Any],
         ]
     ]
-    response: Union[
-        Dict[str, Any],
-        List[Union[IImage, IVideo, IAudio, IVideoToText, IImageToText, I3d, IText, IEnhancedPrompt, Dict[str, Any]]],
+    response: List[
+        Union[IImage, IVideo, IAudio, IVideoToText, IImageToText, I3d, IText, IEnhancedPrompt, Dict[str, Any]]
     ]
 
 
