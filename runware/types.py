@@ -1875,15 +1875,33 @@ class IAudioInputs(SerializableMixin):
 
 
 @dataclass
+class IAudioVoice(SerializableMixin):
+    speaker: str
+    voice: str
+
+
+@dataclass
 class IAudioSpeech(SerializableMixin):
     text: Optional[str] = None  
     voice: Optional[str] = None
+    voices: Optional[List[Union[IAudioVoice, Dict[str, Any]]]] = None
     language: Optional[str] = None
     speed: Optional[float] = None
     volume: Optional[int] = None
     pitch: Optional[int] = None
     emotion: Optional[str] = None
     tone: Optional[List[str]] = None  
+
+    def __post_init__(self):
+        if self.voices is not None and isinstance(self.voices, (list, tuple)):
+            normalized_voices = []
+            for v in self.voices:
+                if isinstance(v, dict):
+                    normalized_voices.append(IAudioVoice(**v))
+                else:
+                    normalized_voices.append(v)
+
+            self.voices = normalized_voices
 
     @property
     def request_key(self) -> str:
