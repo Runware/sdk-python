@@ -1863,7 +1863,7 @@ class I3dInference:
     taskUUID: Optional[str] = None
     numberResults: Optional[int] = 1
     outputType: Optional[IOutputType] = None
-    outputFormat: Optional[I3dOutputFormat] = None  # "GLB" | "PLY"
+    outputFormat: Optional[I3dOutputFormat] = None  
     outputQuality: Optional[int] = None
     includeCost: Optional[bool] = None
     deliveryMethod: str = "async"
