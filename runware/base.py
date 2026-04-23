@@ -2291,6 +2291,8 @@ class RunwareBase:
             return
         if request3d.inputs.images:
             request3d.inputs.images = await process_image(request3d.inputs.images)
+        if request3d.inputs.referenceImages:
+            request3d.inputs.referenceImages = await process_image(request3d.inputs.referenceImages)
         if request3d.inputs.image:
             request3d.inputs.image = await process_image(request3d.inputs.image)
         if request3d.inputs.mask:
