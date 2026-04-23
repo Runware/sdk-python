@@ -856,6 +856,7 @@ class ISettings(SerializableMixin):
     layers: Optional[int] = None
     trueCFGScale: Optional[float] = None
     quality: Optional[str] = None
+    background: Optional[str] = None
     renderingSpeed: Optional[str] = None
     magicPrompt: Optional[str] = None
     promptExtend: Optional[bool] = None
