@@ -892,6 +892,17 @@ class ISettings(SerializableMixin):
     generateParts: Optional[bool] = None
     exportUv: Optional[bool] = None
     geometryQuality: Optional[str] = None
+    meshType: Optional[str] = None
+    topology: Optional[str] = None
+    decimation: Optional[int] = None
+    symmetry: Optional[str] = None
+    pose: Optional[str] = None
+    texturePrompt: Optional[str] = None
+    imageEnhancement: Optional[bool] = None
+    savePreRemeshedModel: Optional[bool] = None
+    removeLighting: Optional[bool] = None
+    moderation: Optional[bool] = None
+    origin: Optional[str] = None
     # Audio
     languageBoost: Optional[str] = None
     turbo: Optional[bool] = None
@@ -1135,6 +1146,7 @@ class IVideoInputs(SerializableMixin):
 class I3dInputs(SerializableMixin):
     image: Optional[Union[str, File]] = None
     images: Optional[List[Union[str, File]]] = None
+    referenceImages: Optional[List[Union[str, File]]] = None
     mask: Optional[Union[str, File]] = None
     meshFile: Optional[Union[str, File]] = None
 
@@ -1775,7 +1787,7 @@ class IVideoInference:
             self.inputs = IVideoInputs(**self.inputs)
 
 
-I3dOutputFormat = Literal["GLB", "PLY"]
+I3dOutputFormat = Literal["GLB", "OBJ", "FBX", "STL", "USDZ", "3MF", "PLY"]
 
 
 @dataclass
