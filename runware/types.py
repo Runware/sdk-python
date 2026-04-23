@@ -915,12 +915,18 @@ class ISettings(SerializableMixin):
     # Video
     draft: Optional[bool] = None
     audio: Optional[bool] = None
+    syncMode: Optional[str] = None
+    mode: Optional[str] = None
+    emotion: Optional[str] = None
     voiceDescription: Optional[str] = None
     style: Optional[str] = None
     thinking: Optional[str] = None
     multiClip: Optional[bool] = None
     promptUpsampling: Optional[bool] = None
     expressiveness: Optional[str] = None
+    activeSpeakerDetection: Optional[Union["IActiveSpeakerDetection", Dict[str, Any]]] = None
+    occlusionDetection: Optional[bool] = None
+    segments: Optional[List[Union["ISegment", Dict[str, Any]]]] = None
     removeBackground: Optional[bool] = None
     backgroundColor: Optional[str] = None
     # Text
@@ -970,6 +976,15 @@ class ISettings(SerializableMixin):
             self.colorPalette = [
                 IColorPaletteEntry(**item) if isinstance(item, dict) else item
                 for item in self.colorPalette
+            ]
+        if isinstance(self.activeSpeakerDetection, dict):
+            self.activeSpeakerDetection = IActiveSpeakerDetection(**self.activeSpeakerDetection)
+        if isinstance(self.segments, dict):
+            self.segments = [ISegment(**self.segments)]
+        elif self.segments:
+            self.segments = [
+                ISegment(**segment) if isinstance(segment, dict) else segment
+                for segment in self.segments
             ]
 
     @property
@@ -1684,27 +1699,72 @@ class IRunwayProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class ISyncSegment(SerializableMixin):
+class ISegment(SerializableMixin):
     startTime: float
     endTime: float
-    ref: str
+    audio: Optional[str] = None
+    ref: Optional[str] = None
     audioStartTime: Optional[float] = None
     audioEndTime: Optional[float] = None
 
 
 @dataclass
+class IActiveSpeakerDetection(SerializableMixin):
+    autoDetect: Optional[bool] = None
+    frameNumber: Optional[int] = None
+    coordinates: Optional[List[float]] = None
+    boundingBoxes: Optional[List[Optional[List[float]]]] = None
+
+    def __post_init__(self):
+        if self.boundingBoxes is None:
+            return
+        for idx, boundingBoxes in enumerate(self.boundingBoxes):
+            if boundingBoxes is None:
+                continue
+            if not isinstance(boundingBoxes, (list, tuple)) or len(boundingBoxes) != 4:
+                raise ValueError(
+                    f"boundingBoxes[{idx}] must be null or [x1, y1, x2, y2] with float values."
+                )
+            if not all(isinstance(ele, (int, float)) for ele in boundingBoxes):
+                raise ValueError(
+                    f"boundingBoxes[{idx}] must be null or [x1, y1, x2, y2] with float values."
+                )
+            self.boundingBoxes[idx] = [float(ele) for ele in boundingBoxes]
+
+
+@dataclass
 class ISyncProviderSettings(BaseProviderSettings):
     syncMode: Optional[str] = None
+    mode: Optional[str] = None
+    emotion: Optional[str] = None
     editRegion: Optional[str] = None
     emotionPrompt: Optional[str] = None
     temperature: Optional[float] = None
-    activeSpeakerDetection: Optional[bool] = None
+    activeSpeakerDetection: Optional[Union[IActiveSpeakerDetection, Dict[str, Any], bool]] = None
+    occlusionDetection: Optional[bool] = None
     occlusionDetectionEnabled: Optional[bool] = None
-    segments: Optional[List[ISyncSegment]] = None
+    segments: Optional[List[Union[ISegment, Dict[str, Any]]]] = None
 
     @property
     def provider_key(self) -> str:
         return "sync"
+
+    def __post_init__(self):
+        if isinstance(self.activeSpeakerDetection, dict):
+            self.activeSpeakerDetection = IActiveSpeakerDetection(**self.activeSpeakerDetection)
+
+        if self.segments:
+            if isinstance(self.segments, dict):
+                self.segments = [self.segments]
+            self.segments = [
+                ISegment(**segment) if isinstance(segment, dict) else segment
+                for segment in self.segments
+            ]
+
+
+ISyncSegment = ISegment
+ISyncActiveSpeakerDetection = IActiveSpeakerDetection
+ISyncSettings = ISyncProviderSettings
 
 
 AudioProviderSettings = IElevenLabsProviderSettings | IKlingAIProviderSettings | IMireloProviderSettings
