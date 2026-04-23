@@ -929,6 +929,7 @@ class ISettings(SerializableMixin):
     segments: Optional[List[Union["ISegment", Dict[str, Any]]]] = None
     removeBackground: Optional[bool] = None
     backgroundColor: Optional[str] = None
+    colorCorrection: Optional[bool] = None
     # Text
     maxTokens: Optional[int] = None
     topK: Optional[int] = None
