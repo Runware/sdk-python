@@ -856,6 +856,9 @@ class ISettings(SerializableMixin):
     layers: Optional[int] = None
     trueCFGScale: Optional[float] = None
     quality: Optional[str] = None
+    background: Optional[str] = None
+    renderingSpeed: Optional[str] = None
+    magicPrompt: Optional[str] = None
     promptExtend: Optional[bool] = None
     editRegions: Optional[List[List[Union[IEditRegion, Dict[str, Any]]]]] = None
     sequential: Optional[bool] = None
@@ -926,14 +929,21 @@ class ISettings(SerializableMixin):
     # Video
     draft: Optional[bool] = None
     audio: Optional[bool] = None
+    syncMode: Optional[str] = None
+    mode: Optional[str] = None
+    emotion: Optional[str] = None
     voiceDescription: Optional[str] = None
     style: Optional[str] = None
     thinking: Optional[str] = None
     multiClip: Optional[bool] = None
     promptUpsampling: Optional[bool] = None
     expressiveness: Optional[str] = None
+    activeSpeakerDetection: Optional[Union["IActiveSpeakerDetection", Dict[str, Any]]] = None
+    occlusionDetection: Optional[bool] = None
+    segments: Optional[List[Union["ISegment", Dict[str, Any]]]] = None
     removeBackground: Optional[bool] = None
     backgroundColor: Optional[str] = None
+    colorCorrection: Optional[bool] = None
     # Text
     maxTokens: Optional[int] = None
     topK: Optional[int] = None
@@ -981,6 +991,15 @@ class ISettings(SerializableMixin):
             self.colorPalette = [
                 IColorPaletteEntry(**item) if isinstance(item, dict) else item
                 for item in self.colorPalette
+            ]
+        if isinstance(self.activeSpeakerDetection, dict):
+            self.activeSpeakerDetection = IActiveSpeakerDetection(**self.activeSpeakerDetection)
+        if isinstance(self.segments, dict):
+            self.segments = [ISegment(**self.segments)]
+        elif self.segments:
+            self.segments = [
+                ISegment(**segment) if isinstance(segment, dict) else segment
+                for segment in self.segments
             ]
 
     @property
@@ -1169,6 +1188,7 @@ class IImageInference:
     seedImage: Optional[Union[File, str]] = None
     maskImage: Optional[Union[File, str]] = None
     strength: Optional[float] = None
+    upscaleFactor: Optional[float] = None
     height: Optional[int] = None
     width: Optional[int] = None
     acceleratorOptions: Optional[IAcceleratorOptions] = None
@@ -1696,27 +1716,72 @@ class IRunwayProviderSettings(BaseProviderSettings):
 
 
 @dataclass
-class ISyncSegment(SerializableMixin):
+class ISegment(SerializableMixin):
     startTime: float
     endTime: float
-    ref: str
+    audio: Optional[str] = None
+    ref: Optional[str] = None
     audioStartTime: Optional[float] = None
     audioEndTime: Optional[float] = None
 
 
 @dataclass
+class IActiveSpeakerDetection(SerializableMixin):
+    autoDetect: Optional[bool] = None
+    frameNumber: Optional[int] = None
+    coordinates: Optional[List[float]] = None
+    boundingBoxes: Optional[List[Optional[List[float]]]] = None
+
+    def __post_init__(self):
+        if self.boundingBoxes is None:
+            return
+        for idx, boundingBoxes in enumerate(self.boundingBoxes):
+            if boundingBoxes is None:
+                continue
+            if not isinstance(boundingBoxes, (list, tuple)) or len(boundingBoxes) != 4:
+                raise ValueError(
+                    f"boundingBoxes[{idx}] must be null or [x1, y1, x2, y2] with float values."
+                )
+            if not all(isinstance(ele, (int, float)) for ele in boundingBoxes):
+                raise ValueError(
+                    f"boundingBoxes[{idx}] must be null or [x1, y1, x2, y2] with float values."
+                )
+            self.boundingBoxes[idx] = [float(ele) for ele in boundingBoxes]
+
+
+@dataclass
 class ISyncProviderSettings(BaseProviderSettings):
     syncMode: Optional[str] = None
+    mode: Optional[str] = None
+    emotion: Optional[str] = None
     editRegion: Optional[str] = None
     emotionPrompt: Optional[str] = None
     temperature: Optional[float] = None
-    activeSpeakerDetection: Optional[bool] = None
+    activeSpeakerDetection: Optional[Union[IActiveSpeakerDetection, Dict[str, Any], bool]] = None
+    occlusionDetection: Optional[bool] = None
     occlusionDetectionEnabled: Optional[bool] = None
-    segments: Optional[List[ISyncSegment]] = None
+    segments: Optional[List[Union[ISegment, Dict[str, Any]]]] = None
 
     @property
     def provider_key(self) -> str:
         return "sync"
+
+    def __post_init__(self):
+        if isinstance(self.activeSpeakerDetection, dict):
+            self.activeSpeakerDetection = IActiveSpeakerDetection(**self.activeSpeakerDetection)
+
+        if self.segments:
+            if isinstance(self.segments, dict):
+                self.segments = [self.segments]
+            self.segments = [
+                ISegment(**segment) if isinstance(segment, dict) else segment
+                for segment in self.segments
+            ]
+
+
+ISyncSegment = ISegment
+ISyncActiveSpeakerDetection = IActiveSpeakerDetection
+ISyncSettings = ISyncProviderSettings
 
 
 AudioProviderSettings = IElevenLabsProviderSettings | IKlingAIProviderSettings | IMireloProviderSettings
@@ -1826,15 +1891,33 @@ class IAudioInputs(SerializableMixin):
 
 
 @dataclass
+class IAudioVoice(SerializableMixin):
+    speaker: str
+    voice: str
+
+
+@dataclass
 class IAudioSpeech(SerializableMixin):
     text: Optional[str] = None  
     voice: Optional[str] = None
+    voices: Optional[List[Union[IAudioVoice, Dict[str, Any]]]] = None
     language: Optional[str] = None
     speed: Optional[float] = None
     volume: Optional[int] = None
     pitch: Optional[int] = None
     emotion: Optional[str] = None
     tone: Optional[List[str]] = None  
+
+    def __post_init__(self):
+        if self.voices is not None and isinstance(self.voices, (list, tuple)):
+            normalized_voices = []
+            for v in self.voices:
+                if isinstance(v, dict):
+                    normalized_voices.append(IAudioVoice(**v))
+                else:
+                    normalized_voices.append(v)
+
+            self.voices = normalized_voices
 
     @property
     def request_key(self) -> str:

@@ -2,6 +2,47 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.9]
+
+### Added
+
+- **`ISettings`** now includes:
+  - `syncMode: Optional[str]`
+  - `mode: Optional[str]`
+  - `emotion: Optional[str]`
+  - `activeSpeakerDetection: Optional[Union[IActiveSpeakerDetection, Dict[str, Any]]]`
+  - `occlusionDetection: Optional[bool]`
+  - `segments: Optional[List[Union[ISegment, Dict[str, Any]]]]`
+  - `tts: Optional[Union[ITTSSettings, Dict[str, Any]]]`
+  - `colorCorrection: Optional[bool]`
+  - `renderingSpeed: Optional[str]`
+  - `magicPrompt: Optional[str]`
+  - `background: Optional[str]`
+- Added **`IActiveSpeakerDetection`** (`autoDetect`, `frameNumber`, `coordinates`, `boundingBoxes`) with validation for `boundingBoxes` entries (must be `null` or four numeric values).
+- Added **`ISegment`** for Sync segments (`startTime`, `endTime`, `audio`, `ref`, `audioStartTime`, `audioEndTime`).
+- Added **`ITTSSettings`** for Sync TTS tuning (`stability`, `similarityBoost`).
+- Added compatibility aliases:
+  - `ISyncSegment = ISegment`
+  - `ISyncActiveSpeakerDetection = IActiveSpeakerDetection`
+  - `ISyncSettings = ISyncProviderSettings`
+- **`IAudioSpeech`** now includes:
+  - `voices: Optional[List[Union[IAudioVoice, Dict[str, Any]]]]`
+- Added **`IAudioVoice`** for multi-speaker TTS mapping:
+  - `speaker: str`
+  - `voice: str`
+- **`IImageInference`** now includes:
+  - `upscaleFactor: Optional[float]`
+
+### Changed
+
+- Updated **`ISyncProviderSettings`** to include Sync 3 fields:
+  - `mode: Optional[str]`
+  - `emotion: Optional[str]`
+  - `activeSpeakerDetection: Optional[Union[IActiveSpeakerDetection, Dict[str, Any], bool]]`
+  - `occlusionDetection: Optional[bool]`
+  - `segments: Optional[List[Union[ISegment, Dict[str, Any]]]]`
+- Added post-init normalization for Sync settings so dict inputs are coerced into **`IActiveSpeakerDetection`**, **`ISegment`**, and **`ITTSSettings`** objects.
+
 ## [0.5.8]
 
 ### Added
