@@ -1023,8 +1023,12 @@ async def process_media(
         return processed_media
     elif isinstance(media, UploadImageType):
         return media.imageUUID
-    if isLocalFile(media) and not media.startswith("http"):
-        return await fileToBase64(media)
+    elif isinstance(media, File):
+        base64_content = base64.b64encode(media.data).decode("utf-8")
+        return f"data:application/octet-stream;base64,{base64_content}"
+    elif isinstance(media, str):
+        if isLocalFile(media) and not media.startswith("http"):
+            return await fileToBase64(media)
     return media
 
 
