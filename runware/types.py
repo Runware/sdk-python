@@ -930,6 +930,7 @@ class ISettings(SerializableMixin):
     activeSpeakerDetection: Optional[Union["IActiveSpeakerDetection", Dict[str, Any]]] = None
     occlusionDetection: Optional[bool] = None
     segments: Optional[List[Union["ISegment", Dict[str, Any]]]] = None
+    keyframe: Optional[int] = None
     removeBackground: Optional[bool] = None
     backgroundColor: Optional[str] = None
     colorCorrection: Optional[bool] = None
