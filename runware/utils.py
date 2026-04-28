@@ -1011,25 +1011,15 @@ def isLocalFile(file):
     raise FileNotFoundError(f"File or URL '{file}' not valid or not found.")
 
 
-async def process_media(
-    media: Optional[Union[str, list, UploadImageType | None | File]],
-) -> None | list[Any] | str:
-    if media is None:
-        return None
-    elif isinstance(media, list):
-        processed_media = []
-        for item in media:
-            processed_media.append(await process_media(item))
-        return processed_media
-    elif isinstance(media, UploadImageType):
-        return media.imageUUID
-    if isLocalFile(media) and not media.startswith("http"):
-        return await fileToBase64(media)
-    return media
-
-
 async def process_image(
     image: Optional[Union[str, list, UploadImageType | None | File]],
 ) -> None | list[Any] | str:
-    # Backward-compatible alias; process_media is the canonical name.
-    return await process_media(image)
+    if image is None:
+        return None
+    if isinstance(image, list):
+        return [await process_image(item) for item in image]
+    if isinstance(image, UploadImageType):
+        return image.imageUUID
+    if isLocalFile(image) and not image.startswith("http"):
+        return await fileToBase64(image)
+    return image

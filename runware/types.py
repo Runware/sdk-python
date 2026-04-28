@@ -1076,16 +1076,30 @@ class IElements(SerializableMixin):
 @dataclass
 class IVideoReferenceImage(SerializableMixin):
     tag: Optional[str] = None
-    type: Optional[str] = None
+    refType: Optional[str] = None
     images: Optional[List[Union[str, File]]] = None
     audio: Optional[Union[str, File]] = None
+
+    def serialize(self) -> Dict[str, Any]:
+        data = super().serialize()
+        if self.refType is not None:
+            data["type"] = self.refType
+            data.pop("refType", None)
+        return data
 
 
 @dataclass
 class IVideoReferenceVideo(SerializableMixin):
     tag: Optional[str] = None
-    type: Optional[str] = None
+    refType: Optional[str] = None
     video: Optional[Union[str, File]] = None
+
+    def serialize(self) -> Dict[str, Any]:
+        data = super().serialize()
+        if self.refType is not None:
+            data["type"] = self.refType
+            data.pop("refType", None)
+        return data
 
 
 @dataclass
@@ -1131,11 +1145,16 @@ class IVideoInputs(SerializableMixin):
                 self.referenceImages = [ref for ref in self.references]
         
         if self.referenceImages:
-            self.referenceImages = [
-                IVideoReferenceImage(**ref) if isinstance(ref, dict) and any(k in ref for k in ("images", "audio", "tag", "type"))
-                else ref
-                for ref in self.referenceImages
-            ]
+            normalized_reference_images: List[Union[str, File, IVideoReferenceImage, IInputReference]] = []
+            for ref in self.referenceImages:
+                if isinstance(ref, dict) and any(k in ref for k in ("images", "audio", "tag", "type", "refType")):
+                    if "type" in ref and "refType" not in ref:
+                        ref = {**ref, "refType": ref["type"]}
+                        ref.pop("type", None)
+                    normalized_reference_images.append(IVideoReferenceImage(**ref))
+                else:
+                    normalized_reference_images.append(ref)
+            self.referenceImages = normalized_reference_images
             # Check if IInputReference objects are used and convert them to strings
             if any(isinstance(ref, IInputReference) for ref in self.referenceImages):
                 warnings.warn(
@@ -1145,10 +1164,16 @@ class IVideoInputs(SerializableMixin):
                 )
                 self.referenceImages = [ref.image if isinstance(ref, IInputReference) else ref for ref in self.referenceImages]
         if self.referenceVideos:
-            self.referenceVideos = [
-                IVideoReferenceVideo(**ref) if isinstance(ref, dict) and any(k in ref for k in ("video", "tag", "type")) else ref
-                for ref in self.referenceVideos
-            ]
+            normalized_reference_videos: List[Union[str, IVideoReferenceVideo]] = []
+            for ref in self.referenceVideos:
+                if isinstance(ref, dict) and any(k in ref for k in ("video", "tag", "type", "refType")):
+                    if "type" in ref and "refType" not in ref:
+                        ref = {**ref, "refType": ref["type"]}
+                        ref.pop("type", None)
+                    normalized_reference_videos.append(IVideoReferenceVideo(**ref))
+                else:
+                    normalized_reference_videos.append(ref)
+            self.referenceVideos = normalized_reference_videos
         if self.elements:
             self.elements = [
                 IElements(**item) if isinstance(item, dict) else item
