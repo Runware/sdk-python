@@ -2306,6 +2306,8 @@ class RunwareBase:
         }
         if request3d.positivePrompt is not None:
             request_object["positivePrompt"] = request3d.positivePrompt.strip()
+        if request3d.negativePrompt is not None:
+            request_object["negativePrompt"] = request3d.negativePrompt.strip()
         if request3d.seed is not None:
             request_object["seed"] = request3d.seed
         if request3d.numberResults is not None:

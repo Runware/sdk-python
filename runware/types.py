@@ -874,8 +874,12 @@ class ISettings(SerializableMixin):
     texSlat: Optional[Union[ITexSlat, Dict[str, Any]]] = None
     imageAutoFix: Optional[bool] = None
     faceLimit: Optional[int] = None
+    faceCount: Optional[int] = None
     texture: Optional[bool] = None
     pbr: Optional[bool] = None
+    geometryOnly: Optional[bool] = None
+    generateType: Optional[str] = None
+    polygonType: Optional[str] = None
     textureSeed: Optional[int] = None
     textureAlignment: Optional[str] = None
     textureQuality: Optional[str] = None
@@ -1840,13 +1844,14 @@ class IVideoInference:
             self.inputs = IVideoInputs(**self.inputs)
 
 
-I3dOutputFormat = Literal["GLB", "PLY"]
+I3dOutputFormat = Literal["GLB", "PLY", "OBJ"]
 
 
 @dataclass
 class I3dInference:
     model: str
     positivePrompt: Optional[str] = None
+    negativePrompt: Optional[str] = None
     seed: Optional[int] = None
     taskUUID: Optional[str] = None
     numberResults: Optional[int] = 1
