@@ -254,6 +254,14 @@ class RunwareBase:
 
             return self._pending_operations.pop(task_uuid, {}).get("results")
 
+    def _get_pending_operation(self, task_uuid: str, task_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        operation_key = task_uuid
+        if task_type:
+            typed_key = f"{task_uuid}:{task_type}"
+            if typed_key in self._pending_operations:
+                operation_key = typed_key
+        return self._pending_operations.get(operation_key)
+
     async def _handle_pending_operation_message(self, item: "Dict[str, Any]") -> bool:
         task_uuid = item.get("taskUUID")
         if not task_uuid:
@@ -262,12 +270,7 @@ class RunwareBase:
 
         on_partial_callback = None
         async with self._operations_lock:
-            operation_key = task_uuid
-            if task_type:
-                typed_key = f"{task_uuid}:{task_type}"
-                if typed_key in self._pending_operations:
-                    operation_key = typed_key
-            op = self._pending_operations.get(operation_key)
+            op = self._get_pending_operation(task_uuid, task_type)
             if op is None:
                 return False
 
@@ -322,13 +325,8 @@ class RunwareBase:
         on_partial_callback = None
         error_obj = None
         async with self._operations_lock:
-            operation_key = task_uuid
             task_type = error.get("taskType")
-            if task_type:
-                typed_key = f"{task_uuid}:{task_type}"
-                if typed_key in self._pending_operations:
-                    operation_key = typed_key
-            op = self._pending_operations.get(operation_key)
+            op = self._get_pending_operation(task_uuid, task_type)
             if op is None:
                 return False
 
