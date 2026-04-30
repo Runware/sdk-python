@@ -54,6 +54,8 @@ from .types import (
     IAudioInference,
     IFrameImage,
     IVideoInputs,
+    IVideoReferenceImage,
+    IVideoReferenceVideo,
     IAsyncTaskResponse,
     IVectorize,
     OperationState,
@@ -86,7 +88,6 @@ from .utils import (
     removeListener,
     LISTEN_TO_IMAGES_KEY,
     isLocalFile,
-    process_image,
     createAsyncTaskResponse,
     VIDEO_INITIAL_TIMEOUT,
     TEXT_INITIAL_TIMEOUT,
@@ -119,6 +120,17 @@ logger = logging.getLogger(__name__)
 
 
 class RunwareBase:
+    async def _process_media(self, item: Any) -> Any:
+        if item is None:
+            return None
+        if isinstance(item, list):
+            return [await self._process_media(media_item) for media_item in item]
+        if isinstance(item, UploadImageType):
+            return item.imageUUID
+        if isLocalFile(item) and not item.startswith("http"):
+            return await fileToBase64(item)
+        return item
+
     async def _process_media_list(
         self,
         items: List[Any],
@@ -128,10 +140,10 @@ class RunwareBase:
         processed: List[Any] = []
         for item in items:
             if object_attr and hasattr(item, object_attr):
-                setattr(item, object_attr, await process_image(getattr(item, object_attr)))
+                setattr(item, object_attr, await self._process_media(getattr(item, object_attr)))
                 processed.append(item)
             else:
-                processed.append(await process_image(item))
+                processed.append(await self._process_media(item))
         return processed
 
     def __init__(
@@ -751,18 +763,18 @@ class RunwareBase:
 
         control_net_data: "List[IControlNet]" = []
         requestImage.taskUUID = requestImage.taskUUID or getUUID()
-        requestImage.maskImage = await process_image(requestImage.maskImage)
-        requestImage.seedImage = await process_image(requestImage.seedImage)
+        requestImage.maskImage = await self._process_media(requestImage.maskImage)
+        requestImage.seedImage = await self._process_media(requestImage.seedImage)
 
         if requestImage.referenceImages:
-            requestImage.referenceImages = await process_image(requestImage.referenceImages)
+            requestImage.referenceImages = await self._process_media(requestImage.referenceImages)
 
         if requestImage.inputs:
             if isinstance(requestImage.inputs, dict):
                 requestImage.inputs = IInputs(**requestImage.inputs)
 
             if requestImage.inputs.image:
-                requestImage.inputs.image = await process_image(requestImage.inputs.image)
+                requestImage.inputs.image = await self._process_media(requestImage.inputs.image)
 
             if requestImage.inputs.images:
                 requestImage.inputs.images = await self._process_media_list(
@@ -797,7 +809,7 @@ class RunwareBase:
             }
 
             if "poseImage" in instant_id_data:
-                instant_id_data["poseImage"] = await process_image(instant_id_data["poseImage"])
+                instant_id_data["poseImage"] = await self._process_media(instant_id_data["poseImage"])
 
             input_images = instant_id_data.get("inputImages")
             single_input = instant_id_data.get("inputImage")
@@ -806,7 +818,7 @@ class RunwareBase:
                 input_images = [single_input]
 
             if input_images is not None:
-                instant_id_data["inputImages"] = await process_image(input_images)
+                instant_id_data["inputImages"] = await self._process_media(input_images)
 
             instant_id_data.pop("inputImage", None)
 
@@ -817,9 +829,9 @@ class RunwareBase:
                     k: v for k, v in vars(ip_adapter).items() if v is not None
                 }
                 if "guideImages" in ip_adapter_data:
-                    ip_adapter_data["guideImages"] = await process_image(ip_adapter_data["guideImages"])
+                    ip_adapter_data["guideImages"] = await self._process_media(ip_adapter_data["guideImages"])
                 elif "guideImage" in ip_adapter_data:
-                    ip_adapter_data["guideImage"] = await process_image(ip_adapter_data["guideImage"])
+                    ip_adapter_data["guideImage"] = await self._process_media(ip_adapter_data["guideImage"])
                 ip_adapters_data.append(ip_adapter_data)
 
         ace_plus_plus_data = {}
@@ -830,9 +842,9 @@ class RunwareBase:
                 "type": requestImage.acePlusPlus.taskType,
             }
             if requestImage.acePlusPlus.inputImages:
-                ace_plus_plus_data["inputImages"] = await process_image(requestImage.acePlusPlus.inputImages)
+                ace_plus_plus_data["inputImages"] = await self._process_media(requestImage.acePlusPlus.inputImages)
             if requestImage.acePlusPlus.inputMasks:
-                ace_plus_plus_data["inputMasks"] = await process_image(requestImage.acePlusPlus.inputMasks)
+                ace_plus_plus_data["inputMasks"] = await self._process_media(requestImage.acePlusPlus.inputMasks)
 
         pulid_data = {}
         if requestImage.puLID:
@@ -844,7 +856,7 @@ class RunwareBase:
                 "CFGStartStepPercentage": requestImage.puLID.CFGStartStepPercentage,
             }
             if requestImage.puLID.inputImages:
-                pulid_data["inputImages"] = await process_image(requestImage.puLID.inputImages)
+                pulid_data["inputImages"] = await self._process_media(requestImage.puLID.inputImages)
 
         photo_maker_data: Dict[str, Any] = {}
         if requestImage.photoMaker:
@@ -855,7 +867,7 @@ class RunwareBase:
 
             image_list = requestImage.photoMaker.images or requestImage.photoMaker.inputImages
             if image_list:
-                photo_maker_data["images"] = await process_image(image_list)
+                photo_maker_data["images"] = await self._process_media(image_list)
 
         request_object = self._buildImageRequest(
             requestImage, prompt, control_net_data_dicts,
@@ -1445,7 +1457,7 @@ class RunwareBase:
     async def _processVectorizeInputs(self, vectorizePayload: IVectorize) -> None:
         if not vectorizePayload.inputs or not vectorizePayload.inputs.image:
             return
-        vectorizePayload.inputs.image = await process_image(vectorizePayload.inputs.image)
+        vectorizePayload.inputs.image = await self._process_media(vectorizePayload.inputs.image)
 
     def _buildVectorizeRequest(self, vectorizePayload: IVectorize) -> Dict[str, Any]:
         request_object = {
@@ -2359,16 +2371,37 @@ class RunwareBase:
                 requestVideo.inputs = inputs
 
             if inputs.image:
-                inputs.image = await process_image(inputs.image)
+                inputs.image = await self._process_media(inputs.image)
 
             if inputs.images:
                 inputs.images = await self._process_media_list(inputs.images)
 
             if inputs.mask:
-                inputs.mask = await process_image(inputs.mask)
+                inputs.mask = await self._process_media(inputs.mask)
 
             if inputs.referenceImages:
-                inputs.referenceImages = await self._process_media_list(inputs.referenceImages)
+                processed_reference_images = []
+                for item in inputs.referenceImages:
+                    if isinstance(item, IVideoReferenceImage):
+                        if item.images:
+                            item.images = await self._process_media_list(item.images)
+                        if item.audio:
+                            item.audio = await self._process_media(item.audio)
+                        processed_reference_images.append(item)
+                    else:
+                        processed_reference_images.append(await self._process_media(item))
+                inputs.referenceImages = processed_reference_images
+
+            if inputs.referenceVideos:
+                processed_reference_videos = []
+                for item in inputs.referenceVideos:
+                    if isinstance(item, IVideoReferenceVideo):
+                        if item.video:
+                            item.video = await self._process_media(item.video)
+                        processed_reference_videos.append(item)
+                    else:
+                        processed_reference_videos.append(await self._process_media(item))
+                inputs.referenceVideos = processed_reference_videos
 
             if inputs.frameImages:
                 inputs.frameImages = await self._process_media_list(
@@ -2441,13 +2474,13 @@ class RunwareBase:
         if not request3d.inputs:
             return
         if request3d.inputs.images:
-            request3d.inputs.images = await process_image(request3d.inputs.images)
+            request3d.inputs.images = await self._process_media(request3d.inputs.images)
         if request3d.inputs.image:
-            request3d.inputs.image = await process_image(request3d.inputs.image)
+            request3d.inputs.image = await self._process_media(request3d.inputs.image)
         if request3d.inputs.mask:
-            request3d.inputs.mask = await process_image(request3d.inputs.mask)
+            request3d.inputs.mask = await self._process_media(request3d.inputs.mask)
         if request3d.inputs.meshFile:
-            request3d.inputs.meshFile = await process_image(request3d.inputs.meshFile)
+            request3d.inputs.meshFile = await self._process_media(request3d.inputs.meshFile)
 
     def _build3dRequest(self, request3d: I3dInference) -> Dict[str, Any]:
         request_object: Dict[str, Any] = {

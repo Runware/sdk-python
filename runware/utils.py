@@ -1058,12 +1058,9 @@ async def process_image(
 ) -> None | list[Any] | str:
     if image is None:
         return None
-    elif isinstance(image, list):
-        images = []
-        for image in image:
-            images.append(await process_image(image))
-        return images
-    elif isinstance(image, UploadImageType):
+    if isinstance(image, list):
+        return [await process_image(item) for item in image]
+    if isinstance(image, UploadImageType):
         return image.imageUUID
     if isLocalFile(image) and not image.startswith("http"):
         return await fileToBase64(image)
