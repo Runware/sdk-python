@@ -54,17 +54,21 @@ from .types import (
     IAudioInference,
     IFrameImage,
     IVideoInputs,
+    IVideoReferenceImage,
+    IVideoReferenceVideo,
     IAsyncTaskResponse,
     IVectorize,
     OperationState,
     I3dInference,
     I3d,
     IGetResponseRequest,
+    IGetTaskDetailsRequest,
     IUploadImageRequest,
     IUploadMediaRequest,
     ITextInference,
     IText,
     ITextInputs,
+    ITaskDetails,
 )
 from .types import IImage, IError, SdkType, ListenerType
 from .utils import (
@@ -84,7 +88,6 @@ from .utils import (
     removeListener,
     LISTEN_TO_IMAGES_KEY,
     isLocalFile,
-    process_image,
     createAsyncTaskResponse,
     VIDEO_INITIAL_TIMEOUT,
     TEXT_INITIAL_TIMEOUT,
@@ -117,6 +120,17 @@ logger = logging.getLogger(__name__)
 
 
 class RunwareBase:
+    async def _process_media(self, item: Any) -> Any:
+        if item is None:
+            return None
+        if isinstance(item, list):
+            return [await self._process_media(media_item) for media_item in item]
+        if isinstance(item, UploadImageType):
+            return item.imageUUID
+        if isLocalFile(item) and not item.startswith("http"):
+            return await fileToBase64(item)
+        return item
+
     async def _process_media_list(
         self,
         items: List[Any],
@@ -126,10 +140,10 @@ class RunwareBase:
         processed: List[Any] = []
         for item in items:
             if object_attr and hasattr(item, object_attr):
-                setattr(item, object_attr, await process_image(getattr(item, object_attr)))
+                setattr(item, object_attr, await self._process_media(getattr(item, object_attr)))
                 processed.append(item)
             else:
-                processed.append(await process_image(item))
+                processed.append(await self._process_media(item))
         return processed
 
     def __init__(
@@ -252,14 +266,23 @@ class RunwareBase:
 
             return self._pending_operations.pop(task_uuid, {}).get("results")
 
+    def _get_pending_operation(self, task_uuid: str, task_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        operation_key = task_uuid
+        if task_type:
+            typed_key = f"{task_uuid}:{task_type}"
+            if typed_key in self._pending_operations:
+                operation_key = typed_key
+        return self._pending_operations.get(operation_key)
+
     async def _handle_pending_operation_message(self, item: "Dict[str, Any]") -> bool:
         task_uuid = item.get("taskUUID")
         if not task_uuid:
             return False
+        task_type = item.get("taskType")
 
         on_partial_callback = None
         async with self._operations_lock:
-            op = self._pending_operations.get(task_uuid)
+            op = self._get_pending_operation(task_uuid, task_type)
             if op is None:
                 return False
 
@@ -314,7 +337,8 @@ class RunwareBase:
         on_partial_callback = None
         error_obj = None
         async with self._operations_lock:
-            op = self._pending_operations.get(task_uuid)
+            task_type = error.get("taskType")
+            op = self._get_pending_operation(task_uuid, task_type)
             if op is None:
                 return False
 
@@ -739,18 +763,18 @@ class RunwareBase:
 
         control_net_data: "List[IControlNet]" = []
         requestImage.taskUUID = requestImage.taskUUID or getUUID()
-        requestImage.maskImage = await process_image(requestImage.maskImage)
-        requestImage.seedImage = await process_image(requestImage.seedImage)
+        requestImage.maskImage = await self._process_media(requestImage.maskImage)
+        requestImage.seedImage = await self._process_media(requestImage.seedImage)
 
         if requestImage.referenceImages:
-            requestImage.referenceImages = await process_image(requestImage.referenceImages)
+            requestImage.referenceImages = await self._process_media(requestImage.referenceImages)
 
         if requestImage.inputs:
             if isinstance(requestImage.inputs, dict):
                 requestImage.inputs = IInputs(**requestImage.inputs)
 
             if requestImage.inputs.image:
-                requestImage.inputs.image = await process_image(requestImage.inputs.image)
+                requestImage.inputs.image = await self._process_media(requestImage.inputs.image)
 
             if requestImage.inputs.images:
                 requestImage.inputs.images = await self._process_media_list(
@@ -785,7 +809,7 @@ class RunwareBase:
             }
 
             if "poseImage" in instant_id_data:
-                instant_id_data["poseImage"] = await process_image(instant_id_data["poseImage"])
+                instant_id_data["poseImage"] = await self._process_media(instant_id_data["poseImage"])
 
             input_images = instant_id_data.get("inputImages")
             single_input = instant_id_data.get("inputImage")
@@ -794,7 +818,7 @@ class RunwareBase:
                 input_images = [single_input]
 
             if input_images is not None:
-                instant_id_data["inputImages"] = await process_image(input_images)
+                instant_id_data["inputImages"] = await self._process_media(input_images)
 
             instant_id_data.pop("inputImage", None)
 
@@ -805,9 +829,9 @@ class RunwareBase:
                     k: v for k, v in vars(ip_adapter).items() if v is not None
                 }
                 if "guideImages" in ip_adapter_data:
-                    ip_adapter_data["guideImages"] = await process_image(ip_adapter_data["guideImages"])
+                    ip_adapter_data["guideImages"] = await self._process_media(ip_adapter_data["guideImages"])
                 elif "guideImage" in ip_adapter_data:
-                    ip_adapter_data["guideImage"] = await process_image(ip_adapter_data["guideImage"])
+                    ip_adapter_data["guideImage"] = await self._process_media(ip_adapter_data["guideImage"])
                 ip_adapters_data.append(ip_adapter_data)
 
         ace_plus_plus_data = {}
@@ -818,9 +842,9 @@ class RunwareBase:
                 "type": requestImage.acePlusPlus.taskType,
             }
             if requestImage.acePlusPlus.inputImages:
-                ace_plus_plus_data["inputImages"] = await process_image(requestImage.acePlusPlus.inputImages)
+                ace_plus_plus_data["inputImages"] = await self._process_media(requestImage.acePlusPlus.inputImages)
             if requestImage.acePlusPlus.inputMasks:
-                ace_plus_plus_data["inputMasks"] = await process_image(requestImage.acePlusPlus.inputMasks)
+                ace_plus_plus_data["inputMasks"] = await self._process_media(requestImage.acePlusPlus.inputMasks)
 
         pulid_data = {}
         if requestImage.puLID:
@@ -832,7 +856,7 @@ class RunwareBase:
                 "CFGStartStepPercentage": requestImage.puLID.CFGStartStepPercentage,
             }
             if requestImage.puLID.inputImages:
-                pulid_data["inputImages"] = await process_image(requestImage.puLID.inputImages)
+                pulid_data["inputImages"] = await self._process_media(requestImage.puLID.inputImages)
 
         photo_maker_data: Dict[str, Any] = {}
         if requestImage.photoMaker:
@@ -843,7 +867,7 @@ class RunwareBase:
 
             image_list = requestImage.photoMaker.images or requestImage.photoMaker.inputImages
             if image_list:
-                photo_maker_data["images"] = await process_image(image_list)
+                photo_maker_data["images"] = await self._process_media(image_list)
 
         request_object = self._buildImageRequest(
             requestImage, prompt, control_net_data_dicts,
@@ -1433,7 +1457,7 @@ class RunwareBase:
     async def _processVectorizeInputs(self, vectorizePayload: IVectorize) -> None:
         if not vectorizePayload.inputs or not vectorizePayload.inputs.image:
             return
-        vectorizePayload.inputs.image = await process_image(vectorizePayload.inputs.image)
+        vectorizePayload.inputs.image = await self._process_media(vectorizePayload.inputs.image)
 
     def _buildVectorizeRequest(self, vectorizePayload: IVectorize) -> Dict[str, Any]:
         request_object = {
@@ -2189,6 +2213,145 @@ class RunwareBase:
             number_results=request_model.numberResults,
         )
 
+    async def getTaskDetails(self, taskUUID: str) -> ITaskDetails:
+        async with self._request_semaphore:
+            request = IGetTaskDetailsRequest(taskUUID=taskUUID)
+            return await self._retry_async_with_reconnect(
+                self._requestTaskDetails,
+                request,
+                task_type=ETaskType.GET_TASK_DETAILS.value,
+            )
+
+    async def _requestTaskDetails(self, request_model: IGetTaskDetailsRequest) -> ITaskDetails:
+        await self.ensureConnection()
+        request_object = {
+            "taskType": ETaskType.GET_TASK_DETAILS.value,
+            "taskUUID": request_model.taskUUID,
+        }
+        return await self._handleTaskDetailsResponse(
+            request_object=request_object,
+            task_uuid=request_model.taskUUID,
+        )
+
+    async def _handleTaskDetailsResponse(
+        self,
+        request_object: Dict[str, Any],
+        task_uuid: str,
+    ) -> ITaskDetails:
+        operation_key = f"{task_uuid}:{ETaskType.GET_TASK_DETAILS.value}"
+        future, should_send = await self._register_pending_operation(
+            operation_key,
+            expected_results=1,
+            complete_predicate=lambda r: (
+                r.get("taskType") == ETaskType.GET_TASK_DETAILS.value
+                and "request" in r
+                and "response" in r
+            ),
+            result_filter=lambda r: r.get("taskType") == ETaskType.GET_TASK_DETAILS.value,
+        )
+        try:
+            if should_send:
+                await self.send([request_object])
+                await self._mark_operation_sent(operation_key)
+
+            results = await asyncio.wait_for(future, timeout=self._timeout / 1000)
+            if not results:
+                raise ValueError(f"No task details found for taskUUID={task_uuid}")
+            task_details = instantiateDataclass(ITaskDetails, results[0])
+            task_details.request = self._normalizeTaskDetailsRequest(task_details.request)
+            task_details.response = self._normalizeTaskDetailsResponse(task_details.response)
+            return task_details
+        except asyncio.TimeoutError:
+            raise Exception(
+                f"Timeout waiting for task details | TaskUUID: {task_uuid} | "
+                f"Timeout: {self._timeout}ms"
+            )
+        finally:
+            await self._unregister_pending_operation(operation_key)
+
+    def _normalizeTaskDetailsRequest(self, request_items: List[Any]) -> List[Any]:
+        task_type_map = {
+            ETaskType.IMAGE_INFERENCE.value: IImageInference,
+            ETaskType.PHOTO_MAKER.value: IPhotoMaker,
+            ETaskType.IMAGE_CAPTION.value: IImageCaption,
+            ETaskType.IMAGE_BACKGROUND_REMOVAL.value: IImageBackgroundRemoval,
+            ETaskType.IMAGE_UPSCALE.value: IImageUpscale,
+            ETaskType.PROMPT_ENHANCE.value: IPromptEnhance,
+            ETaskType.MODEL_SEARCH.value: IModelSearch,
+            ETaskType.VIDEO_INFERENCE.value: IVideoInference,
+            ETaskType.VIDEO_CAPTION.value: IVideoCaption,
+            ETaskType.VIDEO_BACKGROUND_REMOVAL.value: IVideoBackgroundRemoval,
+            ETaskType.VIDEO_UPSCALE.value: IVideoUpscale,
+            ETaskType.AUDIO_INFERENCE.value: IAudioInference,
+            ETaskType.INFERENCE_3D.value: I3dInference,
+            ETaskType.TEXT_INFERENCE.value: ITextInference,
+            ETaskType.GET_RESPONSE.value: IGetResponseRequest,
+            ETaskType.GET_TASK_DETAILS.value: IGetTaskDetailsRequest,
+            ETaskType.IMAGE_VECTORIZE.value: IVectorize,
+        }
+        return self._normalizeTaskDetailsItems(
+            request_items,
+            task_type_map,
+            lambda cls, item: instantiateDataclass(cls, item),
+        )
+
+    def _normalizeTaskDetailsResponse(self, response_payload: Any) -> Any:
+        if not isinstance(response_payload, dict):
+            return response_payload if isinstance(response_payload, list) else [response_payload]
+
+        data_items = response_payload.get("data")
+        if isinstance(data_items, list):
+            response_type_map = {
+                ETaskType.AUDIO_INFERENCE.value: IAudio,
+                ETaskType.VIDEO_CAPTION.value: IVideoToText,
+                ETaskType.IMAGE_CAPTION.value: IImageToText,
+                ETaskType.IMAGE_INFERENCE.value: IImage,
+                ETaskType.PHOTO_MAKER.value: IImage,
+                ETaskType.IMAGE_UPSCALE.value: IImage,
+                ETaskType.IMAGE_VECTORIZE.value: IImage,
+                ETaskType.IMAGE_BACKGROUND_REMOVAL.value: IImage,
+                ETaskType.VIDEO_INFERENCE.value: IVideo,
+                ETaskType.VIDEO_BACKGROUND_REMOVAL.value: IVideo,
+                ETaskType.VIDEO_UPSCALE.value: IVideo,
+                ETaskType.INFERENCE_3D.value: I3d,
+                ETaskType.TEXT_INFERENCE.value: IText,
+                ETaskType.PROMPT_ENHANCE.value: IEnhancedPrompt,
+                ETaskType.GET_TASK_DETAILS.value: ITaskDetails,
+            }
+            return self._normalizeTaskDetailsItems(
+                data_items,
+                response_type_map,
+                lambda cls, item: instantiateDataclass(cls, item),
+            )
+
+        error_items = response_payload.get("errors")
+        if isinstance(error_items, list):
+            return error_items
+
+        return [response_payload]
+
+    def _normalizeTaskDetailsItems(
+        self,
+        items: List[Any],
+        task_type_map: Dict[str, Any],
+        instantiate_fn: Callable[[Any, Dict[str, Any]], Any],
+    ) -> List[Any]:
+        normalized: List[Any] = []
+        for item in items:
+            if not isinstance(item, dict):
+                normalized.append(item)
+                continue
+            task_type = item.get("taskType")
+            target_cls = task_type_map.get(task_type)
+            if target_cls is None:
+                normalized.append(item)
+                continue
+            try:
+                normalized.append(instantiate_fn(target_cls, item))
+            except Exception:
+                normalized.append(item)
+        return normalized
+
     async def _requestVideo(self, requestVideo: "IVideoInference") -> "Union[List[IVideo], IAsyncTaskResponse]":
         if requestVideo.frameImages:
             requestVideo.frameImages = await self._process_media_list(
@@ -2208,16 +2371,37 @@ class RunwareBase:
                 requestVideo.inputs = inputs
 
             if inputs.image:
-                inputs.image = await process_image(inputs.image)
+                inputs.image = await self._process_media(inputs.image)
 
             if inputs.images:
                 inputs.images = await self._process_media_list(inputs.images)
 
             if inputs.mask:
-                inputs.mask = await process_image(inputs.mask)
+                inputs.mask = await self._process_media(inputs.mask)
 
             if inputs.referenceImages:
-                inputs.referenceImages = await self._process_media_list(inputs.referenceImages)
+                processed_reference_images = []
+                for item in inputs.referenceImages:
+                    if isinstance(item, IVideoReferenceImage):
+                        if item.images:
+                            item.images = await self._process_media_list(item.images)
+                        if item.audio:
+                            item.audio = await self._process_media(item.audio)
+                        processed_reference_images.append(item)
+                    else:
+                        processed_reference_images.append(await self._process_media(item))
+                inputs.referenceImages = processed_reference_images
+
+            if inputs.referenceVideos:
+                processed_reference_videos = []
+                for item in inputs.referenceVideos:
+                    if isinstance(item, IVideoReferenceVideo):
+                        if item.video:
+                            item.video = await self._process_media(item.video)
+                        processed_reference_videos.append(item)
+                    else:
+                        processed_reference_videos.append(await self._process_media(item))
+                inputs.referenceVideos = processed_reference_videos
 
             if inputs.frameImages:
                 inputs.frameImages = await self._process_media_list(
@@ -2290,15 +2474,15 @@ class RunwareBase:
         if not request3d.inputs:
             return
         if request3d.inputs.images:
-            request3d.inputs.images = await process_image(request3d.inputs.images)
+            request3d.inputs.images = await self._process_media(request3d.inputs.images)
         if request3d.inputs.referenceImages:
-            request3d.inputs.referenceImages = await process_image(request3d.inputs.referenceImages)
+            request3d.inputs.referenceImages = await self._process_media(request3d.inputs.referenceImages)
         if request3d.inputs.image:
-            request3d.inputs.image = await process_image(request3d.inputs.image)
+            request3d.inputs.image = await self._process_media(request3d.inputs.image)
         if request3d.inputs.mask:
-            request3d.inputs.mask = await process_image(request3d.inputs.mask)
+            request3d.inputs.mask = await self._process_media(request3d.inputs.mask)
         if request3d.inputs.meshFile:
-            request3d.inputs.meshFile = await process_image(request3d.inputs.meshFile)
+            request3d.inputs.meshFile = await self._process_media(request3d.inputs.meshFile)
 
     def _build3dRequest(self, request3d: I3dInference) -> Dict[str, Any]:
         request_object: Dict[str, Any] = {

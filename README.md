@@ -241,6 +241,29 @@ async def main() -> None:
 - Use `getResponse(taskUUID)` to retrieve results at any time
 - `deliveryMethod="sync"` waits for complete results (may timeout for long-running tasks)
 
+### Retrieving Original Task Request/Response
+
+To inspect the original request payload and response for a past task, use `getTaskDetails(taskUUID)`.
+Known request task types are parsed into SDK request objects when possible; unknown task types remain raw dictionaries.
+`details.response` is normalized to a list:
+- success: parsed items from `response.data[]` (typed when known)
+- failure: items from `response.errors[]`
+
+```python
+from runware import Runware
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    details = await runware.getTaskDetails(
+        taskUUID="a770f077-f413-47de-9dac-be0b26a35da6"
+    )
+
+    print("Original request:", details.request)
+    print("Original response:", details.response)
+```
+
 ### Enhancing Prompts
 
 To enhance prompts using the Runware API, you can use the `promptEnhance` method of the `Runware` class. Here's an example:
