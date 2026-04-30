@@ -2,6 +2,62 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.10]
+
+### Added
+
+- Added support for taskType `getTaskDetails`.
+- Added `IVideoReferenceImage` dataclass with:
+  - `tag: Optional[str]`
+  - `refType: Optional[str]`
+  - `images: Optional[List[Union[str, File]]]`
+  - `audio: Optional[Union[str, File]]`
+  - `serialize()` override that maps `refType` -> `type` in outgoing payloads.
+- Added `IVideoReferenceVideo` dataclass with:
+  - `tag: Optional[str]`
+  - `refType: Optional[str]`
+  - `video: Optional[Union[str, File]]`
+  - `serialize()` override that maps `refType` -> `type` in outgoing payloads.
+- Extended `IVideoInputs` to support structured references:
+  - `referenceImages: Optional[List[Union[str, File, IVideoReferenceImage]]]`
+  - `referenceVideos: Optional[List[Union[str, IVideoReferenceVideo]]]`
+- Added `process_media()` in `runware/utils.py` as the canonical media normalization helper (supports local-file conversion and pass-through for URL/UUID/base64).
+- Added backward-compat normalization in `IVideoInputs.__post_init__`:
+  - dict inputs with `type` are accepted and internally mapped to `refType` for both `referenceImages` and `referenceVideos`.
+- `ISettings` now includes Meshy 6 / 3D controls:
+  - `meshType: Optional[str]`
+  - `topology: Optional[str]`
+  - `decimation: Optional[int]`
+  - `symmetry: Optional[str]`
+  - `pose: Optional[str]`
+  - `removeLighting: Optional[bool]`
+  - `origin: Optional[str]`
+  - `moderation: Optional[bool]`
+  - `texturePrompt: Optional[str]`
+  - `imageEnhancement: Optional[bool]`
+  - `savePreRemeshedModel: Optional[bool]`
+- `I3dInputs` now includes:
+  - `referenceImages: Optional[List[Union[str, File]]]`
+- `ISettings` now includes:
+  - `keyframe: Optional[int]`
+- `ISettings` now includes additional `3dInference` fields:
+  - `faceCount: Optional[int]`
+  - `geometryOnly: Optional[bool]`
+  - `generateType: Optional[str]`
+  - `polygonType: Optional[str]`
+- `I3dInference` now includes:
+  - `negativePrompt: Optional[str]`
+- `I3dOutputFormat` now supports:
+  - `OBJ`
+
+### Changed
+
+- Improved `SerializableMixin.serialize()` to handle mixed list/tuple payloads by serializing `SerializableMixin` items item-by-item (instead of requiring all items to be mixin instances).
+- Switched `runware/base.py` media normalization flow to canonical `process_media()` semantics (via `_process_media` delegation).
+- Kept `process_image()` as a backward-compatible alias to `process_media()`.
+- Replaced `type` usage in video reference dataclasses with `refType` to avoid reserved-name ambiguity while preserving API payload compatibility (`type` is still sent on wire via `serialize()`).
+- `I3dOutputFormat` now supports Meshy 6 target formats: `GLB`, `OBJ`, `FBX`, `STL`, `USDZ`, `3MF` (while keeping `PLY` for compatibility).
+
 ## [0.5.9]
 
 ### Added
