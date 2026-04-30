@@ -61,6 +61,8 @@ from .types import (
     OperationState,
     I3dInference,
     I3d,
+    ITraining,
+    ITrainingResult,
     IGetResponseRequest,
     IGetTaskDetailsRequest,
     IUploadImageRequest,
@@ -2169,6 +2171,14 @@ class RunwareBase:
         await self.ensureConnection()
         return await self._request3d(request3d)
 
+    async def training(self, requestTraining: ITraining) -> Union[List[ITrainingResult], IAsyncTaskResponse]:
+        async with self._request_semaphore:
+            return await self._retry_async_with_reconnect(
+                self._requestTraining,
+                requestTraining,
+                task_type=ETaskType.TRAINING.value,
+            )
+
     async def textInference(
         self, requestText: ITextInference
     ) -> Union[List[IText], IAsyncTaskResponse, AsyncIterator[Union[str, IText]]]:
@@ -2194,7 +2204,7 @@ class RunwareBase:
         self,
         taskUUID: str,
         numberResults: Optional[int] = 1,
-    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage], List[I3d], List[IText]]:
+    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage], List[I3d], List[IText], List[ITrainingResult]]:
         async with self._request_semaphore:
             request = IGetResponseRequest(
                 taskUUID=taskUUID,
@@ -2205,7 +2215,7 @@ class RunwareBase:
     async def _getResponse(
         self,
         request_model: IGetResponseRequest,
-    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage], List[I3d], List[IText]]:
+    ) -> Union[List[IVideo], List[IAudio], List[IVideoToText], List[IImage], List[I3d], List[IText], List[ITrainingResult]]:
         await self.ensureConnection()
 
         return await self._pollResults(
@@ -2284,6 +2294,7 @@ class RunwareBase:
             ETaskType.VIDEO_UPSCALE.value: IVideoUpscale,
             ETaskType.AUDIO_INFERENCE.value: IAudioInference,
             ETaskType.INFERENCE_3D.value: I3dInference,
+            ETaskType.TRAINING.value: ITraining,
             ETaskType.TEXT_INFERENCE.value: ITextInference,
             ETaskType.GET_RESPONSE.value: IGetResponseRequest,
             ETaskType.GET_TASK_DETAILS.value: IGetTaskDetailsRequest,
@@ -2314,6 +2325,7 @@ class RunwareBase:
                 ETaskType.VIDEO_BACKGROUND_REMOVAL.value: IVideo,
                 ETaskType.VIDEO_UPSCALE.value: IVideo,
                 ETaskType.INFERENCE_3D.value: I3d,
+                ETaskType.TRAINING.value: ITrainingResult,
                 ETaskType.TEXT_INFERENCE.value: IText,
                 ETaskType.PROMPT_ENHANCE.value: IEnhancedPrompt,
                 ETaskType.GET_TASK_DETAILS.value: ITaskDetails,
@@ -2528,6 +2540,43 @@ class RunwareBase:
             webhook_url=request_object.get("webhookURL"),
             debug_key="3d-inference-initial",
         )
+
+    async def _requestTraining(self, requestTraining: ITraining) -> Union[List[ITrainingResult], IAsyncTaskResponse]:
+        await self.ensureConnection()
+        requestTraining.taskUUID = requestTraining.taskUUID or getUUID()
+
+        if requestTraining.inputs.dataset:
+            requestTraining.inputs.dataset = await self._process_media(requestTraining.inputs.dataset)
+
+        request_object = self._buildTrainingRequest(requestTraining)
+
+        return await self._handleInitialTrainingResponse(
+            request_object=request_object,
+            task_uuid=requestTraining.taskUUID,
+            number_results=requestTraining.numberResults or 1,
+            delivery_method=requestTraining.deliveryMethod,
+            webhook_url=requestTraining.webhookURL,
+            debug_key="training-initial",
+        )
+
+    def _buildTrainingRequest(self, requestTraining: ITraining) -> Dict[str, Any]:
+        request_object: Dict[str, Any] = {
+            "taskType": ETaskType.TRAINING.value,
+            "taskUUID": requestTraining.taskUUID,
+            "model": requestTraining.model,
+            "deliveryMethod": requestTraining.deliveryMethod,
+        }
+
+        if requestTraining.numberResults is not None:
+            request_object["numberResults"] = requestTraining.numberResults
+        if requestTraining.includeCost is not None:
+            request_object["includeCost"] = requestTraining.includeCost
+        if requestTraining.webhookURL is not None:
+            request_object["webhookURL"] = requestTraining.webhookURL
+
+        self._addOptionalField(request_object, requestTraining.importModel)
+        self._addOptionalField(request_object, requestTraining.inputs)
+        return request_object
 
     def _buildTextRequest(self, requestText: ITextInference) -> Dict[str, Any]:
         request_object: Dict[str, Any] = {
@@ -3161,6 +3210,85 @@ class RunwareBase:
         finally:
             await self._unregister_pending_operation(task_uuid)
 
+    async def _handleInitialTrainingResponse(
+        self,
+        request_object: Dict[str, Any],
+        task_uuid: str,
+        number_results: int,
+        delivery_method: Union[str, EDeliveryMethod] = EDeliveryMethod.ASYNC,
+        webhook_url: Optional[str] = None,
+        debug_key: str = "training-initial",
+    ) -> Union[List[ITrainingResult], IAsyncTaskResponse]:
+        delivery_method_enum = (
+            delivery_method
+            if isinstance(delivery_method, EDeliveryMethod)
+            else EDeliveryMethod(delivery_method)
+        )
+
+        def is_training_complete(r: Dict[str, Any]) -> bool:
+            if r.get("status") == "success":
+                return True
+            if r.get("outputs") is not None:
+                return True
+            if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
+                return True
+            return False
+
+        if delivery_method_enum is EDeliveryMethod.SYNC and not webhook_url:
+            future, should_send = await self._register_pending_operation(
+                task_uuid,
+                expected_results=number_results or 1,
+                complete_predicate=None,
+                result_filter=lambda r: (
+                    r.get("status") == "success"
+                    or r.get("outputs") is not None
+                ),
+            )
+        else:
+            future, should_send = await self._register_pending_operation(
+                task_uuid,
+                expected_results=1,
+                complete_predicate=is_training_complete,
+            )
+
+        timeout = TIMEOUT_DURATION if delivery_method_enum is EDeliveryMethod.SYNC else VIDEO_INITIAL_TIMEOUT
+
+        try:
+            if should_send:
+                await self.send([request_object])
+                await self._mark_operation_sent(task_uuid)
+
+            results = await asyncio.wait_for(future, timeout=timeout / 1000)
+            if not results:
+                raise ConnectionError(
+                    f"No initial response received for training | "
+                    f"delivery_method={delivery_method_enum} | taskUUID={task_uuid}"
+                )
+
+            response = results[0]
+            self._handle_error_response(response)
+
+            if response.get("status") == "success" or response.get("outputs") is not None:
+                return instantiateDataclassList(ITrainingResult, results)
+
+            if webhook_url or delivery_method_enum is EDeliveryMethod.ASYNC:
+                return createAsyncTaskResponse(response)
+
+            return instantiateDataclassList(ITrainingResult, results)
+
+        except asyncio.TimeoutError:
+            if not self.connected() or not self.isWebsocketReadyState():
+                raise ConnectionError(
+                    f"Connection lost while waiting for training response | "
+                    f"TaskUUID: {task_uuid} | Delivery method: {delivery_method_enum}"
+                )
+            raise ConnectionError(
+                f"Timeout waiting for training response | TaskUUID: {task_uuid} | "
+                f"Timeout: {timeout}ms"
+            )
+        finally:
+            await self._unregister_pending_operation(task_uuid)
+
     async def _handleInitialImageResponse(
         self,
         task_uuid: str,
@@ -3422,7 +3550,7 @@ class RunwareBase:
         self,
         task_uuid: str,
         number_results: Optional[int],
-    ) -> Union[List[IVideo], List[IVideoToText], List[IAudio], List[IImage], List[I3d], List[IText]]:
+    ) -> Union[List[IVideo], List[IVideoToText], List[IAudio], List[IImage], List[I3d], List[IText], List[ITrainingResult]]:
         # Default to 1 if number_results is None
         if number_results is None:
             number_results = 1
@@ -3430,7 +3558,7 @@ class RunwareBase:
         completed_results: "List[Dict[str, Any]]" = []
 
         task_type = None
-        response_cls: Optional[Union[IVideo, IVideoToText, IAudio, IImage, I3d, IText]] = None
+        response_cls: Optional[Union[IVideo, IVideoToText, IAudio, IImage, I3d, IText, ITrainingResult]] = None
         max_polls: int = MAX_POLLS
         polling_delay: int = VIDEO_POLLING_DELAY
         timeout_message: str = f"Polling timeout after {MAX_POLLS} polls"
@@ -3496,6 +3624,13 @@ class RunwareBase:
                         MAX_POLLS,
                         TEXT_POLLING_DELAY,
                         f"Text generation timeout after {MAX_POLLS} polls"
+                    )
+                case ETaskType.TRAINING.value:
+                    return (
+                        ITrainingResult,
+                        MAX_POLLS,
+                        VIDEO_POLLING_DELAY,
+                        f"Training timeout after {MAX_POLLS} polls"
                     )
                 case _:
                     raise ValueError(f"Unsupported task type for polling: {task_type_val}")
