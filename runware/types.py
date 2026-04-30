@@ -884,8 +884,12 @@ class ISettings(SerializableMixin):
     texSlat: Optional[Union[ITexSlat, Dict[str, Any]]] = None
     imageAutoFix: Optional[bool] = None
     faceLimit: Optional[int] = None
+    faceCount: Optional[int] = None
     texture: Optional[bool] = None
     pbr: Optional[bool] = None
+    geometryOnly: Optional[bool] = None
+    generateType: Optional[str] = None
+    polygonType: Optional[str] = None
     textureSeed: Optional[int] = None
     textureAlignment: Optional[str] = None
     textureQuality: Optional[str] = None
@@ -1920,11 +1924,12 @@ I3dOutputFormat = Literal["GLB", "OBJ", "FBX", "STL", "USDZ", "3MF", "PLY"]
 class I3dInference:
     model: str
     positivePrompt: Optional[str] = None
+    negativePrompt: Optional[str] = None
     seed: Optional[int] = None
     taskUUID: Optional[str] = None
     numberResults: Optional[int] = 1
     outputType: Optional[IOutputType] = None
-    outputFormat: Optional[I3dOutputFormat] = None  
+    outputFormat: Optional[I3dOutputFormat] = None
     outputQuality: Optional[int] = None
     includeCost: Optional[bool] = None
     deliveryMethod: str = "async"
