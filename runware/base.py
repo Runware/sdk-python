@@ -2661,8 +2661,6 @@ class RunwareBase:
                 inputs.images = await self._process_media_list(inputs.images)
             if inputs.videos:
                 inputs.videos = await self._process_media_list(inputs.videos)
-            if inputs.documents:
-                inputs.documents = await self._process_media_list(inputs.documents)
 
         request_object = self._buildTextRequest(requestText)
 
