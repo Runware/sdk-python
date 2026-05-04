@@ -120,6 +120,8 @@ class OperationState(Enum):
 IOutputType = Literal["base64Data", "dataURI", "URL"]
 IOutputFormat = Literal["JPG", "PNG", "WEBP", "SVG"]
 IAudioOutputFormat = Literal["wav", "mp3", "pcm", "opus", "aac", "flac", "MP3"]
+TextInferenceCacheScope = Literal["system", "system+history"]
+TextInferenceCacheTtl = Literal["5m", "1h"]
 
 
 @dataclass
@@ -822,12 +824,46 @@ class ITexSlat(SerializableMixin):
 
 
 @dataclass
+class ITextInferenceCache(SerializableMixin):
+
+    scope: Optional[TextInferenceCacheScope] = None
+    ttl: Optional[TextInferenceCacheTtl] = None
+
+    @property
+    def request_key(self) -> str:
+        return "cache"
+
+
+@dataclass
 class ITextInferenceTool(SerializableMixin):
     """Tool definition for text inference (e.g. function-calling / JSON-schema tools)."""
 
     name: str
     description: str
-    input_schema: Dict[str, Any]
+    schema: Optional[Dict[str, Any]] = None
+    input_schema: Optional[Dict[str, Any]] = field(default=None, repr=False)
+    type: Optional[str] = field(default=None, repr=False)
+    toolType: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.schema is None and self.input_schema is not None:
+            object.__setattr__(self, "schema", self.input_schema)
+        object.__setattr__(self, "input_schema", None)
+        if self.schema is None:
+            raise ValueError("ITextInferenceTool requires 'schema' or 'input_schema'")
+        if self.toolType is None:
+            object.__setattr__(
+                self,
+                "toolType",
+                self.type if self.type is not None else "function",
+            )
+        object.__setattr__(self, "type", None)
+
+    def serialize(self) -> Dict[str, Any]:
+        data = super().serialize()
+        tt = data.pop("toolType", None) or "function"
+        data["type"] = tt
+        return data
 
 
 @dataclass
@@ -965,6 +1001,7 @@ class ISettings(SerializableMixin):
     stopSequences: Optional[List[str]] = None
     tools: Optional[List[Union[ITextInferenceTool, Dict[str, Any]]]] = None
     toolChoice: Optional[Union[ITextInferenceToolChoice, Dict[str, Any]]] = None
+    cache: Optional[Union[ITextInferenceCache, Dict[str, Any]]] = None
     # Image upscale 
     steps: Optional[int] = None
     seed: Optional[int] = None
@@ -992,6 +1029,8 @@ class ISettings(SerializableMixin):
                 ITextInferenceTool(**t) if isinstance(t, dict) else t
                 for t in self.tools
             ]
+        if self.cache is not None and isinstance(self.cache, dict):
+            self.cache = ITextInferenceCache(**self.cache)
         if self.toolChoice is not None and isinstance(self.toolChoice, dict):
             self.toolChoice = ITextInferenceToolChoice(**self.toolChoice)
         if self.editRegions is not None:
@@ -1083,6 +1122,7 @@ class IInputs(SerializableMixin):
 class ITextInputs(SerializableMixin):
     images: Optional[List[Union[str, File]]] = None
     videos: Optional[List[Union[str, File]]] = None
+    documents: Optional[List[Union[str, File]]] = None
 
     @property
     def request_key(self) -> str:
