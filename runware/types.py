@@ -948,6 +948,8 @@ class ISettings(SerializableMixin):
     emotion: Optional[str] = None
     voiceDescription: Optional[str] = None
     style: Optional[str] = None
+    voicePrompt: Optional[str] = None
+    safetyFilter: Optional[bool] = None
     thinking: Optional[str] = None
     multiClip: Optional[bool] = None
     promptUpsampling: Optional[bool] = None
