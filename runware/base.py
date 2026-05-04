@@ -873,8 +873,7 @@ class RunwareBase:
             requestImage, prompt, control_net_data_dicts,
             instant_id_data, ip_adapters_data, ace_plus_plus_data, pulid_data, photo_maker_data
         )
-        import json
-        print(json.dumps(request_object, indent=4))
+
         delivery_method_enum = EDeliveryMethod(requestImage.deliveryMethod) if isinstance(requestImage.deliveryMethod,
                                                                                           str) else requestImage.deliveryMethod
         task_uuid = requestImage.taskUUID
