@@ -241,6 +241,68 @@ async def main() -> None:
 - Use `getResponse(taskUUID)` to retrieve results at any time
 - `deliveryMethod="sync"` waits for complete results (may timeout for long-running tasks)
 
+### Training (Async Only)
+
+Training is a long-running task type. 
+- `deliveryMethod="sync"` is not supported for training and raises a `ValueError`
+- Use `deliveryMethod="async"` and retrieve final results with `getResponse(taskUUID)`
+
+```python
+import uuid
+from runware import Runware, ITraining, ITrainingImportModel, ITrainingInputs
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    request_training = ITraining(
+        taskUUID=str(uuid.uuid4()),
+        taskType="training",
+        model="runware:illustrative@training",
+        deliveryMethod="async",
+        importModel=ITrainingImportModel(
+            air="runware:illustrative@0",
+            name="Runware Illustrative Training Model",
+            uniqueIdentifier="exacltyai_illustrative_model_1",
+            version="1.0",
+            private=False,
+            heroImageURL="https://example.com/hero-image.png",
+            shortDescription="First training model",
+        ),
+        inputs=ITrainingInputs(
+            dataset="example/pictures.zip"
+        ),
+    )
+
+    training_task = await runware.training(requestTraining=request_training)
+    results = await runware.getResponse(taskUUID=training_task.taskUUID)
+    print(results)
+```
+
+After training, you can run image inference with the trained model:
+
+```python
+import uuid
+from runware import Runware, IImageInference, IInputs, IInputReference
+
+async def main() -> None:
+    runware = Runware(api_key=RUNWARE_API_KEY)
+    await runware.connect()
+
+    request_image = IImageInference(
+        taskUUID=str(uuid.uuid4()),
+        model="runware:illustrative@0",
+        positivePrompt="a horse",
+        numberResults=1,
+        width=1024,
+        height=1025,
+        deliveryMethod="sync",
+    )
+
+    image_task = await runware.imageInference(requestImage=request_image)
+    print(f"Image inference task submitted: {image_task.taskUUID}")
+```
+
 ### Retrieving Original Task Request/Response
 
 To inspect the original request payload and response for a past task, use `getTaskDetails(taskUUID)`.

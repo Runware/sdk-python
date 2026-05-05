@@ -1983,6 +1983,8 @@ class ITraining:
     webhookURL: Optional[str] = None
 
     def __post_init__(self):
+        if self.deliveryMethod == "sync":
+            raise ValueError("ITraining is a long-running task. Please use 'async' delivery method.")
         if self.importModel is not None and isinstance(self.importModel, dict):
             self.importModel = ITrainingImportModel(**self.importModel)
         if self.inputs is not None and isinstance(self.inputs, dict):
