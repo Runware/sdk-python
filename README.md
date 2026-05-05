@@ -257,7 +257,6 @@ async def main() -> None:
 
     request_training = ITraining(
         taskUUID=str(uuid.uuid4()),
-        taskType="training",
         model="runware:illustrative@training",
         deliveryMethod="async",
         importModel=ITrainingImportModel(
