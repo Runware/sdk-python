@@ -842,27 +842,16 @@ class ITextInferenceTool(SerializableMixin):
     description: str
     schema: Optional[Dict[str, Any]] = None
     input_schema: Optional[Dict[str, Any]] = field(default=None, repr=False)
-    type: Optional[str] = field(default=None, repr=False)
     toolType: Optional[str] = None
-
-    def __post_init__(self) -> None:
-        if self.schema is None and self.input_schema is not None:
-            object.__setattr__(self, "schema", self.input_schema)
-        object.__setattr__(self, "input_schema", None)
-        if self.schema is None:
-            raise ValueError("ITextInferenceTool requires 'schema' or 'input_schema'")
-        if self.toolType is None:
-            object.__setattr__(
-                self,
-                "toolType",
-                self.type if self.type is not None else "function",
-            )
-        object.__setattr__(self, "type", None)
 
     def serialize(self) -> Dict[str, Any]:
         data = super().serialize()
-        tt = data.pop("toolType", None) or "function"
-        data["type"] = tt
+        if self.schema is None and self.input_schema is not None:
+            data["schema"] = self.input_schema
+            data.pop("input_schema", None)
+        if self.toolType is not None:
+            data["type"] = self.toolType
+            data.pop("toolType", None)
         return data
 
 
