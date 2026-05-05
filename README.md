@@ -262,7 +262,7 @@ async def main() -> None:
         importModel=ITrainingImportModel(
             air="runware:illustrative@0",
             name="Runware Illustrative Training Model",
-            uniqueIdentifier="exacltyai_illustrative_model_1",
+            uniqueIdentifier="runware_illustrative_model_1",
             version="1.0",
             private=False,
             heroImageURL="https://example.com/hero-image.png",
