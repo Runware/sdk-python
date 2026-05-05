@@ -1893,7 +1893,7 @@ class IVideoInference:
     acceleration: Optional[str] = None
     numberResults: Optional[int] = None
     providerSettings: Optional[VideoProviderSettings] = None
-    speech: Optional[IVideoSpeechSettings] = None
+    speech: Optional[Union[IVideoSpeechSettings, Dict[str, Any]]] = None
     webhookURL: Optional[str] = None
     nsfw_check: Optional[Literal["none", "fast", "full"]] = None
     safety: Optional[Union[ISafety, Dict[str, Any]]] = None
@@ -1917,6 +1917,8 @@ class IVideoInference:
             self.safety = ISafety(**self.safety)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = IVideoInputs(**self.inputs)
+        if self.speech is not None and isinstance(self.speech, dict):
+            self.speech = IVideoSpeechSettings(**self.speech)
 
 
 I3dOutputFormat = Literal["GLB", "OBJ", "FBX", "STL", "USDZ", "3MF", "PLY"]
