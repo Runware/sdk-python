@@ -49,17 +49,6 @@ All notable changes to this project will be documented in this file.
   - `negativePrompt: Optional[str]`
 - `I3dOutputFormat` now supports:
   - `OBJ`
-- Added text inference cache support:
-  - `TextInferenceCacheScope = Literal["system", "system+history"]`
-  - `TextInferenceCacheTtl = Literal["5m", "1h"]`
-  - `ITextInferenceCache` dataclass (`scope`, `ttl`) with request key `cache`
-  - `ISettings.cache: Optional[Union[ITextInferenceCache, Dict[str, Any]]]` plus dict-to-dataclass normalization in `ISettings.__post_init__`
-- `ITextInputs` now includes:
-  - `documents: Optional[List[Union[str, File]]]`
-- `ITextInferenceTool` now supports:
-  - `schema: Optional[Dict[str, Any]]`
-  - backward-compatible `input_schema` alias (serialized as `schema` when `schema` is not provided)
-  - optional `toolType` (serialized as `type`)
 
 ### Changed
 
@@ -68,7 +57,6 @@ All notable changes to this project will be documented in this file.
 - Kept `process_image()` as a backward-compatible alias to `process_media()`.
 - Replaced `type` usage in video reference dataclasses with `refType` to avoid reserved-name ambiguity while preserving API payload compatibility (`type` is still sent on wire via `serialize()`).
 - `I3dOutputFormat` now supports Meshy 6 target formats: `GLB`, `OBJ`, `FBX`, `STL`, `USDZ`, `3MF` (while keeping `PLY` for compatibility).
-- Unified text-input media preprocessing in `runware/base.py` via `_processTextInputs()` and applied it to both `_requestText()` and `_requestTextStream()`, so `images`/`videos`/`documents` are normalized consistently for sync/async/stream text requests.
 
 ## [0.5.9]
 
