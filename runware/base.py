@@ -2553,7 +2553,7 @@ class RunwareBase:
         return await self._handleInitialTrainingResponse(
             request_object=request_object,
             task_uuid=requestTraining.taskUUID,
-            number_results=requestTraining.numberResults or 1,
+            number_results=1,
             delivery_method=requestTraining.deliveryMethod,
             webhook_url=requestTraining.webhookURL,
             debug_key="training-initial",
@@ -2567,8 +2567,6 @@ class RunwareBase:
             "deliveryMethod": requestTraining.deliveryMethod,
         }
 
-        if requestTraining.numberResults is not None:
-            request_object["numberResults"] = requestTraining.numberResults
         if requestTraining.includeCost is not None:
             request_object["includeCost"] = requestTraining.includeCost
         if requestTraining.webhookURL is not None:

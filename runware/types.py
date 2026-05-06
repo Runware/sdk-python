@@ -1979,7 +1979,6 @@ class ITraining:
     taskUUID: Optional[str] = None
     deliveryMethod: str = "async"
     includeCost: Optional[bool] = None
-    numberResults: Optional[int] = 1
     webhookURL: Optional[str] = None
 
     def __post_init__(self):
