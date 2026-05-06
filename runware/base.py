@@ -2545,6 +2545,7 @@ class RunwareBase:
             request_object["includeUsage"] = requestText.includeUsage
         if requestText.numberResults is not None:
             request_object["numberResults"] = requestText.numberResults
+        self._addOptionalField(request_object, requestText.toolChoice)
         self._addOptionalField(request_object, requestText.settings)
         self._addOptionalField(request_object, requestText.inputs)
         self._addProviderSettings(request_object, requestText)

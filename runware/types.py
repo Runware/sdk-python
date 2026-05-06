@@ -859,8 +859,19 @@ class ITextInferenceTool(SerializableMixin):
 class ITextInferenceToolChoice(SerializableMixin):
     """Selects how tools are used (provider-specific shape, e.g. type + name)."""
 
-    type: str
+    toolType: str
     name: Optional[str] = None
+
+    @property
+    def request_key(self) -> str:
+        return "toolChoice"
+
+    def serialize(self) -> Dict[str, Any]:
+        data = super().serialize()
+        if self.toolType is not None:
+            data["type"] = self.toolType
+            data.pop("toolType", None)
+        return data
 
 
 @dataclass
@@ -989,7 +1000,6 @@ class ISettings(SerializableMixin):
     topK: Optional[int] = None
     stopSequences: Optional[List[str]] = None
     tools: Optional[List[Union[ITextInferenceTool, Dict[str, Any]]]] = None
-    toolChoice: Optional[Union[ITextInferenceToolChoice, Dict[str, Any]]] = None
     cache: Optional[Union[ITextInferenceCache, Dict[str, Any]]] = None
     # Image upscale 
     steps: Optional[int] = None
@@ -1020,8 +1030,6 @@ class ISettings(SerializableMixin):
             ]
         if self.cache is not None and isinstance(self.cache, dict):
             self.cache = ITextInferenceCache(**self.cache)
-        if self.toolChoice is not None and isinstance(self.toolChoice, dict):
-            self.toolChoice = ITextInferenceToolChoice(**self.toolChoice)
         if self.editRegions is not None:
             self.editRegions = [
                 [
@@ -2167,12 +2175,15 @@ class ITextInference:
     seed: Optional[int] = None
     includeCost: Optional[bool] = None
     includeUsage: Optional[bool] = None
+    toolChoice: Optional[Union[ITextInferenceToolChoice, Dict[str, Any]]] = None
     settings: Optional[Union[ISettings, Dict[str, Any]]] = None
     inputs: Optional[Union[ITextInputs, Dict[str, Any]]] = None
     providerSettings: Optional[TextProviderSettings] = None
     webhookURL: Optional[str] = None
 
     def __post_init__(self) -> None:
+        if self.toolChoice is not None and isinstance(self.toolChoice, dict):
+            self.toolChoice = ITextInferenceToolChoice(**self.toolChoice)
         if self.settings is not None and isinstance(self.settings, dict):
             self.settings = ISettings(**self.settings)
         if self.inputs is not None and isinstance(self.inputs, dict):
