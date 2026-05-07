@@ -859,19 +859,22 @@ class ITextInferenceTool(SerializableMixin):
 class ITextInferenceToolChoice(SerializableMixin):
     """Selects how tools are used (provider-specific shape, e.g. type + name)."""
 
-    toolType: str
+    toolType: Optional[str] = None
+    type: InitVar[Optional[str]] = None
     name: Optional[str] = None
+
+    def __post_init__(self, type: Optional[str] = None) -> None:
+        if self.toolType is None and type is not None:
+            warnings.warn(
+                "ITextInferenceToolChoice(type=...) is deprecated; use toolType=... instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            self.toolType = type
 
     @property
     def request_key(self) -> str:
         return "toolChoice"
-
-    def serialize(self) -> Dict[str, Any]:
-        data = super().serialize()
-        if self.toolType is not None:
-            data["type"] = self.toolType
-            data.pop("toolType", None)
-        return data
 
 
 @dataclass
@@ -1027,7 +1030,7 @@ class ISettings(SerializableMixin):
             self.tools = [
                 ITextInferenceTool(
                     **(
-                        {**t, "toolType": t["type"]}
+                        {**{k: v for k, v in t.items() if k != "type"}, "toolType": t["type"]}
                         if isinstance(t, dict) and "toolType" not in t and "type" in t
                         else t
                     )
