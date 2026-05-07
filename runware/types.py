@@ -2188,10 +2188,23 @@ class ITextInference:
     webhookURL: Optional[str] = None
 
     def __post_init__(self) -> None:
-        if self.toolChoice is not None and isinstance(self.toolChoice, dict):
-            self.toolChoice = ITextInferenceToolChoice(**self.toolChoice)
         if self.settings is not None and isinstance(self.settings, dict):
-            self.settings = ISettings(**self.settings)
+            settings_data = dict(self.settings)
+            legacy_tool_choice = settings_data.pop("toolChoice", None)
+            if legacy_tool_choice is not None:
+                warnings.warn(
+                    "settings.toolChoice is deprecated; use ITextInference.toolChoice instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                if self.toolChoice is None:
+                    self.toolChoice = legacy_tool_choice
+            self.settings = ISettings(**settings_data)
+        if self.toolChoice is not None and isinstance(self.toolChoice, dict):
+            tool_choice_data = dict(self.toolChoice)
+            if "toolType" not in tool_choice_data and "type" in tool_choice_data:
+                tool_choice_data["toolType"] = tool_choice_data.pop("type")
+            self.toolChoice = ITextInferenceToolChoice(**tool_choice_data)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = ITextInputs(**self.inputs)
 
