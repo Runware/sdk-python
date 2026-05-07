@@ -846,9 +846,9 @@ class ITextInferenceTool(SerializableMixin):
 
     def serialize(self) -> Dict[str, Any]:
         data = super().serialize()
-        if self.schema is None and self.input_schema is not None:
-            data["schema"] = self.input_schema
-            data.pop("input_schema", None)
+        input_schema = data.pop("input_schema", None)
+        if data.get("schema") is None and input_schema is not None:
+            data["schema"] = input_schema
         if self.toolType is not None:
             data["type"] = self.toolType
             data.pop("toolType", None)
@@ -1025,7 +1025,13 @@ class ISettings(SerializableMixin):
             self.texSlat = ITexSlat(**self.texSlat)
         if self.tools is not None:
             self.tools = [
-                ITextInferenceTool(**t) if isinstance(t, dict) else t
+                ITextInferenceTool(
+                    **(
+                        {**t, "toolType": t["type"]}
+                        if isinstance(t, dict) and "toolType" not in t and "type" in t
+                        else t
+                    )
+                ) if isinstance(t, dict) else t
                 for t in self.tools
             ]
         if self.cache is not None and isinstance(self.cache, dict):
