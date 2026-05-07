@@ -876,6 +876,13 @@ class ITextInferenceToolChoice(SerializableMixin):
     def request_key(self) -> str:
         return "toolChoice"
 
+    def serialize(self) -> Dict[str, Any]:
+        data = super().serialize()
+        if self.toolType is not None:
+            data["type"] = self.toolType
+            data.pop("toolType", None)
+        return data
+
 
 @dataclass
 class IColorPaletteEntry(SerializableMixin):
@@ -1003,6 +1010,7 @@ class ISettings(SerializableMixin):
     topK: Optional[int] = None
     stopSequences: Optional[List[str]] = None
     tools: Optional[List[Union[ITextInferenceTool, Dict[str, Any]]]] = None
+    toolChoice: InitVar[Optional[Union["ITextInferenceToolChoice", Dict[str, Any]]]] = None
     cache: Optional[Union[ITextInferenceCache, Dict[str, Any]]] = None
     # Image upscale 
     steps: Optional[int] = None
@@ -1019,7 +1027,14 @@ class ISettings(SerializableMixin):
     enhanceDetails: Optional[bool] = None
     realism: Optional[bool] = None
 
-    def __post_init__(self):
+    def __post_init__(self, toolChoice: Optional[Union["ITextInferenceToolChoice", Dict[str, Any]]] = None):
+        if toolChoice is not None:
+            warnings.warn(
+                "ISettings(toolChoice=...) is deprecated; use ITextInference.toolChoice instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            self.__dict__["toolChoice"] = toolChoice
         if self.sparseStructure is not None and isinstance(self.sparseStructure, dict):
             self.sparseStructure = ISparseStructure(**self.sparseStructure)
         if self.shapeSlat is not None and isinstance(self.shapeSlat, dict):
@@ -2203,6 +2218,16 @@ class ITextInference:
                 if self.toolChoice is None:
                     self.toolChoice = legacy_tool_choice
             self.settings = ISettings(**settings_data)
+        elif self.settings is not None:
+            legacy_tool_choice = getattr(self.settings, "toolChoice", None)
+            if legacy_tool_choice is not None:
+                warnings.warn(
+                    "settings.toolChoice is deprecated; use ITextInference.toolChoice instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                if self.toolChoice is None:
+                    self.toolChoice = legacy_tool_choice
         if self.toolChoice is not None and isinstance(self.toolChoice, dict):
             tool_choice_data = dict(self.toolChoice)
             if "toolType" not in tool_choice_data and "type" in tool_choice_data:
