@@ -119,7 +119,7 @@ class OperationState(Enum):
 # Define the types using Literal
 IOutputType = Literal["base64Data", "dataURI", "URL"]
 IOutputFormat = Literal["JPG", "PNG", "WEBP", "SVG"]
-IAudioOutputFormat = Literal["wav", "mp3", "pcm", "opus", "aac", "flac", "MP3"]
+IAudioOutputFormat = Literal["wav", "mp3", "pcm", "opus", "aac", "flac", "ogg", "MP3"]
 
 
 @dataclass
@@ -936,8 +936,12 @@ class ISettings(SerializableMixin):
     timeSignature: Optional[Union[int, str]] = None
     vocalLanguage: Optional[str] = None
     coverConditioningScale: Optional[float] = None
+    cfgIntervalStart: Optional[float] = None
+    cfgIntervalEnd: Optional[float] = None
     repaintingStart: Optional[float] = None
     repaintingEnd: Optional[float] = None
+    repaintMode: Optional[str] = None
+    repaintStrength: Optional[float] = None
     includePrefix: Optional[bool] = None
     audioTemperature: Optional[float] = None
     # Video
