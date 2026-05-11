@@ -50,6 +50,7 @@ class ETaskType(Enum):
     GET_RESPONSE = "getResponse"
     GET_TASK_DETAILS = "getTaskDetails"
     IMAGE_VECTORIZE = "vectorize"
+    TRAINING = "training"
 
 
 class EPreProcessorGroup(Enum):
@@ -120,6 +121,8 @@ class OperationState(Enum):
 IOutputType = Literal["base64Data", "dataURI", "URL"]
 IOutputFormat = Literal["JPG", "PNG", "WEBP", "SVG"]
 IAudioOutputFormat = Literal["wav", "mp3", "pcm", "opus", "aac", "flac", "ogg", "MP3"]
+TextInferenceCacheScope = Literal["system", "system+history"]
+TextInferenceCacheTtl = Literal["5m", "1h"]
 
 
 @dataclass
@@ -822,20 +825,64 @@ class ITexSlat(SerializableMixin):
 
 
 @dataclass
+class ITextInferenceCache(SerializableMixin):
+
+    scope: Optional[TextInferenceCacheScope] = None
+    ttl: Optional[TextInferenceCacheTtl] = None
+
+    @property
+    def request_key(self) -> str:
+        return "cache"
+
+
+@dataclass
 class ITextInferenceTool(SerializableMixin):
     """Tool definition for text inference (e.g. function-calling / JSON-schema tools)."""
 
     name: str
     description: str
-    input_schema: Dict[str, Any]
+    schema: Optional[Dict[str, Any]] = None
+    input_schema: Optional[Dict[str, Any]] = field(default=None, repr=False)
+    toolType: Optional[str] = None
+
+    def serialize(self) -> Dict[str, Any]:
+        data = super().serialize()
+        input_schema = data.pop("input_schema", None)
+        if data.get("schema") is None and input_schema is not None:
+            data["schema"] = input_schema
+        if self.toolType is not None:
+            data["type"] = self.toolType
+            data.pop("toolType", None)
+        return data
 
 
 @dataclass
 class ITextInferenceToolChoice(SerializableMixin):
     """Selects how tools are used (provider-specific shape, e.g. type + name)."""
 
-    type: str
+    toolType: Optional[str] = None
+    type: InitVar[Optional[str]] = None
     name: Optional[str] = None
+
+    def __post_init__(self, type: Optional[str] = None) -> None:
+        if self.toolType is None and type is not None:
+            warnings.warn(
+                "ITextInferenceToolChoice(type=...) is deprecated; use toolType=... instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            self.toolType = type
+
+    @property
+    def request_key(self) -> str:
+        return "toolChoice"
+
+    def serialize(self) -> Dict[str, Any]:
+        data = super().serialize()
+        if self.toolType is not None:
+            data["type"] = self.toolType
+            data.pop("toolType", None)
+        return data
 
 
 @dataclass
@@ -854,137 +901,142 @@ class IEditRegion(SerializableMixin):
 
 @dataclass
 class ISettings(SerializableMixin):
-    # Image / Text
-    temperature: Optional[float] = None
-    systemPrompt: Optional[str] = None
-    topP: Optional[float] = None
-    minP: Optional[float] = None
-    repetitionPenalty: Optional[float] = None
-    presencePenalty: Optional[float] = None
-    frequencyPenalty: Optional[float] = None
-    thinkingLevel: Optional[str] = None
-    layers: Optional[int] = None
-    trueCFGScale: Optional[float] = None
-    quality: Optional[str] = None
-    background: Optional[str] = None
-    renderingSpeed: Optional[str] = None
-    magicPrompt: Optional[str] = None
-    promptExtend: Optional[bool] = None
-    editRegions: Optional[List[List[Union[IEditRegion, Dict[str, Any]]]]] = None
-    sequential: Optional[bool] = None
-    thinking: Optional[bool] = None
-    colorPalette: Optional[List[Union[IColorPaletteEntry, Dict[str, Any]]]] = None
-    # 3D inference
-    textureSize: Optional[int] = None
-    decimationTarget: Optional[int] = None
-    remesh: Optional[bool] = None
-    resolution: Optional[int] = None
-    sparseStructure: Optional[Union[ISparseStructure, Dict[str, Any]]] = None
-    shapeSlat: Optional[Union[IShapeSlat, Dict[str, Any]]] = None
-    texSlat: Optional[Union[ITexSlat, Dict[str, Any]]] = None
-    imageAutoFix: Optional[bool] = None
-    faceLimit: Optional[int] = None
-    faceCount: Optional[int] = None
-    texture: Optional[bool] = None
-    pbr: Optional[bool] = None
-    geometryOnly: Optional[bool] = None
-    generateType: Optional[str] = None
-    polygonType: Optional[str] = None
-    textureSeed: Optional[int] = None
-    textureAlignment: Optional[str] = None
-    textureQuality: Optional[str] = None
-    useOriginalAlpha: Optional[bool] = None
-    material: Optional[str] = None
-    polyCount: Optional[float] = None
-    taPose: Optional[bool] = None
-    boundingBox: Optional[List[int]] = None
-    meshMode: Optional[str] = None
+    activeSpeakerDetection: Optional[Union["IActiveSpeakerDetection", Dict[str, Any]]] = None
     addons: Optional[List[str]] = None
-    hdTexture: Optional[bool] = None
+    audio: Optional[bool] = None
+    audioTemperature: Optional[float] = None
     autoSize: Optional[bool] = None
-    orientation: Optional[str] = None
-    quad: Optional[bool] = None
-    compress: Optional[str] = None
-    smartLowPoly: Optional[bool] = None
-    generateParts: Optional[bool] = None
-    exportUv: Optional[bool] = None
-    geometryQuality: Optional[str] = None
-    meshType: Optional[str] = None
-    topology: Optional[str] = None
-    decimation: Optional[int] = None
-    symmetry: Optional[str] = None
-    pose: Optional[str] = None
-    texturePrompt: Optional[str] = None
-    imageEnhancement: Optional[bool] = None
-    savePreRemeshedModel: Optional[bool] = None
-    removeLighting: Optional[bool] = None
-    moderation: Optional[bool] = None
-    origin: Optional[str] = None
-    # Audio
-    languageBoost: Optional[str] = None
-    turbo: Optional[bool] = None
-    lyrics: Optional[str] = None
-    instrumental: Optional[bool] = None
-    lyricsOptimizer: Optional[bool] = None
-    guidanceType: Optional[str] = None
-    textNormalization: Optional[bool] = None
-    maxNewTokens: Optional[int] = None
-    transcript: Optional[str] = None
-    xVectorOnly: Optional[bool] = None
+    background: Optional[str] = None
+    backgroundColor: Optional[str] = None
+    boundingBox: Optional[List[int]] = None
     bpm: Optional[int] = None
-    keyScale: Optional[str] = None
-    timeSignature: Optional[Union[int, str]] = None
-    vocalLanguage: Optional[str] = None
-    coverConditioningScale: Optional[float] = None
-    cfgIntervalStart: Optional[float] = None
+    cache: Optional[Union[ITextInferenceCache, Dict[str, Any]]] = None
     cfgIntervalEnd: Optional[float] = None
-    repaintingStart: Optional[float] = None
+    cfgIntervalStart: Optional[float] = None
+    CFGScale: Optional[float] = None
+    clipSkip: Optional[int] = None
+    colorCorrection: Optional[bool] = None
+    colorFix: Optional[bool] = None
+    colorPalette: Optional[List[Union[IColorPaletteEntry, Dict[str, Any]]]] = None
+    compress: Optional[str] = None
+    controlNetWeight: Optional[float] = None
+    coverConditioningScale: Optional[float] = None
+    decimation: Optional[int] = None
+    decimationTarget: Optional[int] = None
+    draft: Optional[bool] = None
+    editRegions: Optional[List[List[Union[IEditRegion, Dict[str, Any]]]]] = None
+    emotion: Optional[str] = None
+    enhanceDetails: Optional[bool] = None
+    exportUv: Optional[bool] = None
+    expressiveness: Optional[str] = None
+    faceCount: Optional[int] = None
+    faceLimit: Optional[int] = None
+    frequencyPenalty: Optional[float] = None
+    generateParts: Optional[bool] = None
+    generateType: Optional[str] = None
+    geometryOnly: Optional[bool] = None
+    geometryQuality: Optional[str] = None
+    guidanceType: Optional[str] = None
+    hdTexture: Optional[bool] = None
+    imageAutoFix: Optional[bool] = None
+    imageEnhancement: Optional[bool] = None
+    includePrefix: Optional[bool] = None
+    instrumental: Optional[bool] = None
+    keyframe: Optional[int] = None
+    keyScale: Optional[str] = None
+    languageBoost: Optional[str] = None
+    layers: Optional[int] = None
+    lyrics: Optional[str] = None
+    lyricsOptimizer: Optional[bool] = None
+    magicPrompt: Optional[str] = None
+    material: Optional[str] = None
+    maxNewTokens: Optional[int] = None
+    maxTokens: Optional[int] = None
+    meshMode: Optional[str] = None
+    meshType: Optional[str] = None
+    minP: Optional[float] = None
+    mode: Optional[str] = None
+    moderation: Optional[bool] = None
+    multiClip: Optional[bool] = None
+    negativePrompt: Optional[str] = None
+    occlusionDetection: Optional[bool] = None
+    orientation: Optional[str] = None
+    origin: Optional[str] = None
+    pbr: Optional[bool] = None
+    polyCount: Optional[float] = None
+    polygonType: Optional[str] = None
+    pose: Optional[str] = None
+    positivePrompt: Optional[str] = None
+    presencePenalty: Optional[float] = None
+    promptExtend: Optional[bool] = None
+    promptUpsampling: Optional[bool] = None
+    quad: Optional[bool] = None
+    quality: Optional[str] = None
+    realism: Optional[bool] = None
+    remesh: Optional[bool] = None
+    removeBackground: Optional[bool] = None
+    removeLighting: Optional[bool] = None
+    renderingSpeed: Optional[str] = None
     repaintingEnd: Optional[float] = None
+    repaintingStart: Optional[float] = None
     repaintMode: Optional[str] = None
     repaintStrength: Optional[float] = None
-    includePrefix: Optional[bool] = None
-    audioTemperature: Optional[float] = None
-    # Video
-    draft: Optional[bool] = None
-    audio: Optional[bool] = None
-    syncMode: Optional[str] = None
-    mode: Optional[str] = None
-    emotion: Optional[str] = None
-    voiceDescription: Optional[str] = None
-    style: Optional[str] = None
-    thinking: Optional[str] = None
-    multiClip: Optional[bool] = None
-    promptUpsampling: Optional[bool] = None
-    expressiveness: Optional[str] = None
-    activeSpeakerDetection: Optional[Union["IActiveSpeakerDetection", Dict[str, Any]]] = None
-    occlusionDetection: Optional[bool] = None
-    segments: Optional[List[Union["ISegment", Dict[str, Any]]]] = None
-    keyframe: Optional[int] = None
-    removeBackground: Optional[bool] = None
-    backgroundColor: Optional[str] = None
-    colorCorrection: Optional[bool] = None
-    # Text
-    maxTokens: Optional[int] = None
-    topK: Optional[int] = None
-    stopSequences: Optional[List[str]] = None
-    tools: Optional[List[Union[ITextInferenceTool, Dict[str, Any]]]] = None
-    toolChoice: Optional[Union[ITextInferenceToolChoice, Dict[str, Any]]] = None
-    # Image upscale 
-    steps: Optional[int] = None
-    seed: Optional[int] = None
-    CFGScale: Optional[float] = None
-    positivePrompt: Optional[str] = None
-    negativePrompt: Optional[str] = None
-    controlNetWeight: Optional[float] = None
-    strength: Optional[float] = None
+    repetitionPenalty: Optional[float] = None
+    resolution: Optional[int] = None
+    safetyFilter: Optional[bool] = None
+    savePreRemeshedModel: Optional[bool] = None
     scheduler: Optional[str] = None
-    colorFix: Optional[bool] = None
+    search: Optional[bool] = None
+    seed: Optional[int] = None
+    segments: Optional[List[Union["ISegment", Dict[str, Any]]]] = None
+    sequential: Optional[bool] = None
+    shapeSlat: Optional[Union[IShapeSlat, Dict[str, Any]]] = None
+    smartLowPoly: Optional[bool] = None
+    sparseStructure: Optional[Union[ISparseStructure, Dict[str, Any]]] = None
+    steps: Optional[int] = None
+    stopSequences: Optional[List[str]] = None
+    strength: Optional[float] = None
+    style: Optional[str] = None
+    symmetry: Optional[str] = None
+    syncMode: Optional[str] = None
+    systemPrompt: Optional[str] = None
+    taPose: Optional[bool] = None
+    temperature: Optional[float] = None
+    texSlat: Optional[Union[ITexSlat, Dict[str, Any]]] = None
+    textNormalization: Optional[bool] = None
+    texture: Optional[bool] = None
+    textureAlignment: Optional[str] = None
+    texturePrompt: Optional[str] = None
+    textureQuality: Optional[str] = None
+    textureSeed: Optional[int] = None
+    textureSize: Optional[int] = None
+    thinking: Optional[Union[bool, str]] = None
+    thinkingLevel: Optional[str] = None
+    thinkingMode: Optional[str] = None
     tileDiffusion: Optional[bool] = None
-    clipSkip: Optional[int] = None
-    enhanceDetails: Optional[bool] = None
-    realism: Optional[bool] = None
+    timeSignature: Optional[Union[int, str]] = None
+    toolChoice: Optional[Union[ITextInferenceToolChoice, Dict[str, Any]]] = None
+    tools: Optional[List[Union[ITextInferenceTool, Dict[str, Any]]]] = None
+    topK: Optional[int] = None
+    topology: Optional[str] = None
+    topP: Optional[float] = None
+    transcript: Optional[str] = None
+    trueCFGScale: Optional[float] = None
+    turbo: Optional[bool] = None
+    useOriginalAlpha: Optional[bool] = None
+    vocalLanguage: Optional[str] = None
+    voiceDescription: Optional[str] = None
+    voicePrompt: Optional[str] = None
+    xVectorOnly: Optional[bool] = None
 
-    def __post_init__(self):
+    def __post_init__(self, toolChoice: Optional[Union["ITextInferenceToolChoice", Dict[str, Any]]] = None):
+        if toolChoice is not None:
+            warnings.warn(
+                "ISettings(toolChoice=...) is deprecated; use ITextInference.toolChoice instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            self.__dict__["toolChoice"] = toolChoice
         if self.sparseStructure is not None and isinstance(self.sparseStructure, dict):
             self.sparseStructure = ISparseStructure(**self.sparseStructure)
         if self.shapeSlat is not None and isinstance(self.shapeSlat, dict):
@@ -993,11 +1045,17 @@ class ISettings(SerializableMixin):
             self.texSlat = ITexSlat(**self.texSlat)
         if self.tools is not None:
             self.tools = [
-                ITextInferenceTool(**t) if isinstance(t, dict) else t
+                ITextInferenceTool(
+                    **(
+                        {**{k: v for k, v in t.items() if k != "type"}, "toolType": t["type"]}
+                        if isinstance(t, dict) and "toolType" not in t and "type" in t
+                        else t
+                    )
+                ) if isinstance(t, dict) else t
                 for t in self.tools
             ]
-        if self.toolChoice is not None and isinstance(self.toolChoice, dict):
-            self.toolChoice = ITextInferenceToolChoice(**self.toolChoice)
+        if self.cache is not None and isinstance(self.cache, dict):
+            self.cache = ITextInferenceCache(**self.cache)
         if self.editRegions is not None:
             self.editRegions = [
                 [
@@ -1087,6 +1145,7 @@ class IInputs(SerializableMixin):
 class ITextInputs(SerializableMixin):
     images: Optional[List[Union[str, File]]] = None
     videos: Optional[List[Union[str, File]]] = None
+    documents: Optional[List[Union[str, File]]] = None
 
     @property
     def request_key(self) -> str:
@@ -1237,6 +1296,32 @@ class I3dInputs(SerializableMixin):
     referenceImages: Optional[List[Union[str, File]]] = None
     mask: Optional[Union[str, File]] = None
     meshFile: Optional[Union[str, File]] = None
+
+    @property
+    def request_key(self) -> str:
+        return "inputs"
+
+
+@dataclass
+class ITrainingImportModel(SerializableMixin):
+    air: str
+    name: str
+    uniqueIdentifier: str
+    version: str
+    private: bool
+    heroImageURL: Optional[str] = None
+    shortDescription: Optional[str] = None
+    architecture: Optional[str] = None
+    category: Optional[str] = None
+
+    @property
+    def request_key(self) -> str:
+        return "importModel"
+
+
+@dataclass
+class ITrainingInputs(SerializableMixin):
+    dataset: Optional[Union[str, File]] = None
 
     @property
     def request_key(self) -> str:
@@ -1895,7 +1980,7 @@ class IVideoInference:
     acceleration: Optional[str] = None
     numberResults: Optional[int] = None
     providerSettings: Optional[VideoProviderSettings] = None
-    speech: Optional[IVideoSpeechSettings] = None
+    speech: Optional[Union[IVideoSpeechSettings, Dict[str, Any]]] = None
     webhookURL: Optional[str] = None
     nsfw_check: Optional[Literal["none", "fast", "full"]] = None
     safety: Optional[Union[ISafety, Dict[str, Any]]] = None
@@ -1919,6 +2004,8 @@ class IVideoInference:
             self.safety = ISafety(**self.safety)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = IVideoInputs(**self.inputs)
+        if self.speech is not None and isinstance(self.speech, dict):
+            self.speech = IVideoSpeechSettings(**self.speech)
 
 
 I3dOutputFormat = Literal["GLB", "OBJ", "FBX", "STL", "USDZ", "3MF", "PLY"]
@@ -1946,6 +2033,34 @@ class I3dInference:
             self.settings = ISettings(**self.settings)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = I3dInputs(**self.inputs)
+
+
+@dataclass
+class ITraining:
+    model: str
+    importModel: Union[ITrainingImportModel, Dict[str, Any]]
+    inputs: Union[ITrainingInputs, Dict[str, Any]]
+    taskUUID: Optional[str] = None
+    deliveryMethod: str = "async"
+    includeCost: Optional[bool] = None
+    webhookURL: Optional[str] = None
+
+    def __post_init__(self):
+        if self.deliveryMethod == "sync":
+            raise ValueError("ITraining is a long-running task. Please use 'async' delivery method.")
+        if self.importModel is not None and isinstance(self.importModel, dict):
+            self.importModel = ITrainingImportModel(**self.importModel)
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = ITrainingInputs(**self.inputs)
+
+
+@dataclass
+class ITrainingResult:
+    taskType: str
+    taskUUID: str
+    status: Optional[str] = None
+    cost: Optional[float] = None
+    outputs: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -2142,6 +2257,7 @@ class ITextInference:
     seed: Optional[int] = None
     includeCost: Optional[bool] = None
     includeUsage: Optional[bool] = None
+    toolChoice: Optional[Union[ITextInferenceToolChoice, Dict[str, Any]]] = None
     settings: Optional[Union[ISettings, Dict[str, Any]]] = None
     inputs: Optional[Union[ITextInputs, Dict[str, Any]]] = None
     providerSettings: Optional[TextProviderSettings] = None
@@ -2149,7 +2265,32 @@ class ITextInference:
 
     def __post_init__(self) -> None:
         if self.settings is not None and isinstance(self.settings, dict):
-            self.settings = ISettings(**self.settings)
+            settings_data = dict(self.settings)
+            legacy_tool_choice = settings_data.pop("toolChoice", None)
+            if legacy_tool_choice is not None:
+                warnings.warn(
+                    "settings.toolChoice is deprecated; use ITextInference.toolChoice instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                if self.toolChoice is None:
+                    self.toolChoice = legacy_tool_choice
+            self.settings = ISettings(**settings_data)
+        elif self.settings is not None:
+            legacy_tool_choice = getattr(self.settings, "toolChoice", None)
+            if legacy_tool_choice is not None:
+                warnings.warn(
+                    "settings.toolChoice is deprecated; use ITextInference.toolChoice instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                if self.toolChoice is None:
+                    self.toolChoice = legacy_tool_choice
+        if self.toolChoice is not None and isinstance(self.toolChoice, dict):
+            tool_choice_data = dict(self.toolChoice)
+            if "toolType" not in tool_choice_data and "type" in tool_choice_data:
+                tool_choice_data["toolType"] = tool_choice_data.pop("type")
+            self.toolChoice = ITextInferenceToolChoice(**tool_choice_data)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = ITextInputs(**self.inputs)
 
