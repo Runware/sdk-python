@@ -50,6 +50,7 @@ class ETaskType(Enum):
     GET_RESPONSE = "getResponse"
     GET_TASK_DETAILS = "getTaskDetails"
     IMAGE_VECTORIZE = "vectorize"
+    TRAINING = "training"
 
 
 class EPreProcessorGroup(Enum):
@@ -1240,6 +1241,32 @@ class I3dInputs(SerializableMixin):
 
 
 @dataclass
+class ITrainingImportModel(SerializableMixin):
+    air: str
+    name: str
+    uniqueIdentifier: str
+    version: str
+    private: bool
+    heroImageURL: Optional[str] = None
+    shortDescription: Optional[str] = None
+    architecture: Optional[str] = None
+    category: Optional[str] = None
+
+    @property
+    def request_key(self) -> str:
+        return "importModel"
+
+
+@dataclass
+class ITrainingInputs(SerializableMixin):
+    dataset: Optional[Union[str, File]] = None
+
+    @property
+    def request_key(self) -> str:
+        return "inputs"
+
+
+@dataclass
 class IImageInference:
     model: Union[int, str]
     positivePrompt: Optional[str] = None
@@ -1942,6 +1969,34 @@ class I3dInference:
             self.settings = ISettings(**self.settings)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = I3dInputs(**self.inputs)
+
+
+@dataclass
+class ITraining:
+    model: str
+    importModel: Union[ITrainingImportModel, Dict[str, Any]]
+    inputs: Union[ITrainingInputs, Dict[str, Any]]
+    taskUUID: Optional[str] = None
+    deliveryMethod: str = "async"
+    includeCost: Optional[bool] = None
+    webhookURL: Optional[str] = None
+
+    def __post_init__(self):
+        if self.deliveryMethod == "sync":
+            raise ValueError("ITraining is a long-running task. Please use 'async' delivery method.")
+        if self.importModel is not None and isinstance(self.importModel, dict):
+            self.importModel = ITrainingImportModel(**self.importModel)
+        if self.inputs is not None and isinstance(self.inputs, dict):
+            self.inputs = ITrainingInputs(**self.inputs)
+
+
+@dataclass
+class ITrainingResult:
+    taskType: str
+    taskUUID: str
+    status: Optional[str] = None
+    cost: Optional[float] = None
+    outputs: Optional[Dict[str, Any]] = None
 
 
 @dataclass
