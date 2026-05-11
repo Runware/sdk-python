@@ -979,6 +979,7 @@ class ISettings(SerializableMixin):
     repaintingStart: Optional[float] = None
     repetitionPenalty: Optional[float] = None
     resolution: Optional[int] = None
+    safetyFilter: Optional[bool] = None
     savePreRemeshedModel: Optional[bool] = None
     scheduler: Optional[str] = None
     search: Optional[bool] = None
@@ -1007,6 +1008,7 @@ class ISettings(SerializableMixin):
     textureSize: Optional[int] = None
     thinking: Optional[Union[bool, str]] = None
     thinkingLevel: Optional[str] = None
+    thinkingMode: Optional[str] = None
     tileDiffusion: Optional[bool] = None
     timeSignature: Optional[Union[int, str]] = None
     toolChoice: Optional[Union[ITextInferenceToolChoice, Dict[str, Any]]] = None
@@ -1020,6 +1022,7 @@ class ISettings(SerializableMixin):
     useOriginalAlpha: Optional[bool] = None
     vocalLanguage: Optional[str] = None
     voiceDescription: Optional[str] = None
+    voicePrompt: Optional[str] = None
     xVectorOnly: Optional[bool] = None
 
     def __post_init__(self, toolChoice: Optional[Union["ITextInferenceToolChoice", Dict[str, Any]]] = None):
@@ -1973,7 +1976,7 @@ class IVideoInference:
     acceleration: Optional[str] = None
     numberResults: Optional[int] = None
     providerSettings: Optional[VideoProviderSettings] = None
-    speech: Optional[IVideoSpeechSettings] = None
+    speech: Optional[Union[IVideoSpeechSettings, Dict[str, Any]]] = None
     webhookURL: Optional[str] = None
     nsfw_check: Optional[Literal["none", "fast", "full"]] = None
     safety: Optional[Union[ISafety, Dict[str, Any]]] = None
@@ -1997,6 +2000,8 @@ class IVideoInference:
             self.safety = ISafety(**self.safety)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = IVideoInputs(**self.inputs)
+        if self.speech is not None and isinstance(self.speech, dict):
+            self.speech = IVideoSpeechSettings(**self.speech)
 
 
 I3dOutputFormat = Literal["GLB", "OBJ", "FBX", "STL", "USDZ", "3MF", "PLY"]
