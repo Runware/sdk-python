@@ -121,6 +121,8 @@ class OperationState(Enum):
 IOutputType = Literal["base64Data", "dataURI", "URL"]
 IOutputFormat = Literal["JPG", "PNG", "WEBP", "SVG"]
 IAudioOutputFormat = Literal["wav", "mp3", "pcm", "opus", "aac", "flac", "MP3"]
+TextInferenceCacheScope = Literal["system", "system+history"]
+TextInferenceCacheTtl = Literal["5m", "1h"]
 
 
 @dataclass
@@ -823,20 +825,64 @@ class ITexSlat(SerializableMixin):
 
 
 @dataclass
+class ITextInferenceCache(SerializableMixin):
+
+    scope: Optional[TextInferenceCacheScope] = None
+    ttl: Optional[TextInferenceCacheTtl] = None
+
+    @property
+    def request_key(self) -> str:
+        return "cache"
+
+
+@dataclass
 class ITextInferenceTool(SerializableMixin):
     """Tool definition for text inference (e.g. function-calling / JSON-schema tools)."""
 
     name: str
     description: str
-    input_schema: Dict[str, Any]
+    schema: Optional[Dict[str, Any]] = None
+    input_schema: Optional[Dict[str, Any]] = field(default=None, repr=False)
+    toolType: Optional[str] = None
+
+    def serialize(self) -> Dict[str, Any]:
+        data = super().serialize()
+        input_schema = data.pop("input_schema", None)
+        if data.get("schema") is None and input_schema is not None:
+            data["schema"] = input_schema
+        if self.toolType is not None:
+            data["type"] = self.toolType
+            data.pop("toolType", None)
+        return data
 
 
 @dataclass
 class ITextInferenceToolChoice(SerializableMixin):
     """Selects how tools are used (provider-specific shape, e.g. type + name)."""
 
-    type: str
+    toolType: Optional[str] = None
+    type: InitVar[Optional[str]] = None
     name: Optional[str] = None
+
+    def __post_init__(self, type: Optional[str] = None) -> None:
+        if self.toolType is None and type is not None:
+            warnings.warn(
+                "ITextInferenceToolChoice(type=...) is deprecated; use toolType=... instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            self.toolType = type
+
+    @property
+    def request_key(self) -> str:
+        return "toolChoice"
+
+    def serialize(self) -> Dict[str, Any]:
+        data = super().serialize()
+        if self.toolType is not None:
+            data["type"] = self.toolType
+            data.pop("toolType", None)
+        return data
 
 
 @dataclass
@@ -965,7 +1011,8 @@ class ISettings(SerializableMixin):
     topK: Optional[int] = None
     stopSequences: Optional[List[str]] = None
     tools: Optional[List[Union[ITextInferenceTool, Dict[str, Any]]]] = None
-    toolChoice: Optional[Union[ITextInferenceToolChoice, Dict[str, Any]]] = None
+    toolChoice: InitVar[Optional[Union["ITextInferenceToolChoice", Dict[str, Any]]]] = None
+    cache: Optional[Union[ITextInferenceCache, Dict[str, Any]]] = None
     # Image upscale 
     steps: Optional[int] = None
     seed: Optional[int] = None
@@ -981,7 +1028,14 @@ class ISettings(SerializableMixin):
     enhanceDetails: Optional[bool] = None
     realism: Optional[bool] = None
 
-    def __post_init__(self):
+    def __post_init__(self, toolChoice: Optional[Union["ITextInferenceToolChoice", Dict[str, Any]]] = None):
+        if toolChoice is not None:
+            warnings.warn(
+                "ISettings(toolChoice=...) is deprecated; use ITextInference.toolChoice instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            self.__dict__["toolChoice"] = toolChoice
         if self.sparseStructure is not None and isinstance(self.sparseStructure, dict):
             self.sparseStructure = ISparseStructure(**self.sparseStructure)
         if self.shapeSlat is not None and isinstance(self.shapeSlat, dict):
@@ -990,11 +1044,17 @@ class ISettings(SerializableMixin):
             self.texSlat = ITexSlat(**self.texSlat)
         if self.tools is not None:
             self.tools = [
-                ITextInferenceTool(**t) if isinstance(t, dict) else t
+                ITextInferenceTool(
+                    **(
+                        {**{k: v for k, v in t.items() if k != "type"}, "toolType": t["type"]}
+                        if isinstance(t, dict) and "toolType" not in t and "type" in t
+                        else t
+                    )
+                ) if isinstance(t, dict) else t
                 for t in self.tools
             ]
-        if self.toolChoice is not None and isinstance(self.toolChoice, dict):
-            self.toolChoice = ITextInferenceToolChoice(**self.toolChoice)
+        if self.cache is not None and isinstance(self.cache, dict):
+            self.cache = ITextInferenceCache(**self.cache)
         if self.editRegions is not None:
             self.editRegions = [
                 [
@@ -1084,6 +1144,7 @@ class IInputs(SerializableMixin):
 class ITextInputs(SerializableMixin):
     images: Optional[List[Union[str, File]]] = None
     videos: Optional[List[Union[str, File]]] = None
+    documents: Optional[List[Union[str, File]]] = None
 
     @property
     def request_key(self) -> str:
@@ -2193,6 +2254,7 @@ class ITextInference:
     seed: Optional[int] = None
     includeCost: Optional[bool] = None
     includeUsage: Optional[bool] = None
+    toolChoice: Optional[Union[ITextInferenceToolChoice, Dict[str, Any]]] = None
     settings: Optional[Union[ISettings, Dict[str, Any]]] = None
     inputs: Optional[Union[ITextInputs, Dict[str, Any]]] = None
     providerSettings: Optional[TextProviderSettings] = None
@@ -2200,7 +2262,32 @@ class ITextInference:
 
     def __post_init__(self) -> None:
         if self.settings is not None and isinstance(self.settings, dict):
-            self.settings = ISettings(**self.settings)
+            settings_data = dict(self.settings)
+            legacy_tool_choice = settings_data.pop("toolChoice", None)
+            if legacy_tool_choice is not None:
+                warnings.warn(
+                    "settings.toolChoice is deprecated; use ITextInference.toolChoice instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                if self.toolChoice is None:
+                    self.toolChoice = legacy_tool_choice
+            self.settings = ISettings(**settings_data)
+        elif self.settings is not None:
+            legacy_tool_choice = getattr(self.settings, "toolChoice", None)
+            if legacy_tool_choice is not None:
+                warnings.warn(
+                    "settings.toolChoice is deprecated; use ITextInference.toolChoice instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                if self.toolChoice is None:
+                    self.toolChoice = legacy_tool_choice
+        if self.toolChoice is not None and isinstance(self.toolChoice, dict):
+            tool_choice_data = dict(self.toolChoice)
+            if "toolType" not in tool_choice_data and "type" in tool_choice_data:
+                tool_choice_data["toolType"] = tool_choice_data.pop("type")
+            self.toolChoice = ITextInferenceToolChoice(**tool_choice_data)
         if self.inputs is not None and isinstance(self.inputs, dict):
             self.inputs = ITextInputs(**self.inputs)
 

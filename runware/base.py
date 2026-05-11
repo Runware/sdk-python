@@ -2592,6 +2592,7 @@ class RunwareBase:
             request_object["includeUsage"] = requestText.includeUsage
         if requestText.numberResults is not None:
             request_object["numberResults"] = requestText.numberResults
+        self._addOptionalField(request_object, requestText.toolChoice)
         self._addOptionalField(request_object, requestText.settings)
         self._addOptionalField(request_object, requestText.inputs)
         self._addProviderSettings(request_object, requestText)
@@ -2631,6 +2632,7 @@ class RunwareBase:
         self, requestText: ITextInference
     ) -> AsyncIterator[Union[str, IText]]:
         requestText.taskUUID = requestText.taskUUID or getUUID()
+        await self._processTextInputs(requestText)
         request_object = self._buildTextRequest(requestText)
         body = [request_object]
         http_url = get_http_url_from_ws_url(self._url or "")
@@ -2696,18 +2698,7 @@ class RunwareBase:
     async def _requestText(self, requestText: ITextInference) -> Union[List[IText], IAsyncTaskResponse]:
         await self.ensureConnection()
         requestText.taskUUID = requestText.taskUUID or getUUID()
-
-        
-        if requestText.inputs:
-            inputs = requestText.inputs
-            if isinstance(inputs, dict):
-                inputs = ITextInputs(**inputs)
-                requestText.inputs = inputs
-
-            if inputs.images:
-                inputs.images = await self._process_media_list(inputs.images)
-            if inputs.videos:
-                inputs.videos = await self._process_media_list(inputs.videos)
+        await self._processTextInputs(requestText)
 
         request_object = self._buildTextRequest(requestText)
 
@@ -2808,6 +2799,22 @@ class RunwareBase:
             raise
         finally:
             await self._unregister_pending_operation(task_uuid)
+
+    async def _processTextInputs(self, requestText: ITextInference) -> None:
+        if not requestText.inputs:
+            return
+
+        inputs = requestText.inputs
+        if isinstance(inputs, dict):
+            inputs = ITextInputs(**inputs)
+            requestText.inputs = inputs
+
+        if inputs.images:
+            inputs.images = await self._process_media_list(inputs.images)
+        if inputs.videos:
+            inputs.videos = await self._process_media_list(inputs.videos)
+        if inputs.documents:
+            inputs.documents = await self._process_media_list(inputs.documents)
 
     def _buildImageRequest(self, requestImage: IImageInference, prompt: Optional[str], control_net_data_dicts: List[Dict], instant_id_data: Optional[Dict], ip_adapters_data: Optional[List[Dict]], ace_plus_plus_data: Optional[Dict], pulid_data: Optional[Dict], photo_maker_data: Optional[Dict]) -> Dict[str, Any]:
         request_object = {
