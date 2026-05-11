@@ -120,7 +120,7 @@ class OperationState(Enum):
 # Define the types using Literal
 IOutputType = Literal["base64Data", "dataURI", "URL"]
 IOutputFormat = Literal["JPG", "PNG", "WEBP", "SVG"]
-IAudioOutputFormat = Literal["wav", "mp3", "pcm", "opus", "aac", "flac", "MP3"]
+IAudioOutputFormat = Literal["wav", "mp3", "pcm", "opus", "aac", "flac", "ogg", "MP3"]
 TextInferenceCacheScope = Literal["system", "system+history"]
 TextInferenceCacheTtl = Literal["5m", "1h"]
 
@@ -911,6 +911,8 @@ class ISettings(SerializableMixin):
     boundingBox: Optional[List[int]] = None
     bpm: Optional[int] = None
     cache: Optional[Union[ITextInferenceCache, Dict[str, Any]]] = None
+    cfgIntervalEnd: Optional[float] = None
+    cfgIntervalStart: Optional[float] = None
     CFGScale: Optional[float] = None
     clipSkip: Optional[int] = None
     colorCorrection: Optional[bool] = None
@@ -977,6 +979,8 @@ class ISettings(SerializableMixin):
     renderingSpeed: Optional[str] = None
     repaintingEnd: Optional[float] = None
     repaintingStart: Optional[float] = None
+    repaintMode: Optional[str] = None
+    repaintStrength: Optional[float] = None
     repetitionPenalty: Optional[float] = None
     resolution: Optional[int] = None
     safetyFilter: Optional[bool] = None
