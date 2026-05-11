@@ -2,6 +2,45 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.11]
+
+### Added
+
+- Added support for taskType `training`.
+- Added text inference cache support:
+  - `TextInferenceCacheScope = Literal["system", "system+history"]`
+  - `TextInferenceCacheTtl = Literal["5m", "1h"]`
+  - `ITextInferenceCache` dataclass (`scope`, `ttl`) with request key `cache`
+- `ITextInputs` now includes:
+  - `documents: Optional[List[Union[str, File]]]`
+- `ITextInferenceTool` now supports:
+  - `schema: Optional[Dict[str, Any]]`
+  - backward-compatible `input_schema` alias (serialized as `schema` when `schema` is not provided)
+  - optional `toolType` (serialized as `type`)
+- Added `ITextInferenceToolChoice` request serialization support:
+  - `request_key = "toolChoice"`
+  - `toolType` -> `type` mapping in `serialize()`
+- `ISettings` now includes:
+  - `search: Optional[bool] = None`
+  - `voicePrompt: Optional[str]`
+  - `safetyFilter: Optional[bool]`
+  - `cfgIntervalStart: Optional[float]`
+  - `cfgIntervalEnd: Optional[float]`
+  - `repaintMode: Optional[str]`
+  - `repaintStrength: Optional[float]`
+- `IAudioOutputFormat` now supports:
+  - `ogg`
+
+### Changed
+
+- `toolChoice` moved from `ISettings` to the root `ITextInference` payload:
+  - `ITextInference.toolChoice: Optional[Union[ITextInferenceToolChoice, Dict[str, Any]]]`
+  - `_buildTextRequest()` now includes root-level `toolChoice`
+- Unified text-input media preprocessing in `runware/base.py` via `_processTextInputs()` and applied it to both `_requestText()` and `_requestTextStream()`, so images/videos/documents are normalized consistently for sync/async/stream text requests.
+- `IVideoInference.speech` now accepts either:
+  - `IVideoSpeechSettings`
+  - `Dict[str, Any]` (auto-coerced to `IVideoSpeechSettings` in `__post_init__`)
+
 ## [0.5.10]
 
 ### Added
