@@ -1334,7 +1334,7 @@ class IImageInference:
     positivePrompt: Optional[str] = None
     taskUUID: Optional[str] = None
     deliveryMethod: str = "sync"  
-    outputType: Optional[IOutputType] = None
+    outputType: Optional[Union[IOutputType, List[IOutputType]]] = None
     outputFormat: Optional[IOutputFormat] = None
     uploadEndpoint: Optional[str] = None
     checkNsfw: InitVar[Optional[bool]] = None
@@ -1522,7 +1522,7 @@ class IVectorize:
     includeCost: bool = False
     taskUUID: Optional[str] = None
     model: Optional[str] = None
-    outputType: Optional[IOutputType] = "URL"
+    outputType: Optional[IOutputType] = None
     outputFormat: Optional[IOutputFormat] = "SVG"
     webhookURL: Optional[str] = None
     width: Optional[int] = None
