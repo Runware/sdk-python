@@ -997,6 +997,7 @@ class ISettings(SerializableMixin):
     stopSequences: Optional[List[str]] = None
     strength: Optional[float] = None
     style: Optional[str] = None
+    styleId: Optional[str] = None
     symmetry: Optional[str] = None
     syncMode: Optional[str] = None
     systemPrompt: Optional[str] = None
