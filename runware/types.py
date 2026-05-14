@@ -166,6 +166,31 @@ class RunwareBaseType:
 
 
 @dataclass
+class IImageInferenceTextBlock:
+
+    alignment: Optional[str] = None
+    angle: Optional[float] = None
+    color: Optional[str] = None
+    fontAlternatives: Optional[List[str]] = None
+    fontName: Optional[str] = None
+    fontSize: Optional[int] = None
+    formatting: Optional[List[str]] = None
+    height: Optional[int] = None
+    lineHeight: Optional[float] = None
+    role: Optional[str] = None
+    text: Optional[str] = None
+    width: Optional[int] = None
+    x: Optional[int] = None
+    y: Optional[int] = None
+
+
+@dataclass
+class IImageInferenceOutputs:
+
+    textBlocks: Optional[List[IImageInferenceTextBlock]] = None
+
+
+@dataclass
 class IImage:
     taskType: str
     imageUUID: str
@@ -177,6 +202,7 @@ class IImage:
     imageDataURI: Optional[str] = None
     NSFWContent: Optional[bool] = None
     cost: Optional[float] = None
+    outputs: Optional[IImageInferenceOutputs] = None
 
 
 @dataclass
