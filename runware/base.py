@@ -2582,7 +2582,7 @@ class RunwareBase:
             "taskUUID": requestText.taskUUID,
             "model": requestText.model,
             "deliveryMethod": requestText.deliveryMethod,
-            "messages": [asdict(m) for m in requestText.messages],
+            "messages": [m.serialize() for m in requestText.messages],
         }
         if requestText.seed is not None:
             request_object["seed"] = requestText.seed
@@ -2593,6 +2593,8 @@ class RunwareBase:
         if requestText.numberResults is not None:
             request_object["numberResults"] = requestText.numberResults
         self._addOptionalField(request_object, requestText.toolChoice)
+        if requestText.tools:
+            request_object["tools"] = [t.serialize() for t in requestText.tools]
         self._addOptionalField(request_object, requestText.settings)
         self._addOptionalField(request_object, requestText.inputs)
         self._addProviderSettings(request_object, requestText)

@@ -2185,9 +2185,52 @@ class I3d:
 
 
 @dataclass
-class ITextInferenceMessage:
+class ITextInferenceMessageTool(SerializableMixin):
+
+    toolId: str
+    name: str
+    toolInput: Optional[Dict[str, Any]] = None
+
+    def serialize(self) -> Dict[str, Any]:
+        data = super().serialize()
+        if self.toolId is not None:
+            data["id"] = self.toolId
+            data.pop("toolId", None)
+        if self.toolInput is not None:
+            data["input"] = self.toolInput
+            data.pop("toolInput", None)
+        return data
+
+
+@dataclass
+class ITextInferenceMessage(SerializableMixin):
     role: str
-    content: str
+    content: Optional[str] = None
+    toolId: Optional[str] = None
+    tools: Optional[List[Union[ITextInferenceMessageTool, Dict[str, Any]]]] = None
+
+    def __post_init__(self) -> None:
+        if not self.tools:
+            return
+        normalized_tools: List[Union[ITextInferenceMessageTool, Dict[str, Any]]] = []
+        for t in self.tools:
+            if isinstance(t, dict):
+                td = dict(t)
+                if "id" in td and "toolId" not in td:
+                    td["toolId"] = td.pop("id")
+                if "input" in td and "toolInput" not in td:
+                    td["toolInput"] = td.pop("input")
+                normalized_tools.append(ITextInferenceMessageTool(**td))
+            else:
+                normalized_tools.append(t)
+        self.tools = normalized_tools
+
+    def serialize(self) -> Dict[str, Any]:
+        data = super().serialize()
+        if self.toolId is not None:
+            data["id"] = self.toolId
+            data.pop("toolId", None)
+        return data
 
 
 @dataclass
@@ -2258,12 +2301,35 @@ class ITextInference:
     includeCost: Optional[bool] = None
     includeUsage: Optional[bool] = None
     toolChoice: Optional[Union[ITextInferenceToolChoice, Dict[str, Any]]] = None
+    tools: Optional[List[Union[ITextInferenceTool, Dict[str, Any]]]] = None
     settings: Optional[Union[ISettings, Dict[str, Any]]] = None
     inputs: Optional[Union[ITextInputs, Dict[str, Any]]] = None
     providerSettings: Optional[TextProviderSettings] = None
     webhookURL: Optional[str] = None
 
     def __post_init__(self) -> None:
+        if self.messages:
+            normalized: List[ITextInferenceMessage] = []
+            for m in self.messages:
+                if isinstance(m, dict):
+                    msg = dict(m)
+                    if "id" in msg and "toolId" not in msg:
+                        msg["toolId"] = msg.pop("id")
+                    normalized.append(ITextInferenceMessage(**msg))
+                else:
+                    normalized.append(m)
+            self.messages = normalized
+        if self.tools:
+            self.tools = [
+                ITextInferenceTool(
+                    **(
+                        {**{k: v for k, v in t.items() if k != "type"}, "toolType": t["type"]}
+                        if isinstance(t, dict) and "toolType" not in t and "type" in t
+                        else t
+                    )
+                ) if isinstance(t, dict) else t
+                for t in self.tools
+            ]
         if self.settings is not None and isinstance(self.settings, dict):
             settings_data = dict(self.settings)
             legacy_tool_choice = settings_data.pop("toolChoice", None)
