@@ -1044,6 +1044,11 @@ class ISettings(SerializableMixin):
         if self.texSlat is not None and isinstance(self.texSlat, dict):
             self.texSlat = ITexSlat(**self.texSlat)
         if self.tools is not None:
+            warnings.warn(
+                "ISettings.tools is deprecated; use ITextInference.tools instead.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
             self.tools = [
                 ITextInferenceTool(
                     **(
@@ -2193,12 +2198,9 @@ class ITextInferenceMessageTool(SerializableMixin):
 
     def serialize(self) -> Dict[str, Any]:
         data = super().serialize()
-        if self.toolId is not None:
-            data["id"] = self.toolId
-            data.pop("toolId", None)
+        data["id"] = data.pop("toolId")
         if self.toolInput is not None:
-            data["input"] = self.toolInput
-            data.pop("toolInput", None)
+            data["input"] = data.pop("toolInput")
         return data
 
 
@@ -2228,8 +2230,7 @@ class ITextInferenceMessage(SerializableMixin):
     def serialize(self) -> Dict[str, Any]:
         data = super().serialize()
         if self.toolId is not None:
-            data["id"] = self.toolId
-            data.pop("toolId", None)
+            data["id"] = data.pop("toolId")
         return data
 
 
@@ -2319,6 +2320,47 @@ class ITextInference:
                 else:
                     normalized.append(m)
             self.messages = normalized
+        settings_was_dict = False
+        legacy_tool_choice: Optional[Any] = None
+        legacy_tools: Optional[List[Any]] = None
+        if self.settings is not None and isinstance(self.settings, dict):
+            settings_was_dict = True
+            settings_data = dict(self.settings)
+            legacy_tool_choice = settings_data.pop("toolChoice", None)
+            legacy_tools = settings_data.pop("tools", None)
+            self.settings = ISettings(**settings_data)
+        if self.settings is not None:
+            if legacy_tool_choice is None:
+                legacy_tool_choice = getattr(self.settings, "toolChoice", None)
+            if legacy_tools is None:
+                lt = getattr(self.settings, "tools", None)
+                if lt is not None:
+                    legacy_tools = list(lt)
+            if legacy_tool_choice is not None:
+                warnings.warn(
+                    "settings.toolChoice is deprecated; use ITextInference.toolChoice instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                if self.toolChoice is None:
+                    self.toolChoice = legacy_tool_choice
+            if legacy_tools is not None:
+                if settings_was_dict:
+                    warnings.warn(
+                        "settings.tools is deprecated; use ITextInference.tools instead.",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
+                if self.tools is not None:
+                    both_msg = (
+                        "Both ITextInference.tools and settings.tools were provided; using ITextInference.tools only."
+                        if settings_was_dict
+                        else "Both ITextInference.tools and ISettings.tools were provided; using ITextInference.tools only."
+                    )
+                    warnings.warn(both_msg, UserWarning, stacklevel=2)
+                else:
+                    self.tools = legacy_tools
+                self.settings.tools = None
         if self.tools:
             self.tools = [
                 ITextInferenceTool(
@@ -2330,28 +2372,6 @@ class ITextInference:
                 ) if isinstance(t, dict) else t
                 for t in self.tools
             ]
-        if self.settings is not None and isinstance(self.settings, dict):
-            settings_data = dict(self.settings)
-            legacy_tool_choice = settings_data.pop("toolChoice", None)
-            if legacy_tool_choice is not None:
-                warnings.warn(
-                    "settings.toolChoice is deprecated; use ITextInference.toolChoice instead.",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
-                if self.toolChoice is None:
-                    self.toolChoice = legacy_tool_choice
-            self.settings = ISettings(**settings_data)
-        elif self.settings is not None:
-            legacy_tool_choice = getattr(self.settings, "toolChoice", None)
-            if legacy_tool_choice is not None:
-                warnings.warn(
-                    "settings.toolChoice is deprecated; use ITextInference.toolChoice instead.",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
-                if self.toolChoice is None:
-                    self.toolChoice = legacy_tool_choice
         if self.toolChoice is not None and isinstance(self.toolChoice, dict):
             tool_choice_data = dict(self.toolChoice)
             if "toolType" not in tool_choice_data and "type" in tool_choice_data:
