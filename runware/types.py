@@ -937,6 +937,7 @@ class ISettings(SerializableMixin):
     boundingBox: Optional[List[int]] = None
     bpm: Optional[int] = None
     cache: Optional[Union[ITextInferenceCache, Dict[str, Any]]] = None
+    caption: Optional[bool] = None
     cfgIntervalEnd: Optional[float] = None
     cfgIntervalStart: Optional[float] = None
     CFGScale: Optional[float] = None
@@ -957,6 +958,7 @@ class ISettings(SerializableMixin):
     expressiveness: Optional[str] = None
     faceCount: Optional[int] = None
     faceLimit: Optional[int] = None
+    fit: Optional[str] = None
     frequencyPenalty: Optional[float] = None
     generateParts: Optional[bool] = None
     generateType: Optional[str] = None
@@ -1810,6 +1812,7 @@ class IVideoSpeechSettings(SerializableMixin):
     text: Optional[str] = None  # Text script to be converted to speech (~200 characters, not UTF-8 Encoding)
     speed: Optional[float] = None
     pitch: Optional[float] = None
+    volume: Optional[float] = None
     language: Optional[str] = None
 
     @property
