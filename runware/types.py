@@ -932,6 +932,7 @@ class ISettings(SerializableMixin):
     audio: Optional[bool] = None
     audioTemperature: Optional[float] = None
     autoSize: Optional[bool] = None
+    autoCrop: Optional[str] = None
     background: Optional[str] = None
     backgroundColor: Optional[str] = None
     boundingBox: Optional[List[int]] = None
