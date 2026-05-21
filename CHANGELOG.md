@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.12]
+
+### Added
+
+- `IImageInference.outputType` now supports `Optional[Union[IOutputType, List[IOutputType]]]`.
+- Image inference results now include `outputs` on `IImage`:
+  - `IImageInferenceOutputs` with `textBlocks: Optional[List[IImageInferenceTextBlock]]`
+  - `IImageInferenceTextBlock` (`alignment`, `angle`, `color`, `fontAlternatives`, `fontName`, `fontSize`, `formatting`, `height`, `lineHeight`, `role`, `text`, `width`, `x`, `y`)
+- `ISettings` now includes:
+  - `fit: Optional[str]`
+  - `caption: Optional[bool]`
+- `IVideoSpeechSettings` now includes:
+  - `volume: Optional[float]`
+
 ## [0.5.11]
 
 ### Added
