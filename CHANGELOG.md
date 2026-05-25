@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.13]
+
+### Added
+
+- `ISettings` now includes:
+  - `autoCrop: Optional[bool]`
+  - `chunkLength: Optional[int]`
+  - `minChunkLength: Optional[int]`
+  - `normalize: Optional[bool]`
+  - `normalizeLoudness: Optional[bool]`
+  - `latency: Optional[str]`
+  - `conditionOnPreviousChunks: Optional[bool]`
+  - `earlyStopThreshold: Optional[float]`
+- `IAudioReferenceVoice` (`audio`, `text`) for reference-voice input on `audioInference`
+- `IAudioInputs` now includes:
+  - `referenceVoices: Optional[List[Union[IAudioReferenceVoice, Dict[str, Any]]]]`
+- `IAudioSpeech.voices` now accepts voice model ID strings in addition to `IAudioVoice` objects
+
+### Changed
+
+- `IAudioSpeech.volume` type changed from `Optional[int]` to `Optional[float]`
+
 ## [0.5.12]
 
 ### Added
