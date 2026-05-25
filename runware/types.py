@@ -931,6 +931,7 @@ class ISettings(SerializableMixin):
     addons: Optional[List[str]] = None
     audio: Optional[bool] = None
     audioTemperature: Optional[float] = None
+    autoCrop: Optional[bool] = None
     autoSize: Optional[bool] = None
     background: Optional[str] = None
     backgroundColor: Optional[str] = None
@@ -950,6 +951,7 @@ class ISettings(SerializableMixin):
     coverConditioningScale: Optional[float] = None
     decimation: Optional[int] = None
     decimationTarget: Optional[int] = None
+    dilatePixels: Optional[int] = None
     draft: Optional[bool] = None
     editRegions: Optional[List[List[Union[IEditRegion, Dict[str, Any]]]]] = None
     emotion: Optional[str] = None
