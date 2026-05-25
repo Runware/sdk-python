@@ -775,7 +775,7 @@ class IRecraftProviderSettings(BaseProviderSettings):
 
 @dataclass
 class IUltralytics(SerializableMixin):
-
+    inpaintSize: Optional[int] = None
     maskBlur: Optional[int] = None
     maskPadding: Optional[int] = None
     confidence: Optional[float] = None
