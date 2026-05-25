@@ -942,11 +942,13 @@ class ISettings(SerializableMixin):
     cfgIntervalEnd: Optional[float] = None
     cfgIntervalStart: Optional[float] = None
     CFGScale: Optional[float] = None
+    chunkLength: Optional[int] = None
     clipSkip: Optional[int] = None
     colorCorrection: Optional[bool] = None
     colorFix: Optional[bool] = None
     colorPalette: Optional[List[Union[IColorPaletteEntry, Dict[str, Any]]]] = None
     compress: Optional[str] = None
+    conditionOnPreviousChunks: Optional[bool] = None
     controlNetWeight: Optional[float] = None
     coverConditioningScale: Optional[float] = None
     decimation: Optional[int] = None
@@ -954,6 +956,7 @@ class ISettings(SerializableMixin):
     dilatePixels: Optional[int] = None
     draft: Optional[bool] = None
     editRegions: Optional[List[List[Union[IEditRegion, Dict[str, Any]]]]] = None
+    earlyStopThreshold: Optional[float] = None
     emotion: Optional[str] = None
     enhanceDetails: Optional[bool] = None
     exportUv: Optional[bool] = None
@@ -976,6 +979,7 @@ class ISettings(SerializableMixin):
     keyScale: Optional[str] = None
     languageBoost: Optional[str] = None
     layers: Optional[int] = None
+    latency: Optional[str] = None
     lyrics: Optional[str] = None
     lyricsOptimizer: Optional[bool] = None
     magicPrompt: Optional[str] = None
@@ -985,9 +989,12 @@ class ISettings(SerializableMixin):
     meshMode: Optional[str] = None
     meshType: Optional[str] = None
     minP: Optional[float] = None
+    minChunkLength: Optional[int] = None
     mode: Optional[str] = None
     moderation: Optional[bool] = None
     multiClip: Optional[bool] = None
+    normalize: Optional[bool] = None
+    normalizeLoudness: Optional[bool] = None
     negativePrompt: Optional[str] = None
     occlusionDetection: Optional[bool] = None
     orientation: Optional[str] = None
@@ -2095,15 +2102,29 @@ class ITrainingResult:
 
 
 @dataclass
+class IAudioReferenceVoice(SerializableMixin):
+    audio: Union[str, File]
+    text: str
+
+
+@dataclass
 class IAudioInputs(SerializableMixin):
     audio: Optional[str] = None
     audios: Optional[List[str]] = None
     video: Optional[str] = None
     videos: Optional[List[str]] = None
+    referenceVoices: Optional[List[Union[IAudioReferenceVoice, Dict[str, Any]]]] = None
 
     @property
     def request_key(self) -> str:
         return "inputs"
+
+    def __post_init__(self) -> None:
+        if self.referenceVoices is not None:
+            self.referenceVoices = [
+                IAudioReferenceVoice(**ref) if isinstance(ref, dict) else ref
+                for ref in self.referenceVoices
+            ]
 
 
 @dataclass
@@ -2116,17 +2137,17 @@ class IAudioVoice(SerializableMixin):
 class IAudioSpeech(SerializableMixin):
     text: Optional[str] = None  
     voice: Optional[str] = None
-    voices: Optional[List[Union[IAudioVoice, Dict[str, Any]]]] = None
+    voices: Optional[List[Union[str, IAudioVoice, Dict[str, Any]]]] = None
     language: Optional[str] = None
     speed: Optional[float] = None
-    volume: Optional[int] = None
+    volume: Optional[float] = None
     pitch: Optional[int] = None
     emotion: Optional[str] = None
     tone: Optional[List[str]] = None  
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.voices is not None and isinstance(self.voices, (list, tuple)):
-            normalized_voices = []
+            normalized_voices: List[Union[str, IAudioVoice, Dict[str, Any]]] = []
             for v in self.voices:
                 if isinstance(v, dict):
                     normalized_voices.append(IAudioVoice(**v))
