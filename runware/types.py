@@ -951,6 +951,7 @@ class ISettings(SerializableMixin):
     conditionOnPreviousChunks: Optional[bool] = None
     controlNetWeight: Optional[float] = None
     coverConditioningScale: Optional[float] = None
+    creativity: Optional[str] = None
     decimation: Optional[int] = None
     decimationTarget: Optional[int] = None
     dilatePixels: Optional[int] = None
