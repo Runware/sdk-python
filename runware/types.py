@@ -1007,6 +1007,7 @@ class ISettings(SerializableMixin):
     presencePenalty: Optional[float] = None
     promptExtend: Optional[bool] = None
     promptUpsampling: Optional[bool] = None
+    preserveAudio: Optional[bool] = None
     quad: Optional[bool] = None
     quality: Optional[str] = None
     realism: Optional[bool] = None
