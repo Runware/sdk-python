@@ -926,6 +926,12 @@ class IEditRegion(SerializableMixin):
 
 
 @dataclass
+class IMoodboard(SerializableMixin):
+    id: str
+    strength: Optional[float] = None
+
+
+@dataclass
 class ISettings(SerializableMixin):
     activeSpeakerDetection: Optional[Union["IActiveSpeakerDetection", Dict[str, Any]]] = None
     addons: Optional[List[str]] = None
@@ -993,6 +999,7 @@ class ISettings(SerializableMixin):
     minChunkLength: Optional[int] = None
     mode: Optional[str] = None
     moderation: Optional[bool] = None
+    moodboards: Optional[List[Union[IMoodboard, Dict[str, Any]]]] = None
     multiClip: Optional[bool] = None
     normalize: Optional[bool] = None
     normalizeLoudness: Optional[bool] = None
@@ -1106,6 +1113,11 @@ class ISettings(SerializableMixin):
             self.colorPalette = [
                 IColorPaletteEntry(**item) if isinstance(item, dict) else item
                 for item in self.colorPalette
+            ]
+        if self.moodboards is not None:
+            self.moodboards = [
+                IMoodboard(**item) if isinstance(item, dict) else item
+                for item in self.moodboards
             ]
         if isinstance(self.activeSpeakerDetection, dict):
             self.activeSpeakerDetection = IActiveSpeakerDetection(**self.activeSpeakerDetection)
