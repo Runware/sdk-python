@@ -1142,6 +1142,7 @@ class IInputFrame(SerializableMixin):
 @dataclass
 class IInputReference(SerializableMixin):
     image: Union[str, File]
+    role: Optional[str] = None
     tag: Optional[str] = None
     refType: Optional[str] = None
     strength: Optional[float] = None
@@ -1160,8 +1161,6 @@ class IInputs(SerializableMixin):
     referenceImages: Optional[List[Union[str, File, IInputReference]]] = None
     image: Optional[Union[str, File]] = None
     images: Optional[List[Union[str, File]]] = None
-    person: Optional[Union[str, File]] = None
-    garment: Optional[Union[str, File]] = None
     mask: Optional[Union[str, File]] = None
     superResolutionReferences: Optional[List[Union[str, File]]] = None
 

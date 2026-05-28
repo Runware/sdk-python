@@ -783,12 +783,6 @@ class RunwareBase:
                     requestImage.inputs.images
                 )
 
-            if requestImage.inputs.person:
-                requestImage.inputs.person = await self._process_media(requestImage.inputs.person)
-
-            if requestImage.inputs.garment:
-                requestImage.inputs.garment = await self._process_media(requestImage.inputs.garment)
-
             if requestImage.inputs.referenceImages:
                 requestImage.inputs.referenceImages = await self._process_media_list(
                     requestImage.inputs.referenceImages,
