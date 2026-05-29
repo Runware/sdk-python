@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.14]
+
+### Added
+
+- `IUltralytics` now includes:
+  - `inpaintSize: Optional[int]`
+- `ISettings` now includes:
+  - `creativity: Optional[str]`
+  - `moodboards: Optional[List[Union[IMoodboard, Dict[str, Any]]]]`
+  - `preserveAudio: Optional[bool]`
+- `IMoodboard` dataclass for `settings.moodboards[]` entries:
+  - `id: str` 
+  - `strength: Optional[float]`
+- `IInputReference` now includes:
+  - `role: Optional[str]`
+
 ## [0.5.13]
 
 ### Added
