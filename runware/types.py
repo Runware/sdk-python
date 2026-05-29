@@ -851,6 +851,18 @@ class ITexSlat(SerializableMixin):
 
 
 @dataclass
+class IMeshCluster(SerializableMixin):
+    thresholdConeHalfAngleRad: Optional[float] = None
+    refineIterations: Optional[int] = None
+    globalIterations: Optional[int] = None
+    smoothStrength: Optional[int] = None
+
+    @property
+    def request_key(self) -> str:
+        return "meshCluster"
+
+
+@dataclass
 class ITextInferenceCache(SerializableMixin):
 
     scope: Optional[TextInferenceCacheScope] = None
@@ -935,6 +947,7 @@ class IMoodboard(SerializableMixin):
 class ISettings(SerializableMixin):
     activeSpeakerDetection: Optional[Union["IActiveSpeakerDetection", Dict[str, Any]]] = None
     addons: Optional[List[str]] = None
+    alphaMode: Optional[str] = None
     audio: Optional[bool] = None
     audioTemperature: Optional[float] = None
     autoCrop: Optional[bool] = None
@@ -993,6 +1006,7 @@ class ISettings(SerializableMixin):
     material: Optional[str] = None
     maxNewTokens: Optional[int] = None
     maxTokens: Optional[int] = None
+    meshCluster: Optional[Union[IMeshCluster, Dict[str, Any]]] = None
     meshMode: Optional[str] = None
     meshType: Optional[str] = None
     minP: Optional[float] = None
@@ -1020,6 +1034,8 @@ class ISettings(SerializableMixin):
     quality: Optional[str] = None
     realism: Optional[bool] = None
     remesh: Optional[bool] = None
+    remeshBand: Optional[float] = None
+    remeshProject: Optional[float] = None
     removeBackground: Optional[bool] = None
     removeLighting: Optional[bool] = None
     renderingSpeed: Optional[str] = None
@@ -1052,6 +1068,7 @@ class ISettings(SerializableMixin):
     textNormalization: Optional[bool] = None
     texture: Optional[bool] = None
     textureAlignment: Optional[str] = None
+    textureFormat: Optional[str] = None
     texturePrompt: Optional[str] = None
     textureQuality: Optional[str] = None
     textureSeed: Optional[int] = None
@@ -1089,6 +1106,8 @@ class ISettings(SerializableMixin):
             self.shapeSlat = IShapeSlat(**self.shapeSlat)
         if self.texSlat is not None and isinstance(self.texSlat, dict):
             self.texSlat = ITexSlat(**self.texSlat)
+        if self.meshCluster is not None and isinstance(self.meshCluster, dict):
+            self.meshCluster = IMeshCluster(**self.meshCluster)
         if self.tools is not None:
             self.tools = [
                 ITextInferenceTool(
