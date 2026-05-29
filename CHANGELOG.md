@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.15]
+
+### Added
+
+- `IMeshCluster` dataclass for `settings.meshCluster`:
+  - `thresholdConeHalfAngleRad: Optional[float]`
+  - `refineIterations: Optional[int]`
+  - `globalIterations: Optional[int]`
+  - `smoothStrength: Optional[int]`
+- `ISettings` now includes:
+  - `textureFormat: Optional[str]`
+  - `alphaMode: Optional[str]`
+  - `remeshBand: Optional[float]`
+  - `remeshProject: Optional[float]`
+  - `meshCluster: Optional[Union[IMeshCluster, Dict[str, Any]]]`
+
 ## [0.5.14]
 
 ### Added
