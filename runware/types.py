@@ -1156,6 +1156,7 @@ class IInputFrame(SerializableMixin):
 @dataclass
 class IInputReference(SerializableMixin):
     image: Union[str, File]
+    role: Optional[str] = None
     tag: Optional[str] = None
     refType: Optional[str] = None
     strength: Optional[float] = None
