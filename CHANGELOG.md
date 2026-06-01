@@ -2,6 +2,74 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.15]
+
+### Added
+
+- `IMeshCluster` dataclass for `settings.meshCluster`:
+  - `thresholdConeHalfAngleRad: Optional[float]`
+  - `refineIterations: Optional[int]`
+  - `globalIterations: Optional[int]`
+  - `smoothStrength: Optional[int]`
+- `ISettings` now includes:
+  - `textureFormat: Optional[str]`
+  - `alphaMode: Optional[str]`
+  - `remeshBand: Optional[float]`
+  - `remeshProject: Optional[float]`
+  - `meshCluster: Optional[Union[IMeshCluster, Dict[str, Any]]]`
+
+## [0.5.14]
+
+### Added
+
+- `IUltralytics` now includes:
+  - `inpaintSize: Optional[int]`
+- `ISettings` now includes:
+  - `creativity: Optional[str]`
+  - `moodboards: Optional[List[Union[IMoodboard, Dict[str, Any]]]]`
+  - `preserveAudio: Optional[bool]`
+- `IMoodboard` dataclass for `settings.moodboards[]` entries:
+  - `id: str` 
+  - `strength: Optional[float]`
+- `IInputReference` now includes:
+  - `role: Optional[str]`
+
+## [0.5.13]
+
+### Added
+
+- `ISettings` now includes:
+  - `autoCrop: Optional[bool]`
+  - `chunkLength: Optional[int]`
+  - `minChunkLength: Optional[int]`
+  - `normalize: Optional[bool]`
+  - `normalizeLoudness: Optional[bool]`
+  - `latency: Optional[str]`
+  - `conditionOnPreviousChunks: Optional[bool]`
+  - `earlyStopThreshold: Optional[float]`
+- `IAudioReferenceVoice` (`audio`, `text`) for reference-voice input on `audioInference`
+- `IAudioInputs` now includes:
+  - `referenceVoices: Optional[List[Union[IAudioReferenceVoice, Dict[str, Any]]]]`
+- `IAudioSpeech.voices` now accepts voice model ID strings in addition to `IAudioVoice` objects
+
+### Changed
+
+- `IAudioSpeech.volume` type changed from `Optional[int]` to `Optional[float]`
+
+## [0.5.12]
+
+### Added
+
+- `IImageInference.outputType` now supports `Optional[Union[IOutputType, List[IOutputType]]]`.
+- Image inference results now include `outputs` on `IImage`:
+  - `IImageInferenceOutputs` with `textBlocks: Optional[List[IImageInferenceTextBlock]]`
+  - `IImageInferenceTextBlock` (`alignment`, `angle`, `color`, `fontAlternatives`, `fontName`, `fontSize`, `formatting`, `height`, `lineHeight`, `role`, `text`, `width`, `x`, `y`)
+- `ISettings` now includes:
+  - `fit: Optional[str]`
+  - `caption: Optional[bool]`
+- `IVideoSpeechSettings` now includes:
+  - `volume: Optional[float]`
+
 ## [0.5.11]
 
 ### Added

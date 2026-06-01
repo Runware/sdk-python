@@ -166,6 +166,31 @@ class RunwareBaseType:
 
 
 @dataclass
+class IImageInferenceTextBlock:
+
+    alignment: Optional[str] = None
+    angle: Optional[float] = None
+    color: Optional[str] = None
+    fontAlternatives: Optional[List[str]] = None
+    fontName: Optional[str] = None
+    fontSize: Optional[int] = None
+    formatting: Optional[List[str]] = None
+    height: Optional[int] = None
+    lineHeight: Optional[float] = None
+    role: Optional[str] = None
+    text: Optional[str] = None
+    width: Optional[int] = None
+    x: Optional[int] = None
+    y: Optional[int] = None
+
+
+@dataclass
+class IImageInferenceOutputs:
+
+    textBlocks: Optional[List[IImageInferenceTextBlock]] = None
+
+
+@dataclass
 class IImage:
     taskType: str
     imageUUID: str
@@ -177,6 +202,7 @@ class IImage:
     imageDataURI: Optional[str] = None
     NSFWContent: Optional[bool] = None
     cost: Optional[float] = None
+    outputs: Optional[IImageInferenceOutputs] = None
 
 
 @dataclass
@@ -749,7 +775,7 @@ class IRecraftProviderSettings(BaseProviderSettings):
 
 @dataclass
 class IUltralytics(SerializableMixin):
-
+    inpaintSize: Optional[int] = None
     maskBlur: Optional[int] = None
     maskPadding: Optional[int] = None
     confidence: Optional[float] = None
@@ -822,6 +848,18 @@ class ITexSlat(SerializableMixin):
     @property
     def request_key(self) -> str:
         return "texSlat"
+
+
+@dataclass
+class IMeshCluster(SerializableMixin):
+    thresholdConeHalfAngleRad: Optional[float] = None
+    refineIterations: Optional[int] = None
+    globalIterations: Optional[int] = None
+    smoothStrength: Optional[int] = None
+
+    @property
+    def request_key(self) -> str:
+        return "meshCluster"
 
 
 @dataclass
@@ -900,37 +938,52 @@ class IEditRegion(SerializableMixin):
 
 
 @dataclass
+class IMoodboard(SerializableMixin):
+    id: str
+    strength: Optional[float] = None
+
+
+@dataclass
 class ISettings(SerializableMixin):
     activeSpeakerDetection: Optional[Union["IActiveSpeakerDetection", Dict[str, Any]]] = None
     addons: Optional[List[str]] = None
+    alphaMode: Optional[str] = None
     audio: Optional[bool] = None
     audioTemperature: Optional[float] = None
+    autoCrop: Optional[bool] = None
     autoSize: Optional[bool] = None
     background: Optional[str] = None
     backgroundColor: Optional[str] = None
     boundingBox: Optional[List[int]] = None
     bpm: Optional[int] = None
     cache: Optional[Union[ITextInferenceCache, Dict[str, Any]]] = None
+    caption: Optional[bool] = None
     cfgIntervalEnd: Optional[float] = None
     cfgIntervalStart: Optional[float] = None
     CFGScale: Optional[float] = None
+    chunkLength: Optional[int] = None
     clipSkip: Optional[int] = None
     colorCorrection: Optional[bool] = None
     colorFix: Optional[bool] = None
     colorPalette: Optional[List[Union[IColorPaletteEntry, Dict[str, Any]]]] = None
     compress: Optional[str] = None
+    conditionOnPreviousChunks: Optional[bool] = None
     controlNetWeight: Optional[float] = None
     coverConditioningScale: Optional[float] = None
+    creativity: Optional[str] = None
     decimation: Optional[int] = None
     decimationTarget: Optional[int] = None
+    dilatePixels: Optional[int] = None
     draft: Optional[bool] = None
     editRegions: Optional[List[List[Union[IEditRegion, Dict[str, Any]]]]] = None
+    earlyStopThreshold: Optional[float] = None
     emotion: Optional[str] = None
     enhanceDetails: Optional[bool] = None
     exportUv: Optional[bool] = None
     expressiveness: Optional[str] = None
     faceCount: Optional[int] = None
     faceLimit: Optional[int] = None
+    fit: Optional[str] = None
     frequencyPenalty: Optional[float] = None
     generateParts: Optional[bool] = None
     generateType: Optional[str] = None
@@ -946,18 +999,24 @@ class ISettings(SerializableMixin):
     keyScale: Optional[str] = None
     languageBoost: Optional[str] = None
     layers: Optional[int] = None
+    latency: Optional[str] = None
     lyrics: Optional[str] = None
     lyricsOptimizer: Optional[bool] = None
     magicPrompt: Optional[str] = None
     material: Optional[str] = None
     maxNewTokens: Optional[int] = None
     maxTokens: Optional[int] = None
+    meshCluster: Optional[Union[IMeshCluster, Dict[str, Any]]] = None
     meshMode: Optional[str] = None
     meshType: Optional[str] = None
     minP: Optional[float] = None
+    minChunkLength: Optional[int] = None
     mode: Optional[str] = None
     moderation: Optional[bool] = None
+    moodboards: Optional[List[Union[IMoodboard, Dict[str, Any]]]] = None
     multiClip: Optional[bool] = None
+    normalize: Optional[bool] = None
+    normalizeLoudness: Optional[bool] = None
     negativePrompt: Optional[str] = None
     occlusionDetection: Optional[bool] = None
     orientation: Optional[str] = None
@@ -970,10 +1029,13 @@ class ISettings(SerializableMixin):
     presencePenalty: Optional[float] = None
     promptExtend: Optional[bool] = None
     promptUpsampling: Optional[bool] = None
+    preserveAudio: Optional[bool] = None
     quad: Optional[bool] = None
     quality: Optional[str] = None
     realism: Optional[bool] = None
     remesh: Optional[bool] = None
+    remeshBand: Optional[float] = None
+    remeshProject: Optional[float] = None
     removeBackground: Optional[bool] = None
     removeLighting: Optional[bool] = None
     renderingSpeed: Optional[str] = None
@@ -1006,6 +1068,7 @@ class ISettings(SerializableMixin):
     textNormalization: Optional[bool] = None
     texture: Optional[bool] = None
     textureAlignment: Optional[str] = None
+    textureFormat: Optional[str] = None
     texturePrompt: Optional[str] = None
     textureQuality: Optional[str] = None
     textureSeed: Optional[int] = None
@@ -1043,6 +1106,8 @@ class ISettings(SerializableMixin):
             self.shapeSlat = IShapeSlat(**self.shapeSlat)
         if self.texSlat is not None and isinstance(self.texSlat, dict):
             self.texSlat = ITexSlat(**self.texSlat)
+        if self.meshCluster is not None and isinstance(self.meshCluster, dict):
+            self.meshCluster = IMeshCluster(**self.meshCluster)
         if self.tools is not None:
             warnings.warn(
                 "ISettings.tools is deprecated; use ITextInference.tools instead.",
@@ -1073,6 +1138,11 @@ class ISettings(SerializableMixin):
             self.colorPalette = [
                 IColorPaletteEntry(**item) if isinstance(item, dict) else item
                 for item in self.colorPalette
+            ]
+        if self.moodboards is not None:
+            self.moodboards = [
+                IMoodboard(**item) if isinstance(item, dict) else item
+                for item in self.moodboards
             ]
         if isinstance(self.activeSpeakerDetection, dict):
             self.activeSpeakerDetection = IActiveSpeakerDetection(**self.activeSpeakerDetection)
@@ -1110,6 +1180,7 @@ class IInputFrame(SerializableMixin):
 @dataclass
 class IInputReference(SerializableMixin):
     image: Union[str, File]
+    role: Optional[str] = None
     tag: Optional[str] = None
     refType: Optional[str] = None
     strength: Optional[float] = None
@@ -1339,7 +1410,7 @@ class IImageInference:
     positivePrompt: Optional[str] = None
     taskUUID: Optional[str] = None
     deliveryMethod: str = "sync"  
-    outputType: Optional[IOutputType] = None
+    outputType: Optional[Union[IOutputType, List[IOutputType]]] = None
     outputFormat: Optional[IOutputFormat] = None
     uploadEndpoint: Optional[str] = None
     checkNsfw: InitVar[Optional[bool]] = None
@@ -1527,7 +1598,7 @@ class IVectorize:
     includeCost: bool = False
     taskUUID: Optional[str] = None
     model: Optional[str] = None
-    outputType: Optional[IOutputType] = "URL"
+    outputType: Optional[IOutputType] = None
     outputFormat: Optional[IOutputFormat] = "SVG"
     webhookURL: Optional[str] = None
     width: Optional[int] = None
@@ -1789,6 +1860,7 @@ class IVideoSpeechSettings(SerializableMixin):
     text: Optional[str] = None  # Text script to be converted to speech (~200 characters, not UTF-8 Encoding)
     speed: Optional[float] = None
     pitch: Optional[float] = None
+    volume: Optional[float] = None
     language: Optional[str] = None
 
     @property
@@ -2069,15 +2141,29 @@ class ITrainingResult:
 
 
 @dataclass
+class IAudioReferenceVoice(SerializableMixin):
+    audio: Union[str, File]
+    text: str
+
+
+@dataclass
 class IAudioInputs(SerializableMixin):
     audio: Optional[str] = None
     audios: Optional[List[str]] = None
     video: Optional[str] = None
     videos: Optional[List[str]] = None
+    referenceVoices: Optional[List[Union[IAudioReferenceVoice, Dict[str, Any]]]] = None
 
     @property
     def request_key(self) -> str:
         return "inputs"
+
+    def __post_init__(self) -> None:
+        if self.referenceVoices is not None:
+            self.referenceVoices = [
+                IAudioReferenceVoice(**ref) if isinstance(ref, dict) else ref
+                for ref in self.referenceVoices
+            ]
 
 
 @dataclass
@@ -2090,17 +2176,17 @@ class IAudioVoice(SerializableMixin):
 class IAudioSpeech(SerializableMixin):
     text: Optional[str] = None  
     voice: Optional[str] = None
-    voices: Optional[List[Union[IAudioVoice, Dict[str, Any]]]] = None
+    voices: Optional[List[Union[str, IAudioVoice, Dict[str, Any]]]] = None
     language: Optional[str] = None
     speed: Optional[float] = None
-    volume: Optional[int] = None
+    volume: Optional[float] = None
     pitch: Optional[int] = None
     emotion: Optional[str] = None
     tone: Optional[List[str]] = None  
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.voices is not None and isinstance(self.voices, (list, tuple)):
-            normalized_voices = []
+            normalized_voices: List[Union[str, IAudioVoice, Dict[str, Any]]] = []
             for v in self.voices:
                 if isinstance(v, dict):
                     normalized_voices.append(IAudioVoice(**v))
