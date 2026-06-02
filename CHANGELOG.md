@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `IPromptEnhancement` dataclass for nested `settings.promptEnhancement` on image inference (`enabled`, `temperature`, `topP`).
 - `IMeshCluster` dataclass for `settings.meshCluster`:
   - `thresholdConeHalfAngleRad: Optional[float]`
   - `refineIterations: Optional[int]`
@@ -17,6 +18,7 @@ All notable changes to this project will be documented in this file.
   - `remeshBand: Optional[float]`
   - `remeshProject: Optional[float]`
   - `meshCluster: Optional[Union[IMeshCluster, Dict[str, Any]]]`
+  - `promptEnhancement: Optional[Union[IPromptEnhancement, Dict[str, Any], bool]]`
 
 ## [0.5.14]
 
