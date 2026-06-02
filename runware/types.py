@@ -1170,6 +1170,7 @@ class IUpscaleSettings(ISettings):
 class IInputFrame(SerializableMixin):
     image: Union[str, File]
     frame: Optional[Union[Literal["first", "last"], int]] = None
+    timestamp: Optional[float] = None
 
 
 @dataclass
@@ -1283,7 +1284,7 @@ class IVideoInputs(SerializableMixin):
     image: Optional[Union[str, File]] = None
     images: Optional[List[Union[str, File]]] = None
     frames: Optional[List[IInputFrame]] = None
-    frameImages: Optional[List[IInputFrame]] = None
+    frameImages: Optional[List[Union[str, File, IInputFrame, Dict[str, Any]]]] = None
     referenceImages: Optional[List[Union[str, File, IVideoReferenceImage]]] = None
     referenceVideos: Optional[List[Union[str, IVideoReferenceVideo]]] = None
     referenceAudios: Optional[List[str]] = None
@@ -1353,6 +1354,11 @@ class IVideoInputs(SerializableMixin):
             self.elements = [
                 IElements(**item) if isinstance(item, dict) else item
                 for item in self.elements
+            ]
+        if self.frameImages:
+            self.frameImages = [
+                IInputFrame(**item) if isinstance(item, dict) else item
+                for item in self.frameImages
             ]
 
     @property
