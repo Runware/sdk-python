@@ -1284,7 +1284,7 @@ class IVideoInputs(SerializableMixin):
     image: Optional[Union[str, File]] = None
     images: Optional[List[Union[str, File]]] = None
     frames: Optional[List[IInputFrame]] = None
-    frameImages: Optional[List[Union[str, File, IInputFrame, Dict[str, Any]]]] = None
+    frameImages: Optional[List[Union[str, IInputFrame, Dict[str, Any]]]] = None
     referenceImages: Optional[List[Union[str, File, IVideoReferenceImage]]] = None
     referenceVideos: Optional[List[Union[str, IVideoReferenceVideo]]] = None
     referenceAudios: Optional[List[str]] = None
