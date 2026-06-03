@@ -1035,7 +1035,7 @@ class ISettings(SerializableMixin):
     positivePrompt: Optional[str] = None
     presencePenalty: Optional[float] = None
     promptExtend: Optional[bool] = None
-    promptEnhancement: Optional[Union[IPromptEnhancement, Dict[str, Any], bool]] = None
+    promptEnhancement: Optional[Union[IPromptEnhancement, Dict[str, Any]]] = None
     promptUpsampling: Optional[bool] = None
     preserveAudio: Optional[bool] = None
     quad: Optional[bool] = None
