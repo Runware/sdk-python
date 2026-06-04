@@ -188,6 +188,7 @@ class IImageInferenceTextBlock:
 class IImageInferenceOutputs:
 
     textBlocks: Optional[List[IImageInferenceTextBlock]] = None
+    structuredPrompt: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -195,6 +196,7 @@ class IImage:
     taskType: str
     imageUUID: str
     taskUUID: str
+    status: Optional[str] = None
     seed: Optional[int] = None
     inputImageUUID: Optional[str] = None
     imageURL: Optional[str] = None
@@ -202,6 +204,7 @@ class IImage:
     imageDataURI: Optional[str] = None
     NSFWContent: Optional[bool] = None
     cost: Optional[float] = None
+    structuredPrompt: Optional[Dict[str, Any]] = None
     outputs: Optional[IImageInferenceOutputs] = None
 
 
@@ -944,6 +947,75 @@ class IMoodboard(SerializableMixin):
 
 
 @dataclass
+class IStructuredPromptElement(SerializableMixin):
+    elementType: Optional[str] = None
+    desc: Optional[str] = None
+    text: Optional[str] = None
+    bbox: Optional[List[int]] = None
+    color_palette: Optional[List[str]] = None
+
+    def serialize(self) -> Dict[str, Any]:
+        data = super().serialize()
+        if self.elementType is not None:
+            data["type"] = self.elementType
+            data.pop("elementType", None)
+        return data
+
+
+@dataclass
+class IStructuredPromptStyleDescription(SerializableMixin):
+    aesthetics: Optional[str] = None
+    lighting: Optional[str] = None
+    photo: Optional[str] = None
+    medium: Optional[str] = None
+    art_style: Optional[str] = None
+    color_palette: Optional[List[str]] = None
+
+
+@dataclass
+class IStructuredPromptCompositionalDeconstruction(SerializableMixin):
+    background: Optional[str] = None
+    elements: Optional[List[Union[IStructuredPromptElement, Dict[str, Any]]]] = None
+
+    def __post_init__(self) -> None:
+        if self.elements is None:
+            return
+        coerced: List[IStructuredPromptElement] = []
+        for item in self.elements:
+            if isinstance(item, dict):
+                d = dict(item)
+                if "type" in d and "elementType" not in d:
+                    d["elementType"] = d.pop("type")
+                coerced.append(IStructuredPromptElement(**d))
+            else:
+                coerced.append(item)
+        self.elements = coerced
+
+
+@dataclass
+class IStructuredPrompt(SerializableMixin):
+    high_level_description: Optional[str] = None
+    style_description: Optional[
+        Union[IStructuredPromptStyleDescription, Dict[str, Any]]
+    ] = None
+    compositional_deconstruction: Optional[
+        Union[IStructuredPromptCompositionalDeconstruction, Dict[str, Any]]
+    ] = None
+
+    def __post_init__(self) -> None:
+        if isinstance(self.style_description, dict):
+            self.style_description = IStructuredPromptStyleDescription(
+                **self.style_description
+            )
+        if isinstance(self.compositional_deconstruction, dict):
+            self.compositional_deconstruction = (
+                IStructuredPromptCompositionalDeconstruction(
+                    **self.compositional_deconstruction
+                )
+            )
+
+
+@dataclass
 class ISettings(SerializableMixin):
     activeSpeakerDetection: Optional[Union["IActiveSpeakerDetection", Dict[str, Any]]] = None
     addons: Optional[List[str]] = None
@@ -966,6 +1038,7 @@ class ISettings(SerializableMixin):
     colorCorrection: Optional[bool] = None
     colorFix: Optional[bool] = None
     colorPalette: Optional[List[Union[IColorPaletteEntry, Dict[str, Any]]]] = None
+    copyrightDetection: Optional[bool] = None
     compress: Optional[str] = None
     conditionOnPreviousChunks: Optional[bool] = None
     controlNetWeight: Optional[float] = None
@@ -1057,6 +1130,7 @@ class ISettings(SerializableMixin):
     sparseStructure: Optional[Union[ISparseStructure, Dict[str, Any]]] = None
     steps: Optional[int] = None
     stopSequences: Optional[List[str]] = None
+    structuredPrompt: Optional[Union[IStructuredPrompt, Dict[str, Any]]] = None
     strength: Optional[float] = None
     style: Optional[str] = None
     symmetry: Optional[str] = None
@@ -1139,6 +1213,8 @@ class ISettings(SerializableMixin):
                 IMoodboard(**item) if isinstance(item, dict) else item
                 for item in self.moodboards
             ]
+        if isinstance(self.structuredPrompt, dict):
+            self.structuredPrompt = IStructuredPrompt(**self.structuredPrompt)
         if isinstance(self.activeSpeakerDetection, dict):
             self.activeSpeakerDetection = IActiveSpeakerDetection(**self.activeSpeakerDetection)
         if isinstance(self.segments, dict):
