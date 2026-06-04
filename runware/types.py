@@ -984,8 +984,10 @@ class IStructuredPromptCompositionalDeconstruction(SerializableMixin):
         for item in self.elements:
             if isinstance(item, dict):
                 d = dict(item)
-                if "type" in d and "elementType" not in d:
-                    d["elementType"] = d.pop("type")
+                if "type" in d:
+                    if "elementType" not in d:
+                        d["elementType"] = d["type"]
+                    d.pop("type", None)
                 coerced.append(IStructuredPromptElement(**d))
             else:
                 coerced.append(item)
