@@ -780,10 +780,6 @@ def createAsyncTaskResponse(response: dict) -> IAsyncTaskResponse:
     return instantiateDataclass(IAsyncTaskResponse, processed_fields)
 
 
-def createImageFromResponse(response: dict) -> IImage:
-    return instantiateDataclass(IImage, response)
-
-
 def createVideoToTextFromResponse(response: dict) -> IVideoToText:
     processed_fields = {}
 

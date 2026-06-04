@@ -78,7 +78,6 @@ from .utils import (
     getUUID,
     get_http_url_from_ws_url,
     fileToBase64,
-    createImageFromResponse,
     createEnhancedPromptsFromResponse,
     instantiateDataclassList,
     RunwareAPIError,
@@ -320,7 +319,7 @@ class RunwareBase:
         if on_partial_callback:
             try:
                 if item.get("imageUUID"):
-                    partial_images = [createImageFromResponse(item)]
+                    partial_images = [instantiateDataclass(IImage, item)]
                     on_partial_callback(partial_images, None)
                 elif item.get("videoUUID") or item.get("mediaUUID"):
                     on_partial_callback([item], None)
@@ -1299,7 +1298,7 @@ class RunwareBase:
             results = await asyncio.wait_for(future, timeout=IMAGE_OPERATION_TIMEOUT / 1000)
             response = results[0]
             self._handle_error_response(response)
-            image = createImageFromResponse(response)
+            image = instantiateDataclass(IImage, response)
             return [image]
         except asyncio.TimeoutError:
             raise Exception(
@@ -1413,7 +1412,7 @@ class RunwareBase:
                 response = results[0]
                 self._handle_error_response(response)
                 if response.get("status") == "success" or response.get("imageUUID") is not None:
-                    image = createImageFromResponse(response)
+                    image = instantiateDataclass(IImage, response)
                     return [image]
                 return createAsyncTaskResponse(response)
             except asyncio.TimeoutError:
@@ -1440,7 +1439,7 @@ class RunwareBase:
             results = await asyncio.wait_for(future, timeout=IMAGE_OPERATION_TIMEOUT / 1000)
             response = results[0]
             self._handle_error_response(response)
-            image = createImageFromResponse(response)
+            image = instantiateDataclass(IImage, response)
             return [image]
         except asyncio.TimeoutError:
             raise Exception(
@@ -3664,6 +3663,7 @@ class RunwareBase:
                             or r.get("outputs") is not None
                         ),
                     )
+
                     for response in responses:
                         self._handle_error_response(response)
 
