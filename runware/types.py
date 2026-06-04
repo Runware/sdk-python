@@ -1030,6 +1030,7 @@ class ISettings(SerializableMixin):
     promptExtend: Optional[bool] = None
     promptUpsampling: Optional[bool] = None
     preserveAudio: Optional[bool] = None
+    sourceAudioSync: Optional[bool] = None
     quad: Optional[bool] = None
     quality: Optional[str] = None
     realism: Optional[bool] = None
