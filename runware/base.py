@@ -2414,6 +2414,9 @@ class RunwareBase:
                         processed_reference_videos.append(await self._process_media(item))
                 inputs.referenceVideos = processed_reference_videos
 
+            if inputs.video:
+                inputs.video = await self._process_media(inputs.video)
+
             if inputs.frameImages:
                 inputs.frameImages = await self._process_media_list(
                     inputs.frameImages,

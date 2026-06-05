@@ -1018,6 +1018,13 @@ class IStructuredPrompt(SerializableMixin):
 
 
 @dataclass
+class IPromptEnhancement(SerializableMixin):
+    enabled: Optional[bool] = None
+    temperature: Optional[float] = None
+    topP: Optional[float] = None
+
+
+@dataclass
 class ISettings(SerializableMixin):
     activeSpeakerDetection: Optional[Union["IActiveSpeakerDetection", Dict[str, Any]]] = None
     addons: Optional[List[str]] = None
@@ -1103,8 +1110,10 @@ class ISettings(SerializableMixin):
     positivePrompt: Optional[str] = None
     presencePenalty: Optional[float] = None
     promptExtend: Optional[bool] = None
+    promptEnhancement: Optional[Union[IPromptEnhancement, Dict[str, Any]]] = None
     promptUpsampling: Optional[bool] = None
     preserveAudio: Optional[bool] = None
+    sourceAudioSync: Optional[bool] = None
     quad: Optional[bool] = None
     quality: Optional[str] = None
     realism: Optional[bool] = None
@@ -1219,6 +1228,8 @@ class ISettings(SerializableMixin):
             self.structuredPrompt = IStructuredPrompt(**self.structuredPrompt)
         if isinstance(self.activeSpeakerDetection, dict):
             self.activeSpeakerDetection = IActiveSpeakerDetection(**self.activeSpeakerDetection)
+        if isinstance(self.promptEnhancement, dict):
+            self.promptEnhancement = IPromptEnhancement(**self.promptEnhancement)
         if isinstance(self.segments, dict):
             self.segments = [ISegment(**self.segments)]
         elif self.segments:
@@ -1248,6 +1259,7 @@ class IUpscaleSettings(ISettings):
 class IInputFrame(SerializableMixin):
     image: Union[str, File]
     frame: Optional[Union[Literal["first", "last"], int]] = None
+    timestamp: Optional[float] = None
 
 
 @dataclass
@@ -1361,7 +1373,7 @@ class IVideoInputs(SerializableMixin):
     image: Optional[Union[str, File]] = None
     images: Optional[List[Union[str, File]]] = None
     frames: Optional[List[IInputFrame]] = None
-    frameImages: Optional[List[IInputFrame]] = None
+    frameImages: Optional[List[Union[str, IInputFrame, Dict[str, Any]]]] = None
     referenceImages: Optional[List[Union[str, File, IVideoReferenceImage]]] = None
     referenceVideos: Optional[List[Union[str, IVideoReferenceVideo]]] = None
     referenceAudios: Optional[List[str]] = None
@@ -1431,6 +1443,11 @@ class IVideoInputs(SerializableMixin):
             self.elements = [
                 IElements(**item) if isinstance(item, dict) else item
                 for item in self.elements
+            ]
+        if self.frameImages:
+            self.frameImages = [
+                IInputFrame(**item) if isinstance(item, dict) else item
+                for item in self.frameImages
             ]
 
     @property
