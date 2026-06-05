@@ -944,6 +944,13 @@ class IMoodboard(SerializableMixin):
 
 
 @dataclass
+class IPromptEnhancement(SerializableMixin):
+    enabled: Optional[bool] = None
+    temperature: Optional[float] = None
+    topP: Optional[float] = None
+
+
+@dataclass
 class ISettings(SerializableMixin):
     activeSpeakerDetection: Optional[Union["IActiveSpeakerDetection", Dict[str, Any]]] = None
     addons: Optional[List[str]] = None
@@ -1028,6 +1035,7 @@ class ISettings(SerializableMixin):
     positivePrompt: Optional[str] = None
     presencePenalty: Optional[float] = None
     promptExtend: Optional[bool] = None
+    promptEnhancement: Optional[Union[IPromptEnhancement, Dict[str, Any]]] = None
     promptUpsampling: Optional[bool] = None
     preserveAudio: Optional[bool] = None
     quad: Optional[bool] = None
@@ -1141,6 +1149,8 @@ class ISettings(SerializableMixin):
             ]
         if isinstance(self.activeSpeakerDetection, dict):
             self.activeSpeakerDetection = IActiveSpeakerDetection(**self.activeSpeakerDetection)
+        if isinstance(self.promptEnhancement, dict):
+            self.promptEnhancement = IPromptEnhancement(**self.promptEnhancement)
         if isinstance(self.segments, dict):
             self.segments = [ISegment(**self.segments)]
         elif self.segments:
