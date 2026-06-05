@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.16]
+
+### Added
+
+- `IPromptEnhancement` dataclass for nested `settings.promptEnhancement`:
+  - `enabled: Optional[bool]`
+  - `temperature: Optional[float]`
+  - `topP: Optional[float]`
+- `IInputFrame.timestamp`: `Optional[float] = None`
+- `ISettings` now includes:
+  - `sourceAudioSync: Optional[bool] = None`
+- Structured prompt support for `imageInference` requests via `settings.structuredPrompt`:
+  - `IStructuredPrompt` (`high_level_description`, `style_description`, `compositional_deconstruction`)
+  - `IStructuredPromptCompositionalDeconstruction` (`background`, `elements`)
+  - `IStructuredPromptElement` (`elementType`, `desc`, `text`, `bbox`, `color_palette`); serializes `elementType` as API `type`
+  - `IStructuredPromptStyleDescription` (`aesthetics`, `lighting`, `photo`, `medium`, `art_style`, `color_palette`)
+  - `ISettings.structuredPrompt: Optional[Union[IStructuredPrompt, Dict[str, Any]]]` with dict coercion in `ISettings.__post_init__`
+  - `ISettings.copyrightDetection: Optional[bool]`
+- Image inference response fields on `IImage`:
+  - `status: Optional[str]`
+  - `structuredPrompt: Optional[Dict[str, Any]]` (returned as plain dict, matching API shape including `type` on elements)
+- `IImageInferenceOutputs.structuredPrompt: Optional[Dict[str, Any]]` when the API nests it under `outputs`
+
+### Changed
+
+- `_requestVideo` now preprocesses `inputs.video` the same way as `inputs.frameImages`
+- Removed `createImageFromResponse`
+
 ## [0.5.15]
 
 ### Added
