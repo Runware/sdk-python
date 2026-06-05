@@ -780,21 +780,6 @@ def createAsyncTaskResponse(response: dict) -> IAsyncTaskResponse:
     return instantiateDataclass(IAsyncTaskResponse, processed_fields)
 
 
-def createImageFromResponse(response: dict) -> IImage:
-    processed_fields = {}
-
-    for field in fields(IImage):
-        if field.name in response:
-            if field.type == bool or field.type == Optional[bool]:
-                processed_fields[field.name] = bool(response[field.name])
-            elif field.type == float or field.type == Optional[float]:
-                processed_fields[field.name] = float(response[field.name])
-            else:
-                processed_fields[field.name] = response[field.name]
-
-    return instantiateDataclass(IImage, processed_fields)
-
-
 def createVideoToTextFromResponse(response: dict) -> IVideoToText:
     processed_fields = {}
 
