@@ -1025,6 +1025,35 @@ class IPromptEnhancement(SerializableMixin):
 
 
 @dataclass
+class IScoringRubricScoreGuidance(SerializableMixin):
+    score: Optional[float] = None
+    description: Optional[str] = None
+
+
+@dataclass
+class IScoringRubric(SerializableMixin):
+    key: Optional[str] = None
+    label: Optional[str] = None
+    description: Optional[str] = None
+    weight: Optional[float] = None
+    passingScore: Optional[float] = None
+    scoreGuidance: Optional[List[Union[IScoringRubricScoreGuidance, Dict[str, Any]]]] = None
+
+    def __post_init__(self) -> None:
+        if self.scoreGuidance is not None:
+            self.scoreGuidance = [
+                IScoringRubricScoreGuidance(**item) if isinstance(item, dict) else item
+                for item in self.scoreGuidance
+            ]
+
+
+@dataclass
+class IInputFont(SerializableMixin):
+    url: Optional[str] = None
+    text: Optional[str] = None
+
+
+@dataclass
 class ISettings(SerializableMixin):
     activeSpeakerDetection: Optional[Union["IActiveSpeakerDetection", Dict[str, Any]]] = None
     addons: Optional[List[str]] = None
@@ -1035,6 +1064,7 @@ class ISettings(SerializableMixin):
     autoSize: Optional[bool] = None
     background: Optional[str] = None
     backgroundColor: Optional[str] = None
+    backgroundMode: Optional[str] = None
     boundingBox: Optional[List[int]] = None
     bpm: Optional[int] = None
     cache: Optional[Union[ITextInferenceCache, Dict[str, Any]]] = None
@@ -1061,6 +1091,7 @@ class ISettings(SerializableMixin):
     earlyStopThreshold: Optional[float] = None
     emotion: Optional[str] = None
     enhanceDetails: Optional[bool] = None
+    enhancePrompt: Optional[bool] = None
     exportUv: Optional[bool] = None
     expressiveness: Optional[str] = None
     faceCount: Optional[int] = None
@@ -1132,6 +1163,8 @@ class ISettings(SerializableMixin):
     safetyFilter: Optional[bool] = None
     savePreRemeshedModel: Optional[bool] = None
     scheduler: Optional[str] = None
+    scoringPrompt: Optional[str] = None
+    scoringRubric: Optional[List[Union[IScoringRubric, Dict[str, Any]]]] = None
     search: Optional[bool] = None
     seed: Optional[int] = None
     segments: Optional[List[Union["ISegment", Dict[str, Any]]]] = None
@@ -1228,8 +1261,13 @@ class ISettings(SerializableMixin):
             self.structuredPrompt = IStructuredPrompt(**self.structuredPrompt)
         if isinstance(self.activeSpeakerDetection, dict):
             self.activeSpeakerDetection = IActiveSpeakerDetection(**self.activeSpeakerDetection)
-        if isinstance(self.promptEnhance, dict):
+        if self.promptEnhance is not None and isinstance(self.promptEnhance, dict):
             self.promptEnhance = IPromptEnhancement(**self.promptEnhance)
+        if self.scoringRubric is not None:
+            self.scoringRubric = [
+                IScoringRubric(**item) if isinstance(item, dict) else item
+                for item in self.scoringRubric
+            ]
         if isinstance(self.segments, dict):
             self.segments = [ISegment(**self.segments)]
         elif self.segments:
@@ -1282,6 +1320,7 @@ class IInputReference(SerializableMixin):
 class IInputs(SerializableMixin):
     references: Optional[List[Union[str, File]]] = None
     referenceImages: Optional[List[Union[str, File, IInputReference]]] = None
+    fonts: Optional[List[Union[IInputFont, Dict[str, Any]]]] = None
     image: Optional[Union[str, File]] = None
     images: Optional[List[Union[str, File]]] = None
     mask: Optional[Union[str, File]] = None
@@ -1300,6 +1339,11 @@ class IInputs(SerializableMixin):
             )
             if self.referenceImages is None:
                 self.referenceImages = self.references
+        if self.fonts is not None:
+            self.fonts = [
+                IInputFont(**item) if isinstance(item, dict) else item
+                for item in self.fonts
+            ]
 
 
 @dataclass
