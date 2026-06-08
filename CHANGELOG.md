@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- `IPromptEnhancement` dataclass for nested `settings.promptEnhance`:
+- `IPromptEnhancement` dataclass for nested `settings.promptEnhancement`:
   - `enabled: Optional[bool]`
   - `temperature: Optional[float]`
   - `topP: Optional[float]`
