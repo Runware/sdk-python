@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.17]
+
+### Added
+
+- `IInputFont` dataclass for `inputs.fonts[]`:
+  - `url: Optional[str]`
+  - `text: Optional[str]`
+- `IInputs` now includes:
+  - `fonts: Optional[List[Union[IInputFont, Dict[str, Any]]]]`
+- `IScoringRubric` dataclass for `settings.scoringRubric[]`:
+  - `key: Optional[str]`
+  - `label: Optional[str]`
+  - `description: Optional[str]`
+  - `weight: Optional[float]`
+  - `passingScore: Optional[float]`
+  - `scoreGuidance: Optional[List[Union[IScoringRubricScoreGuidance, Dict[str, Any]]]]`
+- `IScoringRubricScoreGuidance` (`score`, `description`)
+- `ISettings` now includes:
+  - `enhancePrompt: Optional[bool]`
+  - `backgroundMode: Optional[str]`
+  - `scoringPrompt: Optional[str]`
+  - `scoringRubric: Optional[List[Union[IScoringRubric, Dict[str, Any]]]]`
+
+### Changed
+
+- `ISettings.promptEnhancement` renamed to `ISettings.promptEnhance`
+
 ## [0.5.16]
 
 ### Added
