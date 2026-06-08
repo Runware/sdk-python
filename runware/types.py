@@ -1141,7 +1141,7 @@ class ISettings(SerializableMixin):
     positivePrompt: Optional[str] = None
     presencePenalty: Optional[float] = None
     promptExtend: Optional[bool] = None
-    promptEnhancement: Optional[Union[IPromptEnhancement, Dict[str, Any]]] = None
+    promptEnhance: Optional[Union[IPromptEnhancement, Dict[str, Any]]] = None
     promptUpsampling: Optional[bool] = None
     preserveAudio: Optional[bool] = None
     sourceAudioSync: Optional[bool] = None
@@ -1261,8 +1261,8 @@ class ISettings(SerializableMixin):
             self.structuredPrompt = IStructuredPrompt(**self.structuredPrompt)
         if isinstance(self.activeSpeakerDetection, dict):
             self.activeSpeakerDetection = IActiveSpeakerDetection(**self.activeSpeakerDetection)
-        if isinstance(self.promptEnhancement, dict):
-            self.promptEnhancement = IPromptEnhancement(**self.promptEnhancement)
+        if self.promptEnhance is not None and isinstance(self.promptEnhance, dict):
+            self.promptEnhance = IPromptEnhancement(**self.promptEnhance)
         if self.scoringRubric is not None:
             self.scoringRubric = [
                 IScoringRubric(**item) if isinstance(item, dict) else item
