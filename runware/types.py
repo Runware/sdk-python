@@ -1344,8 +1344,9 @@ class IInputs(SerializableMixin):
             for item in self.referenceImages:
                 if isinstance(item, dict):
                     d = dict(item)
-                    if "type" in d and "refType" not in d:
-                        d["refType"] = d["type"]
+                    if "type" in d:
+                        if "refType" not in d:
+                            d["refType"] = d["type"]
                         d.pop("type", None)
                     coerced_reference_images.append(IInputReference(**d))
                 else:
