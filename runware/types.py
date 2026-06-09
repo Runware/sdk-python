@@ -1319,7 +1319,7 @@ class IInputReference(SerializableMixin):
 @dataclass
 class IInputs(SerializableMixin):
     references: Optional[List[Union[str, File]]] = None
-    referenceImages: Optional[List[Union[str, File, IInputReference]]] = None
+    referenceImages: Optional[List[Union[str, File, IInputReference, Dict[str, Any]]]] = None
     fonts: Optional[List[Union[IInputFont, Dict[str, Any]]]] = None
     image: Optional[Union[str, File]] = None
     images: Optional[List[Union[str, File]]] = None
@@ -1339,6 +1339,11 @@ class IInputs(SerializableMixin):
             )
             if self.referenceImages is None:
                 self.referenceImages = self.references
+        if self.referenceImages is not None:
+            self.referenceImages = [
+                IInputReference(**item) if isinstance(item, dict) else item
+                for item in self.referenceImages
+            ]
         if self.fonts is not None:
             self.fonts = [
                 IInputFont(**item) if isinstance(item, dict) else item
