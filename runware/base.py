@@ -2527,6 +2527,8 @@ class RunwareBase:
         self._addOptionalField(request_object, request3d.inputs)
         self._addOptionalField(request_object, request3d.settings)
 
+        import json 
+        print(json.dumps(request_object, indent=4))
         return request_object
 
     async def _request3d(self, request3d: I3dInference) -> Union[List[I3d], IAsyncTaskResponse]:
