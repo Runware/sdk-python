@@ -1340,10 +1340,17 @@ class IInputs(SerializableMixin):
             if self.referenceImages is None:
                 self.referenceImages = self.references
         if self.referenceImages is not None:
-            self.referenceImages = [
-                IInputReference(**item) if isinstance(item, dict) else item
-                for item in self.referenceImages
-            ]
+            coerced_reference_images: List[Union[str, File, IInputReference]] = []
+            for item in self.referenceImages:
+                if isinstance(item, dict):
+                    d = dict(item)
+                    if "type" in d and "refType" not in d:
+                        d["refType"] = d["type"]
+                        d.pop("type", None)
+                    coerced_reference_images.append(IInputReference(**d))
+                else:
+                    coerced_reference_images.append(item)
+            self.referenceImages = coerced_reference_images
         if self.fonts is not None:
             self.fonts = [
                 IInputFont(**item) if isinstance(item, dict) else item
