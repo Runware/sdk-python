@@ -890,7 +890,8 @@ def _compact_dataclass_repr(self: Any) -> str:
     for f in fields(self):
         value = getattr(self, f.name)
         if (
-            value is None
+            not f.repr
+            or value is None
             or (isinstance(value, str) and not value.strip())
             or (f.name == "additional_fields" and not value)
         ):
@@ -913,7 +914,7 @@ def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
     filtered_data = {}
     
     for k, v in data.items():
-        if k not in valid_fields or v is None or (isinstance(v, str) and not v.strip()):
+        if k not in valid_fields or v is None:
             continue
         
         field_type = hints.get(k)
