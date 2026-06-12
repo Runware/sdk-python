@@ -12,7 +12,7 @@ import json
 import mimetypes
 import inspect
 from typing import Any, Dict, List, Union, Optional, TypeVar, Type, Coroutine, get_type_hints, get_origin, get_args
-from dataclasses import fields, is_dataclass
+from dataclasses import MISSING, fields, is_dataclass
 from enum import Enum
 from .types import (
     Environment,
@@ -884,6 +884,21 @@ async def getIntervalWithPromise(
                 pass
 
 
+def _compact_dataclass_repr(self: Any) -> str:
+
+    parts = []
+    for f in fields(self):
+        value = getattr(self, f.name)
+        if (
+            value is None
+            or (isinstance(value, str) and not value.strip())
+            or (f.name == "additional_fields" and not value)
+        ):
+            continue
+        parts.append(f"{f.name}={value!r}")
+    return f"{type(self).__name__}({', '.join(parts)})"
+
+
 def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
     """
     Instantiates a dataclass object from a dictionary, filtering out any unknown attributes.
@@ -898,11 +913,7 @@ def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
     filtered_data = {}
     
     for k, v in data.items():
-        if k not in valid_fields:
-            continue
-        
-        if v is None:
-            filtered_data[k] = None
+        if k not in valid_fields or v is None or (isinstance(v, str) and not v.strip()):
             continue
         
         field_type = hints.get(k)
@@ -975,7 +986,19 @@ def instantiateDataclass(dataclass_type: Type[Any], data: dict) -> Any:
             filtered_data[k] = field_type(v)
         else:
             filtered_data[k] = v
-    
+
+    for f in fields(dataclass_type):
+        if (
+            f.name in filtered_data
+            or f.default is not MISSING
+            or f.default_factory is not MISSING
+        ):
+            continue
+        if hints.get(f.name) is str:
+            filtered_data[f.name] = ""
+
+    if is_dataclass(dataclass_type) and dataclass_type.__repr__ is not _compact_dataclass_repr:
+        dataclass_type.__repr__ = _compact_dataclass_repr  
     return dataclass_type(**filtered_data)
 
 
