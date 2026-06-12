@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.18]
+
+### Added
+
+- `IDracoCompression` dataclass for `settings.dracoCompression`:
+  - `enabled: Optional[bool]`
+  - `level: Optional[int]`
+  - `quantizationPosition: Optional[int]`
+  - `quantizationNormal: Optional[int]`
+  - `quantizationTexCoord: Optional[int]`
+- `ISettings` now includes:
+  - `dracoCompression: Optional[Union[bool, IDracoCompression, Dict[str, Any]]]`
+
+### Changed
+
+- `IInputs.referenceImages` now accepts `Dict[str, Any]` entries and coerces them to `IInputReference` in `IInputs.__post_init__`
+
 ## [0.5.17]
 
 ### Added
