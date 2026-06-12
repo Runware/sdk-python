@@ -866,6 +866,15 @@ class IMeshCluster(SerializableMixin):
 
 
 @dataclass
+class IDracoCompression(SerializableMixin):
+    enabled: Optional[bool] = None
+    level: Optional[int] = None
+    quantizationPosition: Optional[int] = None
+    quantizationNormal: Optional[int] = None
+    quantizationTexCoord: Optional[int] = None
+
+
+@dataclass
 class ITextInferenceCache(SerializableMixin):
 
     scope: Optional[TextInferenceCacheScope] = None
@@ -1087,6 +1096,7 @@ class ISettings(SerializableMixin):
     decimationTarget: Optional[int] = None
     dilatePixels: Optional[int] = None
     draft: Optional[bool] = None
+    dracoCompression: Optional[Union[bool, IDracoCompression, Dict[str, Any]]] = None
     editRegions: Optional[List[List[Union[IEditRegion, Dict[str, Any]]]]] = None
     earlyStopThreshold: Optional[float] = None
     emotion: Optional[str] = None
@@ -1226,6 +1236,8 @@ class ISettings(SerializableMixin):
             self.texSlat = ITexSlat(**self.texSlat)
         if self.meshCluster is not None and isinstance(self.meshCluster, dict):
             self.meshCluster = IMeshCluster(**self.meshCluster)
+        if self.dracoCompression is not None and isinstance(self.dracoCompression, dict):
+            self.dracoCompression = IDracoCompression(**self.dracoCompression)
         if self.tools is not None:
             self.tools = [
                 ITextInferenceTool(
