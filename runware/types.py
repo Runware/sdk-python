@@ -2037,18 +2037,6 @@ class IVideoSpeechSettings(SerializableMixin):
 
 
 @dataclass
-class IVideoSource(SerializableMixin):
-    url: Optional[str] = None
-    data: Optional[str] = None
-    media_type: Optional[str] = None
-    generation_id: Optional[str] = None
-
-    @property
-    def request_key(self) -> str:
-        return "source"
-
-
-@dataclass
 class ISourcePosition(SerializableMixin):
     x: Optional[float] = None
     y: Optional[float] = None
