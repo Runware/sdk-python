@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.19]
+
+### Added
+
+- Video editing/reframing helper dataclasses:
+  - `ISourcePosition`
+  - `IVideoEditPoseControl`
+  - `IVideoEditDepthControl`
+  - `IVideoEditNormalsControl`
+  - `IVideoEditTrajectoryControl`
+  - `IVideoEditFaceControl`
+  - `IVideoEditSettingsControls`
+  - `IVideoEditSettings`
+- Text inference chat tools and message serialization:
+  - `ITextInferenceMessageTool` (`toolId`, `name`, `toolInput`; serialized as `id`, `name`, `input`)
+  - `ITextInferenceMessage` extends `SerializableMixin` with optional `content`, `toolId`, and `tools`; `serialize()` maps `toolId` → `id` on the wire
+
+### Changed
+
+- `ISettings` now supports additional video parameters:
+  - `edit: Optional[Union[IVideoEditSettings, Dict[str, Any]]]`
+  - `exrExport: Optional[bool]`
+  - `hdr: Optional[bool]`
+  - `loop: Optional[bool]`
+  - `sourcePosition: Optional[Union[ISourcePosition, Dict[str, Any]]]`
+- Added dict coercion in `ISettings.__post_init__` for:
+  - `edit` → `IVideoEditSettings`
+  - `sourcePosition` → `ISourcePosition`
+- `_buildTextRequest()` now builds messages with `ITextInferenceMessage.serialize()` instead of `dataclasses.asdict()`
+- `ITextInferenceMessage.content` is now `Optional[str]`
+- `instantiateDataclass` now skips `null` values from API payloads instead of passing them through as explicit `None`
+- `instantiateDataclass` fills missing required `str` fields with `""` when the API leaves them out, so dataclasses like `IModel` can keep `version: str` and `architecture: str` as required fields
+- Response dataclasses built via `instantiateDataclass` / `instantiateDataclassList` (`IModel`, `IImage`, `IVideo`, `I3d`, etc.) use a compact `repr` that omits unset, `None`, blank string, and empty `additional_fields` values
+
 ## [0.5.18]
 
 ### Added
