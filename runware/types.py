@@ -1244,6 +1244,11 @@ class ISettings(SerializableMixin):
         if self.dracoCompression is not None and isinstance(self.dracoCompression, dict):
             self.dracoCompression = IDracoCompression(**self.dracoCompression)
         if self.tools is not None:
+            warnings.warn(
+                "ISettings.tools is deprecated; use ITextInference.tools instead.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
             self.tools = [
                 ITextInferenceTool(
                     **(
@@ -2513,9 +2518,48 @@ class I3d:
 
 
 @dataclass
-class ITextInferenceMessage:
+class ITextInferenceMessageTool(SerializableMixin):
+
+    toolId: str
+    name: str
+    toolInput: Optional[Dict[str, Any]] = None
+
+    def serialize(self) -> Dict[str, Any]:
+        data = super().serialize()
+        data["id"] = data.pop("toolId")
+        if self.toolInput is not None:
+            data["input"] = data.pop("toolInput")
+        return data
+
+
+@dataclass
+class ITextInferenceMessage(SerializableMixin):
     role: str
-    content: str
+    content: Optional[str] = None
+    toolId: Optional[str] = None
+    tools: Optional[List[Union[ITextInferenceMessageTool, Dict[str, Any]]]] = None
+
+    def __post_init__(self) -> None:
+        if not self.tools:
+            return
+        normalized_tools: List[Union[ITextInferenceMessageTool, Dict[str, Any]]] = []
+        for t in self.tools:
+            if isinstance(t, dict):
+                td = dict(t)
+                if "id" in td and "toolId" not in td:
+                    td["toolId"] = td.pop("id")
+                if "input" in td and "toolInput" not in td:
+                    td["toolInput"] = td.pop("input")
+                normalized_tools.append(ITextInferenceMessageTool(**td))
+            else:
+                normalized_tools.append(t)
+        self.tools = normalized_tools
+
+    def serialize(self) -> Dict[str, Any]:
+        data = super().serialize()
+        if self.toolId is not None:
+            data["id"] = data.pop("toolId")
+        return data
 
 
 @dataclass
@@ -2586,26 +2630,40 @@ class ITextInference:
     includeCost: Optional[bool] = None
     includeUsage: Optional[bool] = None
     toolChoice: Optional[Union[ITextInferenceToolChoice, Dict[str, Any]]] = None
+    tools: Optional[List[Union[ITextInferenceTool, Dict[str, Any]]]] = None
     settings: Optional[Union[ISettings, Dict[str, Any]]] = None
     inputs: Optional[Union[ITextInputs, Dict[str, Any]]] = None
     providerSettings: Optional[TextProviderSettings] = None
     webhookURL: Optional[str] = None
 
     def __post_init__(self) -> None:
+        if self.messages:
+            normalized: List[ITextInferenceMessage] = []
+            for m in self.messages:
+                if isinstance(m, dict):
+                    msg = dict(m)
+                    if "id" in msg and "toolId" not in msg:
+                        msg["toolId"] = msg.pop("id")
+                    normalized.append(ITextInferenceMessage(**msg))
+                else:
+                    normalized.append(m)
+            self.messages = normalized
+        settings_was_dict = False
+        legacy_tool_choice: Optional[Any] = None
+        legacy_tools: Optional[List[Any]] = None
         if self.settings is not None and isinstance(self.settings, dict):
+            settings_was_dict = True
             settings_data = dict(self.settings)
             legacy_tool_choice = settings_data.pop("toolChoice", None)
-            if legacy_tool_choice is not None:
-                warnings.warn(
-                    "settings.toolChoice is deprecated; use ITextInference.toolChoice instead.",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
-                if self.toolChoice is None:
-                    self.toolChoice = legacy_tool_choice
+            legacy_tools = settings_data.pop("tools", None)
             self.settings = ISettings(**settings_data)
-        elif self.settings is not None:
-            legacy_tool_choice = getattr(self.settings, "toolChoice", None)
+        if self.settings is not None:
+            if legacy_tool_choice is None:
+                legacy_tool_choice = getattr(self.settings, "toolChoice", None)
+            if legacy_tools is None:
+                lt = getattr(self.settings, "tools", None)
+                if lt is not None:
+                    legacy_tools = list(lt)
             if legacy_tool_choice is not None:
                 warnings.warn(
                     "settings.toolChoice is deprecated; use ITextInference.toolChoice instead.",
@@ -2614,6 +2672,34 @@ class ITextInference:
                 )
                 if self.toolChoice is None:
                     self.toolChoice = legacy_tool_choice
+            if legacy_tools is not None:
+                if settings_was_dict:
+                    warnings.warn(
+                        "settings.tools is deprecated; use ITextInference.tools instead.",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
+                if self.tools is not None:
+                    both_msg = (
+                        "Both ITextInference.tools and settings.tools were provided; using ITextInference.tools only."
+                        if settings_was_dict
+                        else "Both ITextInference.tools and ISettings.tools were provided; using ITextInference.tools only."
+                    )
+                    warnings.warn(both_msg, UserWarning, stacklevel=2)
+                else:
+                    self.tools = legacy_tools
+                self.settings.tools = None
+        if self.tools:
+            self.tools = [
+                ITextInferenceTool(
+                    **(
+                        {**{k: v for k, v in t.items() if k != "type"}, "toolType": t["type"]}
+                        if isinstance(t, dict) and "toolType" not in t and "type" in t
+                        else t
+                    )
+                ) if isinstance(t, dict) else t
+                for t in self.tools
+            ]
         if self.toolChoice is not None and isinstance(self.toolChoice, dict):
             tool_choice_data = dict(self.toolChoice)
             if "toolType" not in tool_choice_data and "type" in tool_choice_data:
