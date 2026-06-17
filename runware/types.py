@@ -1097,12 +1097,14 @@ class ISettings(SerializableMixin):
     dilatePixels: Optional[int] = None
     draft: Optional[bool] = None
     dracoCompression: Optional[Union[bool, IDracoCompression, Dict[str, Any]]] = None
+    edit: Optional[Union["IVideoEditSettings", Dict[str, Any]]] = None
     editRegions: Optional[List[List[Union[IEditRegion, Dict[str, Any]]]]] = None
     earlyStopThreshold: Optional[float] = None
     emotion: Optional[str] = None
     enhanceDetails: Optional[bool] = None
     enhancePrompt: Optional[bool] = None
     exportUv: Optional[bool] = None
+    exrExport: Optional[bool] = None
     expressiveness: Optional[str] = None
     faceCount: Optional[int] = None
     faceLimit: Optional[int] = None
@@ -1114,6 +1116,7 @@ class ISettings(SerializableMixin):
     geometryQuality: Optional[str] = None
     guidanceType: Optional[str] = None
     hdTexture: Optional[bool] = None
+    hdr: Optional[bool] = None
     imageAutoFix: Optional[bool] = None
     imageEnhancement: Optional[bool] = None
     includePrefix: Optional[bool] = None
@@ -1123,6 +1126,7 @@ class ISettings(SerializableMixin):
     languageBoost: Optional[str] = None
     layers: Optional[int] = None
     latency: Optional[str] = None
+    loop: Optional[bool] = None
     lyrics: Optional[str] = None
     lyricsOptimizer: Optional[bool] = None
     magicPrompt: Optional[str] = None
@@ -1155,6 +1159,7 @@ class ISettings(SerializableMixin):
     promptUpsampling: Optional[bool] = None
     preserveAudio: Optional[bool] = None
     sourceAudioSync: Optional[bool] = None
+    sourcePosition: Optional[Union["ISourcePosition", Dict[str, Any]]] = None
     quad: Optional[bool] = None
     quality: Optional[str] = None
     realism: Optional[bool] = None
@@ -1259,6 +1264,10 @@ class ISettings(SerializableMixin):
                 ]
                 for image_regions in self.editRegions
             ]
+        if isinstance(self.edit, dict):
+            self.edit = IVideoEditSettings(**self.edit)
+        if isinstance(self.sourcePosition, dict):
+            self.sourcePosition = ISourcePosition(**self.sourcePosition)
         if self.colorPalette is not None:
             self.colorPalette = [
                 IColorPaletteEntry(**item) if isinstance(item, dict) else item
@@ -2025,6 +2034,75 @@ class IVideoSpeechSettings(SerializableMixin):
     @property
     def request_key(self) -> str:
         return "speech"
+
+
+@dataclass
+class ISourcePosition(SerializableMixin):
+    x: Optional[float] = None
+    y: Optional[float] = None
+    width: Optional[float] = None
+    height: Optional[float] = None
+
+
+@dataclass
+class IVideoEditPoseControl(SerializableMixin):
+    enabled: Optional[bool] = None
+    strength: Optional[str] = None
+
+
+@dataclass
+class IVideoEditDepthControl(SerializableMixin):
+    enabled: Optional[bool] = None
+    blur: Optional[float] = None
+
+
+@dataclass
+class IVideoEditNormalsControl(SerializableMixin):
+    enabled: Optional[bool] = None
+    augmentation: Optional[float] = None
+
+
+@dataclass
+class IVideoEditTrajectoryControl(SerializableMixin):
+    enabled: Optional[bool] = None
+    sparsity: Optional[float] = None
+
+
+@dataclass
+class IVideoEditFaceControl(SerializableMixin):
+    enabled: Optional[bool] = None
+
+
+@dataclass
+class IVideoEditSettingsControls(SerializableMixin):
+    poseStrength: Optional[Union[IVideoEditPoseControl, Dict[str, Any]]] = None
+    depthBlur: Optional[Union[IVideoEditDepthControl, Dict[str, Any]]] = None
+    normalsAugmentation: Optional[Union[IVideoEditNormalsControl, Dict[str, Any]]] = None
+    trajectorySparsity: Optional[Union[IVideoEditTrajectoryControl, Dict[str, Any]]] = None
+    face: Optional[Union[IVideoEditFaceControl, Dict[str, Any]]] = None
+
+    def __post_init__(self):
+        if isinstance(self.poseStrength, dict):
+            self.poseStrength = IVideoEditPoseControl(**self.poseStrength)
+        if isinstance(self.depthBlur, dict):
+            self.depthBlur = IVideoEditDepthControl(**self.depthBlur)
+        if isinstance(self.normalsAugmentation, dict):
+            self.normalsAugmentation = IVideoEditNormalsControl(**self.normalsAugmentation)
+        if isinstance(self.trajectorySparsity, dict):
+            self.trajectorySparsity = IVideoEditTrajectoryControl(**self.trajectorySparsity)
+        if isinstance(self.face, dict):
+            self.face = IVideoEditFaceControl(**self.face)
+
+
+@dataclass
+class IVideoEditSettings(SerializableMixin):
+    autoControls: Optional[bool] = None
+    strength: Optional[str] = None
+    controls: Optional[Union[IVideoEditSettingsControls, Dict[str, Any]]] = None
+
+    def __post_init__(self):
+        if isinstance(self.controls, dict):
+            self.controls = IVideoEditSettingsControls(**self.controls)
 
 
 @dataclass
