@@ -1158,6 +1158,7 @@ class ISettings(SerializableMixin):
     promptEnhance: Optional[Union[IPromptEnhancement, Dict[str, Any]]] = None
     promptUpsampling: Optional[bool] = None
     preserveAudio: Optional[bool] = None
+    preserveInputSize: Optional[bool] = None
     sourceAudioSync: Optional[bool] = None
     sourcePosition: Optional[Union["ISourcePosition", Dict[str, Any]]] = None
     quad: Optional[bool] = None
