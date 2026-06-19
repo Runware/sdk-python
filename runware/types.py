@@ -2051,53 +2051,12 @@ class ISourcePosition(SerializableMixin):
 
 
 @dataclass
-class IVideoEditPoseControl(SerializableMixin):
-    enabled: Optional[bool] = None
-    strength: Optional[str] = None
-
-
-@dataclass
-class IVideoEditDepthControl(SerializableMixin):
-    enabled: Optional[bool] = None
-    blur: Optional[float] = None
-
-
-@dataclass
-class IVideoEditNormalsControl(SerializableMixin):
-    enabled: Optional[bool] = None
-    augmentation: Optional[float] = None
-
-
-@dataclass
-class IVideoEditTrajectoryControl(SerializableMixin):
-    enabled: Optional[bool] = None
-    sparsity: Optional[float] = None
-
-
-@dataclass
-class IVideoEditFaceControl(SerializableMixin):
-    enabled: Optional[bool] = None
-
-
-@dataclass
 class IVideoEditSettingsControls(SerializableMixin):
-    poseStrength: Optional[Union[IVideoEditPoseControl, Dict[str, Any]]] = None
-    depthBlur: Optional[Union[IVideoEditDepthControl, Dict[str, Any]]] = None
-    normalsAugmentation: Optional[Union[IVideoEditNormalsControl, Dict[str, Any]]] = None
-    trajectorySparsity: Optional[Union[IVideoEditTrajectoryControl, Dict[str, Any]]] = None
-    face: Optional[Union[IVideoEditFaceControl, Dict[str, Any]]] = None
-
-    def __post_init__(self):
-        if isinstance(self.poseStrength, dict):
-            self.poseStrength = IVideoEditPoseControl(**self.poseStrength)
-        if isinstance(self.depthBlur, dict):
-            self.depthBlur = IVideoEditDepthControl(**self.depthBlur)
-        if isinstance(self.normalsAugmentation, dict):
-            self.normalsAugmentation = IVideoEditNormalsControl(**self.normalsAugmentation)
-        if isinstance(self.trajectorySparsity, dict):
-            self.trajectorySparsity = IVideoEditTrajectoryControl(**self.trajectorySparsity)
-        if isinstance(self.face, dict):
-            self.face = IVideoEditFaceControl(**self.face)
+    poseStrength: Optional[str] = None
+    depthBlur: Optional[float] = None
+    normalsAugmentation: Optional[float] = None
+    trajectorySparsity: Optional[float] = None
+    face: Optional[bool] = None
 
 
 @dataclass
