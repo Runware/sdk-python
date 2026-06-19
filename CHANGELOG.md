@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.20]
+
+### Added
+
+- `ISettings` now includes:
+  - `preserveInputSize: Optional[bool]`
+- Note in README: A new official SDK is available at [runware-python](https://github.com/runware/runware-python). It covers the full inference and utility surface with REST or WebSocket transports and gets all new features going forward. This library remains supported during the transition.
+
 ## [0.5.19]
 
 ### Added
