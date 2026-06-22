@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.21]
+
+### Changed
+
+- `IVideoEditSettingsControls` now uses flat fields for edit controls instead of nested per-control dataclasses:
+  - `poseStrength: Optional[str]`
+  - `depthBlur: Optional[float]`
+  - `normalsAugmentation: Optional[float]`
+  - `trajectorySparsity: Optional[float]`
+  - `face: Optional[bool]`
+
+### Removed
+
+- Per-control video edit dataclasses superseded by the flat `IVideoEditSettingsControls` fields:
+  - `IVideoEditPoseControl`
+  - `IVideoEditDepthControl`
+  - `IVideoEditNormalsControl`
+  - `IVideoEditTrajectoryControl`
+  - `IVideoEditFaceControl`
+
 ## [0.5.20]
 
 ### Added
