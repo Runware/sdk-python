@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.22]
+
+### Added
+
+- `IInputs` now includes:
+  - `seedImage: Optional[Union[str, File]]`
+
+### Changed
+
+- `imageInference` now processes `inputs.seedImage` via `_process_media` before sending the request
+
 ## [0.5.21]
 
 ### Changed
