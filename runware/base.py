@@ -777,6 +777,11 @@ class RunwareBase:
             if requestImage.inputs.image:
                 requestImage.inputs.image = await self._process_media(requestImage.inputs.image)
 
+            if requestImage.inputs.seedImage:
+                requestImage.inputs.seedImage = await self._process_media(
+                    requestImage.inputs.seedImage
+                )
+
             if requestImage.inputs.images:
                 requestImage.inputs.images = await self._process_media_list(
                     requestImage.inputs.images

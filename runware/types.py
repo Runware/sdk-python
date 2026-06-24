@@ -1349,6 +1349,7 @@ class IInputs(SerializableMixin):
     referenceImages: Optional[List[Union[str, File, IInputReference, Dict[str, Any]]]] = None
     fonts: Optional[List[Union[IInputFont, Dict[str, Any]]]] = None
     image: Optional[Union[str, File]] = None
+    seedImage: Optional[Union[str, File]] = None
     images: Optional[List[Union[str, File]]] = None
     mask: Optional[Union[str, File]] = None
     superResolutionReferences: Optional[List[Union[str, File]]] = None
