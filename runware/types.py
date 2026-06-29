@@ -2269,6 +2269,7 @@ class IVideoInference:
     inputs: Optional[Union[IVideoInputs, Dict[str, Any]]] = None
     resolution: Optional[str] = None
     settings: Optional[Union[ISettings, Dict[str, Any]]] = None
+    ttl: Optional[int] = None
     skipResponse: InitVar[Optional[bool]] = None
 
     def __post_init__(self, skipResponse: Optional[bool] = None) -> None:
