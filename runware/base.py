@@ -52,6 +52,7 @@ from .types import (
     IAcceleratorOptions,
     IAudio,
     IAudioInference,
+    IAudioReferenceVoice,
     IFrameImage,
     IVideoInputs,
     IVideoReferenceImage,
@@ -3429,6 +3430,23 @@ class RunwareBase:
     async def _requestAudio(self, requestAudio: "IAudioInference") -> Union[List["IAudio"], "IAsyncTaskResponse"]:
         await self.ensureConnection()
         requestAudio.taskUUID = requestAudio.taskUUID or getUUID()
+
+        if requestAudio.inputs:
+            if requestAudio.inputs.referenceAudios:
+                requestAudio.inputs.referenceAudios = await self._process_media_list(
+                    requestAudio.inputs.referenceAudios
+                )
+
+            if requestAudio.inputs.referenceImages:
+                requestAudio.inputs.referenceImages = await self._process_media_list(
+                    requestAudio.inputs.referenceImages
+                )
+
+            if requestAudio.inputs.referenceVoices:
+                for ref in requestAudio.inputs.referenceVoices:
+                    if isinstance(ref, IAudioReferenceVoice):
+                        ref.audio = await self._process_media(ref.audio)
+
         request_object = self._buildAudioRequest(requestAudio)
         
         return await self._handleInitialAudioResponse(
