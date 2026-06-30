@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.24]
+
+### Added
+
+- `IAudioInputs` now includes:
+  - `referenceAudios: Optional[List[str]]`
+  - `referenceImages: Optional[List[str]]`
+
+### Changed
+
+- `audioInference` now processes `inputs.referenceAudios`, `inputs.referenceImages`, and `inputs.referenceVoices[].audio` via `_process_media` before sending the request
+
 ## [0.5.23]
 
 ### Added
