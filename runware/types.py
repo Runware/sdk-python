@@ -2356,6 +2356,8 @@ class IAudioInputs(SerializableMixin):
     audios: Optional[List[str]] = None
     video: Optional[str] = None
     videos: Optional[List[str]] = None
+    referenceAudios: Optional[List[str]] = None
+    referenceImages: Optional[List[str]] = None
     referenceVoices: Optional[List[Union[IAudioReferenceVoice, Dict[str, Any]]]] = None
 
     @property
